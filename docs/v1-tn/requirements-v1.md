@@ -225,6 +225,8 @@ Cột **Thay đổi** so với plan gốc: `=` giữ nguyên · `~` sửa · `+`
 ## 11. Tài liệu liên quan
 
 - Plan gốc: `c:\Users\Toi Nguyen\Downloads\agilab-practice-plan.md`
+- Demo app bấm được (online, private): https://claude.ai/artifact/6SfXGg8SzEH8MDswxAn52Z
+- Demo app bản local: [`prototype/clauderon-console.html`](prototype/clauderon-console.html)
 
 ## 12. Bước tiếp theo
 
@@ -233,4 +235,4 @@ Cột **Thay đổi** so với plan gốc: `=` giữ nguyên · `~` sửa · `+`
 3. Chọn tech stack.
 4. Viết spec → review → implementation plan.
 
-**Tiếp tục phiên sau:** mở Claude Code tại thư mục `clauderon` và nói *"Đọc `docs/requirements-v1.md` và tiếp tục từ mục 12."*
+**Tiếp tục phiên sau:** mở Claude Code tại thư mục `clauderon` và nói *"Đọc `docs/v1-tn/requirements-v1.md` và tiếp tục từ mục 12."*
