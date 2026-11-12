@@ -5,7 +5,13 @@ Thư mục này chứa cách hiểu của Toi về requirement v1 của Claudero
 | Tài liệu | Nội dung |
 |---|---|
 | [requirements-v1.md](requirements-v1.md) | Requirement v1: phạm vi, yêu cầu chức năng (POD / TIC / FLW / RUN), rủi ro, lộ trình 10 ngày, câu hỏi mở, nhật ký quyết định |
-| [prototype/clauderon-console.html](prototype/clauderon-console.html) | Demo app bấm được, mô phỏng toàn bộ luồng. Mở bằng trình duyệt. Bản online (private): https://claude.ai/artifact/6SfXGg8SzEH8MDswxAn52Z |
+| [prototype/clauderon-console.html](prototype/clauderon-console.html) | Demo app bấm được, mô phỏng toàn bộ luồng. Mở bằng trình duyệt, hoặc xem bản online bên dưới. |
+
+## Xem demo online
+
+**👉 [Mở demo app Clauderon](https://claude.ai/artifact/6SfXGg8SzEH8MDswxAn52Z)** (public, ai có link đều xem được)
+
+Bấm **Kịch bản demo** ở thanh trên cùng để xem từng bước nên thử.
 
 ## Luồng chính
 

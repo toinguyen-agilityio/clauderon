@@ -225,7 +225,7 @@ Cột **Thay đổi** so với plan gốc: `=` giữ nguyên · `~` sửa · `+`
 ## 11. Tài liệu liên quan
 
 - Plan gốc: `c:\Users\Toi Nguyen\Downloads\agilab-practice-plan.md`
-- Demo app bấm được (online, private): https://claude.ai/artifact/6SfXGg8SzEH8MDswxAn52Z
+- Demo app bấm được (online, public): https://claude.ai/artifact/6SfXGg8SzEH8MDswxAn52Z
 - Demo app bản local: [`prototype/clauderon-console.html`](prototype/clauderon-console.html)
 
 ## 12. Bước tiếp theo
