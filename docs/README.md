@@ -6,6 +6,7 @@
 | [requirements/v1-requirements.md](requirements/v1-requirements.md) | v1 requirements: the source of truth for scope, features and decisions |
 | [adr/](adr/) | Architecture decision records, one decision per file |
 | [prototype/clauderon-prototype.html](prototype/clauderon-prototype.html) | Clickable UI prototype built from the v1 requirements, on simulated data; open it in a browser |
+| [Product brief](https://claude.ai/artifact/2tCo9jMTGf5jVfXKqegs3t) | Client-facing product brief (EN/VI): problem, idea, screens, requirements, roadmap, open questions. Hosted as a Claude artifact |
 | [../CONTEXT.md](../CONTEXT.md) | Domain glossary: the words to use in code, UI and conversation |
 
 ## Decision records
