@@ -1,435 +1,435 @@
-# Clauderon v1 — Questions before the spec
+# Clauderon v1 — Câu hỏi cần chốt trước khi viết spec
 
-> **Date:** 2026-11-13 · **Status:** Waiting for team answers
-> **Why:** the [v1 requirements](requirements/v1-requirements.md) are settled, but the spec needs these decisions first. Each question lists options with the suggested one first, marked **(Recommended)**. Write the team's choice on the **Decision** line, or a different answer if none fits. Unanswered questions take the recommended option.
+> **Ngày:** 2026-11-13 · **Trạng thái:** Chờ team trả lời
+> **Mục đích:** [requirements v1](requirements/v1-requirements.md) đã chốt, nhưng spec cần thêm các quyết định dưới đây. Mỗi câu có vài lựa chọn, lựa chọn gợi ý đứng đầu và được đánh dấu **(Recommended)**. Ghi lựa chọn của team vào dòng **Quyết định**, hoặc ghi câu trả lời khác nếu không lựa chọn nào phù hợp. Câu nào bỏ trống sẽ theo lựa chọn gợi ý.
 
-Vocabulary follows [CONTEXT.md](../CONTEXT.md). The ADRs in [adr/](adr/) are taken as given.
+Thuật ngữ (Pod, Run, Flow, Node, Slot...) giữ nguyên tiếng Anh theo [CONTEXT.md](../CONTEXT.md). Các ADR trong [adr/](adr/) được coi là đã chốt.
 
-**Contents**
+**Mục lục**
 
-- [A. How the spec is written and tested](#a-how-the-spec-is-written-and-tested) — Q1–Q4
-- [B. Open questions from the requirements (section 8)](#b-open-questions-from-the-requirements-section-8) — Q5–Q14
-- [C. Host Agent, Pods and terminal](#c-host-agent-pods-and-terminal) — Q15–Q23
-- [D. Run engine and Human Nodes](#d-run-engine-and-human-nodes) — Q24–Q33
-- [E. Tickets, GitHub and Artifact](#e-tickets-github-and-artifact) — Q34–Q39
-- [F. Flows](#f-flows) — Q40–Q42
-- [G. Sign-in, logs and audit](#g-sign-in-logs-and-audit) — Q43–Q47
-- [Summary of recommendations](#summary-of-recommendations)
-
----
-
-## A. How the spec is written and tested
-
-### Q1. Main test seam
-
-There is no code yet. The spec should name as few test seams as possible, as high as possible.
-
-- **a. One seam: the app core, driven through its commands and queries (Recommended).** Tests call the core (start a Batch, approve, retry, cancel, save a Flow, Sync) with a fake Host Agent that speaks the real Host Agent protocol, a fake GitHub reader and a fake clock, then check Run states, Ticket Status, Needs you, Slots and audit. The Flow validator, scheduler, run engine and Ticket Status are all tested through it. The real Host Agent gets its own tests against a fake Docker, on the same protocol.
-- b. Seam (a) plus end-to-end tests through the HTTP API and UI for sign-in, the Start dialog and Needs you.
-- c. Separate unit seams for the validator, scheduler, Run state machine and Ticket Status.
-
-**Decision:**
-
-### Q2. Where the spec is published
-
-- **a. A GitHub issue in this repository, with a new `ready-for-agent` label (Recommended).** The label does not exist yet and would be created.
-- b. A GitHub issue without a label.
-- c. A Markdown file in the repo (for example `docs/spec.md`), reviewed as a pull request.
-
-**Decision:**
-
-### Q3. One spec or several
-
-- **a. One spec for all of v1, later split into issues per milestone M0–M4 (Recommended).**
-- b. One spec per milestone, written just before each starts.
-- c. One spec per module (Pods, Flows, Tickets, Runs).
-
-**Decision:**
-
-### Q4. Repository layout
-
-The app, the Host Agent and the Pod image must live somewhere.
-
-- **a. One repository (this one) with three parts: web app, Host Agent, Pod image, sharing the protocol types (Recommended).**
-- b. Separate repositories for the app, the Host Agent and the image.
-
-**Decision:**
+- [A. Cách viết và test spec](#a-cách-viết-và-test-spec) — Q1–Q4
+- [B. Câu hỏi mở trong requirements (mục 8)](#b-câu-hỏi-mở-trong-requirements-mục-8) — Q5–Q14
+- [C. Host Agent, Pod và terminal](#c-host-agent-pod-và-terminal) — Q15–Q23
+- [D. Run engine và Human Node](#d-run-engine-và-human-node) — Q24–Q33
+- [E. Ticket, GitHub và Artifact](#e-ticket-github-và-artifact) — Q34–Q39
+- [F. Flow](#f-flow) — Q40–Q42
+- [G. Đăng nhập, log và audit](#g-đăng-nhập-log-và-audit) — Q43–Q47
+- [Tóm tắt các gợi ý](#tóm-tắt-các-gợi-ý)
 
 ---
 
-## B. Open questions from the requirements (section 8)
+## A. Cách viết và test spec
 
-### Q5. Hosting the web app and database (open question 1)
+### Q1. Seam test chính
 
-- **a. A managed cloud platform (for example Railway, Render or Fly) with a managed Postgres, reachable over the internet behind Google sign-in (Recommended).**
-- b. A company server, reachable only inside the company network or VPN. The Pod Host and every Member must reach it.
-- c. On the Pod Host itself (contradicts the 2026-11-13 decision "hosted elsewhere").
+Chưa có code. Spec nên dùng càng ít seam test càng tốt, đặt ở tầng càng cao càng tốt.
 
-**Decision:**
+- **a. Một seam duy nhất: app core, test qua các command và query của nó (Recommended).** Test gọi core (start một Batch, approve, retry, cancel, lưu Flow, Sync) với một Host Agent giả nói đúng protocol thật, một GitHub reader giả và một đồng hồ giả, rồi kiểm tra trạng thái Run, Ticket Status, Needs you, Slot và audit. Flow validator, scheduler, run engine và Ticket Status đều được test qua seam này. Host Agent thật có test riêng với Docker giả, trên cùng protocol.
+- b. Seam (a) cộng thêm test end-to-end qua HTTP API và UI cho đăng nhập, Start dialog và Needs you.
+- c. Nhiều seam unit riêng cho validator, scheduler, state machine của Run và Ticket Status.
 
-### Q6. Installing and pairing the Host Agent (open question 2)
+**Quyết định:**
 
-- **a. An install script that sets up the Host Agent as a service that starts with the Pod Host (launchd on macOS, systemd on Linux), paired with a long-lived Host Agent secret from the app's configuration (Recommended).**
-- b. A one-time pairing code shown in the app, exchanged for a secret on first connect.
-- c. The Host Agent runs as a Docker container itself, with the Docker socket mounted.
+### Q2. Publish spec ở đâu
 
-**Decision:**
+- **a. Một GitHub issue trong repo này, gắn label mới `ready-for-agent` (Recommended).** Label này chưa có, sẽ được tạo.
+- b. Một GitHub issue, không gắn label.
+- c. Một file Markdown trong repo (ví dụ `docs/spec.md`), review qua pull request.
 
-### Q7. Default Pod limits and Pod Host capacity (open question 3)
+**Quyết định:**
 
-- **a. 2 CPU, 4 GB RAM, 2 Slots per Pod by default; the owner may change Slots, CPU and RAM up to a cap set in the app's configuration (Recommended).**
-- b. 4 CPU, 8 GB RAM, 2 Slots per Pod, fixed.
-- c. No CPU/RAM limits in v1, Slots only (weakens NFR-6).
+### Q3. Một spec hay nhiều spec
 
-Capacity: the Pods page shows the sum of Pod limits against the Pod Host's total. **Should Create my Pod be refused when the Pod Host would be over-committed?** Suggested: no, warn only.
+- **a. Một spec cho toàn bộ v1, sau đó tách thành issue theo milestone M0–M4 (Recommended).**
+- b. Mỗi milestone một spec, viết ngay trước khi bắt đầu milestone đó.
+- c. Mỗi module một spec (Pods, Flows, Tickets, Runs).
 
-**Decision:**
+**Quyết định:**
 
-### Q8. The standard image (open question 4)
+### Q4. Cấu trúc repo
 
-- **a. Built from a Dockerfile in this repo by CI for arm64 and amd64, with git, gh, Node LTS, Python 3, build tools and the Claude Code CLI; maintained by whoever owns the Host Agent (Recommended).**
-- b. Node only; other toolchains installed by each Member into their Workspace.
-- c. A public base image (for example a devcontainer image) plus Claude Code.
+Web app, Host Agent và Pod image cần nằm ở đâu đó.
 
-**Decision:**
+- **a. Một repo (repo này) gồm ba phần: web app, Host Agent, Pod image, dùng chung kiểu dữ liệu của protocol (Recommended).**
+- b. Ba repo riêng cho app, Host Agent và image.
 
-### Q9. How the Artifact is produced (open question 5)
-
-- **a. The app assembles it when the Run ends from the Run's Outputs: the `summary` Output (what changed, how to test), every `screenshot` Output, the diff stats and the `pull-request` link. No built-in screenshot capture; a Node must produce `screenshot` Outputs (Recommended).**
-- b. Every Flow must end with an Agent Node that writes the Artifact.
-- c. Both: assemble from Outputs, plus an extra Agent call at the end to write the prose.
-
-**Decision:**
-
-### Q10. Output Types for the sample Flows (open question 6)
-
-The sample Tasks need: Grill a plan (`issue` → `plan`), Approve a plan (`plan` → `plan`), Code a change (`plan` → `branch`, `summary`), Run tests (`branch` → `test-result`), Open a pull request (`branch`, `test-result` optional → `pull-request`).
-
-- **a. The current list is enough. Approve passes its input through unchanged as the same Output Type (Recommended).**
-- b. Add an `approval` type so the approval itself is an Output.
-- c. Add a generic `text` type for free-form Outputs.
-
-**Decision:**
-
-### Q11. Showing cost (open question 7)
-
-- **a. Tokens and duration only (Recommended).**
-- b. Tokens plus the cost Claude Code reports, labelled "API-equivalent cost", since subscriptions are not billed per token.
-
-**Decision:**
-
-### Q12. Log retention and backups (open question 8)
-
-- **a. Logs kept 90 days, then deleted (the Run, its Outputs and Artifact stay); daily database backups kept 14 days (Recommended).**
-- b. Logs kept forever; daily backups kept 30 days.
-- c. Logs kept 30 days; backups left to the hosting platform's defaults.
-
-**Decision:**
-
-### Q13. Tech stack (open question 9)
-
-- **a. TypeScript everywhere: a Node backend with Postgres, React + Vite + React Flow for the UI, Vitest for tests, and the Host Agent in Node/TypeScript sharing the protocol types (Recommended).**
-- b. Same web app, Host Agent in Go (a single binary, easier to install on the Pod Host).
-- c. A full-stack framework (for example Next.js) for the app, Host Agent in Node.
-
-**Decision:**
-
-### Q14. Google OAuth client and session length (open question 10)
-
-- **a. The OAuth client lives in a company Google Cloud project owned by the team lead; sessions last 7 days, renewed on use, with a hard limit of 30 days (Recommended).**
-- b. A personal Google Cloud project; sessions last 24 hours.
-- c. Sessions last until sign-out (weakens R7).
-
-**Decision:**
+**Quyết định:**
 
 ---
 
-## C. Host Agent, Pods and terminal
+## B. Câu hỏi mở trong requirements (mục 8)
 
-### Q15. Host Agent connection
+### Q5. Host web app và database ở đâu (câu hỏi mở 1)
 
-- **a. One WebSocket over HTTPS opened by the Host Agent, carrying commands, events and log chunks; every message has an id so either side can resume after a reconnect (Recommended).**
-- b. HTTPS long-polling for commands plus POST for events and logs.
+- **a. Một nền tảng cloud có quản lý (ví dụ Railway, Render hoặc Fly) với Postgres có quản lý, truy cập qua internet, có Google sign-in bảo vệ (Recommended).**
+- b. Một server của công ty, chỉ truy cập được trong mạng công ty hoặc qua VPN. Pod Host và mọi Member đều phải truy cập được.
+- c. Ngay trên Pod Host (trái với quyết định ngày 2026-11-13 là "host ở nơi khác").
+
+**Quyết định:**
+
+### Q6. Cài đặt và kết nối Host Agent (câu hỏi mở 2)
+
+- **a. Một script cài Host Agent thành service tự chạy khi Pod Host khởi động (launchd trên macOS, systemd trên Linux), kết nối bằng một secret dài hạn đặt trong cấu hình của app (Recommended).**
+- b. Một mã ghép nối dùng một lần hiển thị trong app, đổi lấy secret ở lần kết nối đầu.
+- c. Host Agent tự chạy như một Docker container, mount Docker socket vào.
+
+**Quyết định:**
+
+### Q7. Giới hạn mặc định của Pod và sức chứa Pod Host (câu hỏi mở 3)
+
+- **a. Mặc định mỗi Pod 2 CPU, 4 GB RAM, 2 Slot; chủ Pod được đổi Slot, CPU và RAM đến một mức trần đặt trong cấu hình app (Recommended).**
+- b. Mỗi Pod 4 CPU, 8 GB RAM, 2 Slot, cố định.
+- c. Không giới hạn CPU/RAM trong v1, chỉ có Slot (làm yếu NFR-6).
+
+Sức chứa: trang Pods hiển thị tổng giới hạn của các Pod so với tổng tài nguyên của Pod Host. **Có từ chối Create my Pod khi Pod Host bị cấp vượt quá tài nguyên không?** Gợi ý: không, chỉ cảnh báo.
+
+**Quyết định:**
+
+### Q8. Image chuẩn (câu hỏi mở 4)
+
+- **a. Build từ một Dockerfile trong repo này bằng CI cho arm64 và amd64, gồm git, gh, Node LTS, Python 3, build tools và Claude Code CLI; người phụ trách Host Agent cũng phụ trách image (Recommended).**
+- b. Chỉ có Node; các toolchain khác mỗi Member tự cài vào Workspace của mình.
+- c. Một base image công khai (ví dụ devcontainer image) cộng thêm Claude Code.
+
+**Quyết định:**
+
+### Q9. Artifact được tạo ra thế nào (câu hỏi mở 5)
+
+- **a. Khi Run kết thúc, app tự ghép Artifact từ các Output của Run: Output `summary` (đã thay đổi gì, test thế nào), mọi Output `screenshot`, thống kê diff và link `pull-request`. Không có cơ chế chụp màn hình sẵn; muốn có ảnh thì một Node phải tạo Output `screenshot` (Recommended).**
+- b. Mọi Flow phải kết thúc bằng một Agent Node viết Artifact.
+- c. Cả hai: ghép từ Output, cộng thêm một lần gọi Agent ở cuối để viết phần mô tả.
+
+**Quyết định:**
+
+### Q10. Output Type cho các Flow mẫu (câu hỏi mở 6)
+
+Các Task mẫu cần: Grill a plan (`issue` → `plan`), Approve a plan (`plan` → `plan`), Code a change (`plan` → `branch`, `summary`), Run tests (`branch` → `test-result`), Open a pull request (`branch`, `test-result` không bắt buộc → `pull-request`).
+
+- **a. Danh sách hiện tại là đủ. Approve chuyển nguyên input của nó ra thành Output cùng Output Type (Recommended).**
+- b. Thêm type `approval` để bản thân việc approve là một Output.
+- c. Thêm type `text` chung cho các Output dạng tự do.
+
+**Quyết định:**
+
+### Q11. Hiển thị chi phí (câu hỏi mở 7)
+
+- **a. Chỉ token và thời gian (Recommended).**
+- b. Token cộng với chi phí Claude Code báo về, ghi rõ là "chi phí tương đương API", vì subscription không tính tiền theo token.
+
+**Quyết định:**
+
+### Q12. Thời gian giữ log và backup (câu hỏi mở 8)
+
+- **a. Giữ log 90 ngày rồi xoá (Run, Output và Artifact vẫn giữ); backup database hằng ngày, giữ 14 ngày (Recommended).**
+- b. Giữ log mãi mãi; backup hằng ngày, giữ 30 ngày.
+- c. Giữ log 30 ngày; backup theo mặc định của nền tảng hosting.
+
+**Quyết định:**
+
+### Q13. Tech stack (câu hỏi mở 9)
+
+- **a. TypeScript toàn bộ: backend Node với Postgres, UI dùng React + Vite + React Flow, test bằng Vitest, Host Agent viết bằng Node/TypeScript và dùng chung kiểu dữ liệu protocol (Recommended).**
+- b. Web app như trên, Host Agent viết bằng Go (một file binary, dễ cài trên Pod Host).
+- c. Một framework full-stack (ví dụ Next.js) cho app, Host Agent bằng Node.
+
+**Quyết định:**
+
+### Q14. Google OAuth client và thời hạn phiên đăng nhập (câu hỏi mở 10)
+
+- **a. OAuth client nằm trong một Google Cloud project của công ty, do team lead quản lý; phiên kéo dài 7 ngày, tự gia hạn khi dùng, tối đa 30 ngày (Recommended).**
+- b. Một Google Cloud project cá nhân; phiên kéo dài 24 giờ.
+- c. Phiên kéo dài đến khi đăng xuất (làm yếu R7).
+
+**Quyết định:**
+
+---
+
+## C. Host Agent, Pod và terminal
+
+### Q15. Kết nối của Host Agent
+
+- **a. Một WebSocket qua HTTPS do Host Agent mở ra, mang lệnh, sự kiện và các đoạn log; mỗi message có id để hai bên tiếp tục được sau khi kết nối lại (Recommended).**
+- b. HTTPS long-polling để nhận lệnh, cộng POST để gửi sự kiện và log.
 - c. gRPC streaming.
 
-**Decision:**
+**Quyết định:**
 
-### Q16. Who orchestrates a Run
+### Q16. Ai điều phối một Run
 
-- **a. The app: it keeps all Run state in the database and asks the Host Agent to run one Node at a time; the Host Agent only executes and reports (Recommended).** Interrupted handling and Retry stay in one place.
-- b. The Host Agent runs a whole Run locally and reports progress.
+- **a. App: app giữ toàn bộ trạng thái Run trong database và yêu cầu Host Agent chạy từng Node một; Host Agent chỉ thực thi và báo cáo (Recommended).** Xử lý Interrupted và Retry nằm ở một chỗ.
+- b. Host Agent chạy cả Run ngay trên máy và báo tiến độ về.
 
-**Decision:**
+**Quyết định:**
 
-### Q17. When a Run becomes Interrupted
+### Q17. Khi nào Run thành Interrupted
 
-- **a. Heartbeat every 10 seconds; after 30 seconds without one, the Pod's Running Runs become Interrupted. A Run Waiting for human is not Interrupted by a disconnect, since nothing is executing (Recommended).**
-- b. Interrupted immediately on disconnect.
-- c. A 5-minute grace period before Interrupted, in case the Host Agent reconnects and the Node is still running.
+- **a. Heartbeat mỗi 10 giây; quá 30 giây không có heartbeat thì các Run đang Running của Pod thành Interrupted. Run đang Waiting for human không bị Interrupted khi mất kết nối, vì lúc đó không có gì đang chạy (Recommended).**
+- b. Interrupted ngay khi mất kết nối.
+- c. Chờ 5 phút rồi mới Interrupted, phòng khi Host Agent kết nối lại mà Node vẫn đang chạy.
 
-**Decision:**
+**Quyết định:**
 
-### Q18. A Node still running when the Host Agent reconnects
+### Q18. Node vẫn đang chạy khi Host Agent kết nối lại
 
-After a short network drop, the Claude Code or shell process in the Pod may still be alive.
+Sau một lần rớt mạng ngắn, tiến trình Claude Code hoặc shell trong Pod có thể vẫn còn sống.
 
-- **a. The Host Agent kills any orphaned Node process on reconnect; the Run stays Interrupted and the Starter retries (Recommended).** Simple and matches "nothing is retried automatically".
-- b. The Host Agent reattaches and the Run continues if it was not yet marked Interrupted.
+- **a. Khi kết nối lại, Host Agent kill mọi tiến trình Node mồ côi; Run vẫn ở trạng thái Interrupted và người start Run sẽ retry (Recommended).** Đơn giản, và khớp với quy tắc "không có gì được retry tự động".
+- b. Host Agent gắn lại vào tiến trình và Run chạy tiếp nếu chưa bị đánh dấu Interrupted.
 
-**Decision:**
+**Quyết định:**
 
-### Q19. Checking Claude Code and gh login state
+### Q19. Kiểm tra trạng thái đăng nhập Claude Code và gh
 
-- **a. The Host Agent checks both (`gh auth status` and a Claude Code status check) when the Pod starts, after each terminal session closes, before each Real Run starts, and every 5 minutes; it reports the gh account and token scopes too (Recommended).**
-- b. Check only on demand, with a "Refresh" button on the Pod page.
+- **a. Host Agent kiểm tra cả hai (`gh auth status` và một lệnh kiểm tra trạng thái của Claude Code) khi Pod khởi động, sau mỗi phiên terminal đóng lại, trước mỗi Real Run và cứ mỗi 5 phút; đồng thời báo tài khoản gh và scope của token (Recommended).**
+- b. Chỉ kiểm tra khi được yêu cầu, bằng nút "Refresh" trên trang Pod.
 
-**Decision:**
+**Quyết định:**
 
-### Q20. Web terminal path and what is recorded
+### Q20. Đường đi của web terminal và những gì được ghi lại
 
-- **a. Browser ↔ app over WebSocket ↔ Host Agent ↔ `docker exec` with a TTY (xterm.js in the browser). The audit log records who opened the session and when it started and ended, not the keystrokes, since logins type secrets (Recommended).**
-- b. Same path, and the full output transcript is stored, with secrets masked.
+- **a. Browser ↔ app qua WebSocket ↔ Host Agent ↔ `docker exec` có TTY (dùng xterm.js trên browser). Audit log ghi ai mở phiên, lúc bắt đầu và lúc kết thúc, không ghi phím gõ, vì lúc đăng nhập phải gõ secret (Recommended).**
+- b. Cùng đường đi như trên, và lưu toàn bộ output của phiên, có che secret.
 
-**Decision:**
+**Quyết định:**
 
-### Q21. "Newer image available" for Recreate
+### Q21. Nhận biết "có image mới hơn" để Recreate
 
-- **a. The app's configuration names the current image tag; the Host Agent pulls it and compares digests with each Pod's image (Recommended).**
-- b. Images use version numbers; a higher number means newer.
+- **a. Cấu hình của app ghi tag image hiện hành; Host Agent pull image đó và so digest với image của từng Pod (Recommended).**
+- b. Image đánh số phiên bản; số lớn hơn là mới hơn.
 
-**Decision:**
+**Quyết định:**
 
-### Q22. Changing Slots, CPU or RAM on an existing Pod
+### Q22. Đổi Slot, CPU hoặc RAM của Pod đang có
 
-- **a. Slots can change any time and apply at the next scheduling decision (running Runs are not stopped); CPU and RAM changes apply on the next Recreate (Recommended).**
-- b. Any change requires the Pod to have no Running or Waiting Runs.
+- **a. Slot đổi được bất cứ lúc nào và áp dụng từ lần xếp lịch tiếp theo (Run đang chạy không bị dừng); CPU và RAM áp dụng ở lần Recreate tiếp theo (Recommended).**
+- b. Mọi thay đổi đều yêu cầu Pod không có Run nào đang Running hoặc Waiting.
 
-**Decision:**
+**Quyết định:**
 
-### Q23. Project clones in the Workspace
+### Q23. Clone Project trong Workspace
 
-- **a. The first Real Run of a Project on a Pod clones it with the Starter's gh login; later Runs fetch the base branch and add a worktree (Recommended).**
-- b. The owner clones each Project by hand in the terminal.
+- **a. Real Run đầu tiên của một Project trên một Pod sẽ clone Project đó bằng gh login của người start Run; các Run sau chỉ fetch base branch và tạo thêm worktree (Recommended).**
+- b. Chủ Pod tự clone từng Project bằng tay trong terminal.
 
-**Decision:**
-
----
-
-## D. Run engine and Human Nodes
-
-### Q24. Retry and queue position
-
-The lifecycle says Failed or Interrupted → Queued on Retry.
-
-- **a. A retried Run joins the back of its Pod's queue, like a new Run (Recommended).**
-- b. A retried Run jumps to the front of the queue.
-
-**Decision:**
-
-### Q25. Dry-run and Pod Ready
-
-- **a. A Dry-run needs the Starter to have a Pod (it uses a Slot) but not the Claude Code or gh logins, and runs in the app without executing anything in the Pod (Recommended).**
-- b. A Dry-run needs a Pod Ready, like a Real Run.
-- c. A Dry-run needs no Pod and does not use Slots (contradicts RUN-13).
-
-**Decision:**
-
-### Q26. How an Agent Node returns its Outputs
-
-- **a. The Node's prompt asks Claude Code to end with one structured result (JSON) naming each Output; the app validates it against the Node's Output Types and fails the Node if a required Output is missing (Recommended).**
-- b. Claude Code writes Outputs to files in a known folder of the worktree.
-- c. Free text only; the app stores the last message as the Output.
-
-**Decision:**
-
-### Q27. How a Command Node returns its Outputs
-
-- **a. Exit code 0 succeeds, anything else fails. A `test-result` Output is the exit code plus the last 200 lines of output; a `branch` Output is the Run's branch at its current commit (Recommended).**
-- b. The command prints a JSON line with its Outputs.
-
-**Decision:**
-
-### Q28. What the Run's branch is called
-
-- **a. `clauderon/<issue-number>-<short-title-slug>-<short-run-id>` (Recommended).**
-- b. `feat/<issue-number>-<slug>`, as in the Dry-run examples.
-- c. The Agent Node chooses the name.
-
-**Decision:**
-
-### Q29. How Grill works
-
-- **a. The Grill Node runs Claude Code with a structured result that is either `{ question }` or the Node's Outputs. On a question the Run goes to Waiting for human; the Member's answer resumes the same Claude Code session; this repeats until Outputs come back (Recommended).**
-- b. Claude asks all its questions at once, a Member answers them in one form, and Claude produces its Output.
-
-**Decision:**
-
-### Q30. Limit on Grill rounds
-
-- **a. No limit; any Member can Cancel (Recommended).**
-- b. A limit per Node (for example 10 rounds), after which the Node fails.
-
-**Decision:**
-
-### Q31. Passing Reject feedback on Retry
-
-- **a. The latest Reject feedback of the Run is added to the retried Node's instructions under a "Feedback from the last review" heading (Recommended).**
-- b. Only passed when the retried Node is the one directly before the rejecting Approve Node.
-
-**Decision:**
-
-### Q32. Several end Nodes and Run success
-
-FLW-5 allows several end Nodes.
-
-- **a. A Run succeeds when every Node it can reach has succeeded; an optional Output left unproduced does not fail it (Recommended).**
-- b. A Run succeeds when any end Node succeeds.
-
-**Decision:**
-
-### Q33. A Node that produces no changes
-
-RUN-11 opens a pull request only when there are changes.
-
-- **a. `Open a pull request` succeeds with no `pull-request` Output and logs "no changes"; the Run succeeds and Ticket Status stays `Open` (Recommended).**
-- b. The Node fails, so a Member notices and decides.
-
-**Decision:**
+**Quyết định:**
 
 ---
 
-## E. Tickets, GitHub and Artifact
+## D. Run engine và Human Node
 
-### Q34. What Sync fetches
+### Q24. Retry và vị trí trong hàng đợi
 
-- **a. All open issues of the Project, plus the current state of every Ticket already known (so issues closed on GitHub show `Closed`) and of every pull request opened by a Run (Recommended).**
-- b. Open issues only; Tickets closed on GitHub disappear from the list.
+Lifecycle ghi Failed hoặc Interrupted → Queued khi Retry.
 
-**Decision:**
+- **a. Run được retry xếp vào cuối hàng đợi của Pod, như một Run mới (Recommended).**
+- b. Run được retry chen lên đầu hàng đợi.
 
-### Q35. Keeping `PR open` / `PR merged` current
+**Quyết định:**
 
-Automatic sync is out of scope.
+### Q25. Dry-run và Pod Ready
 
-- **a. Pull request state is read on Sync and whenever a Ticket, Run or Batch page is opened (Recommended).**
-- b. Only on Sync.
+- **a. Dry-run yêu cầu người start Run có Pod (vì nó chiếm một Slot) nhưng không cần đăng nhập Claude Code hay gh, và chạy trong app, không thực thi gì trong Pod (Recommended).**
+- b. Dry-run yêu cầu Pod Ready, giống Real Run.
+- c. Dry-run không cần Pod và không chiếm Slot (trái với RUN-13).
 
-**Decision:**
+**Quyết định:**
 
-### Q36. Writing the Artifact into the pull request body
+### Q26. Agent Node trả Output về thế nào
 
-The pull request is opened by a Node before the Run ends, but TRK-5 writes the Artifact into its body when the Run ends. The app never writes to GitHub (ADR 0001).
+- **a. Prompt của Node yêu cầu Claude Code kết thúc bằng một kết quả có cấu trúc (JSON) nêu từng Output; app kiểm tra kết quả theo Output Type của Node và đánh Node là failed nếu thiếu Output bắt buộc (Recommended).**
+- b. Claude Code ghi Output thành file trong một thư mục quy ước của worktree.
+- c. Chỉ văn bản tự do; app lưu message cuối cùng làm Output.
 
-- **a. When the Run ends, the app asks the Host Agent to edit the pull request body with the Starter's gh login in the Pod, as a final system step outside the Flow (Recommended).** Still a write from the Pod, so ADR 0001 holds.
-- b. `Open a pull request` writes what it knows at that moment; the Artifact is only shown in the app.
-- c. Require `Open a pull request` to be the last Node, and assemble the Artifact just before it.
+**Quyết định:**
 
-**Decision:**
+### Q27. Command Node trả Output về thế nào
 
-### Q37. Ticket key across organisations
+- **a. Exit code 0 là thành công, khác 0 là thất bại. Output `test-result` gồm exit code và 200 dòng output cuối; Output `branch` là branch của Run tại commit hiện tại (Recommended).**
+- b. Lệnh in ra một dòng JSON chứa các Output.
 
-TIC-1 shows keys like `ledger-api#412`.
+**Quyết định:**
 
-- **a. Use the repository name; if two Projects share a name, show `owner/repo#n` for both (Recommended).**
-- b. Always `owner/repo#n`.
+### Q28. Đặt tên branch của Run
 
-**Decision:**
+- **a. `clauderon/<số-issue>-<slug-ngắn-của-tiêu-đề>-<run-id-ngắn>` (Recommended).**
+- b. `feat/<số-issue>-<slug>`, như trong ví dụ của Dry-run.
+- c. Agent Node tự đặt tên.
 
-### Q38. Read-only GitHub token type
+**Quyết định:**
 
-- **a. A fine-grained personal access token with Issues: read and Pull requests: read on the Projects' repositories, set in the app's configuration (Recommended).**
-- b. A GitHub App installed on the repositories, read-only.
+### Q29. Grill hoạt động thế nào
 
-**Decision:**
+- **a. Grill Node chạy Claude Code với kết quả có cấu trúc, hoặc là `{ question }`, hoặc là các Output của Node. Nếu là câu hỏi, Run chuyển sang Waiting for human; câu trả lời của Member sẽ resume đúng phiên Claude Code đó; lặp lại cho đến khi có Output (Recommended).**
+- b. Claude hỏi tất cả câu hỏi một lần, một Member trả lời hết trong một form, rồi Claude tạo Output.
 
-### Q39. Enabling a Project
+**Quyết định:**
 
-- **a. Type `owner/repo`; the app checks with its token that the repository is readable and offers its branches for the base branch (Recommended).**
-- b. Pick from a list of every repository the token can read.
+### Q30. Giới hạn số vòng Grill
 
-**Decision:**
+- **a. Không giới hạn; Member nào cũng có thể Cancel (Recommended).**
+- b. Giới hạn mỗi Node (ví dụ 10 vòng), quá thì Node thất bại.
 
----
+**Quyết định:**
 
-## F. Flows
+### Q31. Truyền feedback của Reject khi Retry
 
-### Q40. Actions on a locked Flow
+- **a. Feedback Reject gần nhất của Run được thêm vào instructions của Node được retry, dưới tiêu đề "Feedback from the last review" (Recommended).**
+- b. Chỉ truyền khi Node được retry là Node ngay trước Approve Node đã reject.
 
-FLW-7 locks a Flow while an Active Run uses it.
+**Quyết định:**
 
-- **a. A locked Flow can still be viewed and cloned, not edited or deleted; the editor says which Runs hold the lock (Recommended).**
-- b. A locked Flow cannot be cloned either.
+### Q32. Nhiều end Node và khi nào Run thành công
 
-**Decision:**
+FLW-5 cho phép có nhiều end Node.
 
-### Q41. Who can edit or delete a Flow or Task
+- **a. Run thành công khi mọi Node mà nó đi tới được đều thành công; Output không bắt buộc mà không được tạo thì không làm Run thất bại (Recommended).**
+- b. Run thành công khi bất kỳ end Node nào thành công.
 
-There are no roles in v1.
+**Quyết định:**
 
-- **a. Any Member can edit or delete any non-sample Flow or Task; each change is audited (Recommended).**
-- b. Only the Member who created it.
+### Q33. Node không tạo ra thay đổi nào
 
-**Decision:**
+RUN-11 chỉ mở pull request khi có thay đổi.
 
-### Q42. Editing a Task used by Flows
+- **a. `Open a pull request` thành công mà không có Output `pull-request` và ghi log "no changes"; Run thành công và Ticket Status vẫn là `Open` (Recommended).**
+- b. Node thất bại, để Member để ý và tự quyết định.
 
-- **a. A Task cannot be edited while any Flow using it is locked; edits change every Flow that uses it (Recommended).**
-- b. Nodes copy the Task when added, so editing a Task never changes existing Flows.
-
-**Decision:**
-
----
-
-## G. Sign-in, logs and audit
-
-### Q43. Allowlist format
-
-- **a. A comma-separated list of emails in one environment variable, compared case-insensitively; changing it needs a restart or redeploy (Recommended).**
-- b. A config file read on change, without restart.
-
-**Decision:**
-
-### Q44. Ending sessions of a removed email
-
-- **a. Every request checks the session's email against the allowlist, so removal takes effect on the next request, including open WebSocket and terminal connections (Recommended).**
-- b. Sessions end at their next renewal.
-
-**Decision:**
-
-### Q45. Allowing only a company domain
-
-- **a. No; the allowlist is exact emails only, since personal Gmail is allowed (Recommended).**
-- b. Also allow entries like `@company.com` for a whole domain.
-
-**Decision:**
-
-### Q46. Masking secrets in logs
-
-NFR-1 masks tokens and secrets in every log.
-
-- **a. The Host Agent and app mask known token patterns (GitHub, Anthropic, OAuth) and the values of known secrets before storing or streaming any log line (Recommended).**
-- b. Mask only known secret values held by the app.
-
-**Decision:**
-
-### Q47. Where log lines are stored
-
-- **a. In Postgres, as chunks per Attempt, deleted by the retention job in Q12 (Recommended).**
-- b. In object storage, with only an index in Postgres.
-
-**Decision:**
+**Quyết định:**
 
 ---
 
-## Summary of recommendations
+## E. Ticket, GitHub và Artifact
 
-If the team accepts every recommendation, the spec will assume:
+### Q34. Sync lấy những gì
 
-- One test seam: the app core with a fake Host Agent on the real protocol; one spec for all of v1, published as a GitHub issue labelled `ready-for-agent`; one repository holding app, Host Agent and image.
-- Hosted on a managed cloud platform with Postgres; TypeScript everywhere; Host Agent installed as an OS service and paired with a secret from configuration.
-- Pods default to 2 CPU, 4 GB RAM, 2 Slots; image built by CI with Node, Python and Claude Code.
-- The app orchestrates Runs Node by Node over one resumable WebSocket; 30 seconds without a heartbeat makes Running Runs Interrupted; orphaned processes are killed.
-- Agent and Grill Nodes return structured results; Grill resumes the same Claude Code session; Reject feedback is added to the retried Node.
-- The Artifact is assembled from Outputs and written into the pull request body from the Pod at the end of the Run.
-- Sync also refreshes known Tickets and pull requests; pull request state is also read when pages open.
-- Sessions last 7 days (30 at most); the allowlist is checked on every request; logs live in Postgres for 90 days.
+- **a. Mọi issue đang mở của Project, cộng trạng thái hiện tại của mọi Ticket đã biết (để issue đã đóng trên GitHub hiện `Closed`) và của mọi pull request do Run mở (Recommended).**
+- b. Chỉ issue đang mở; Ticket đã đóng trên GitHub biến mất khỏi danh sách.
+
+**Quyết định:**
+
+### Q35. Giữ `PR open` / `PR merged` luôn cập nhật
+
+Sync tự động nằm ngoài phạm vi.
+
+- **a. Trạng thái pull request được đọc khi Sync và mỗi khi mở trang Ticket, Run hoặc Batch (Recommended).**
+- b. Chỉ đọc khi Sync.
+
+**Quyết định:**
+
+### Q36. Ghi Artifact vào nội dung pull request
+
+Pull request được một Node mở trước khi Run kết thúc, nhưng TRK-5 lại ghi Artifact vào nội dung pull request khi Run kết thúc. Trong khi đó app không bao giờ ghi lên GitHub (ADR 0001).
+
+- **a. Khi Run kết thúc, app yêu cầu Host Agent sửa nội dung pull request bằng gh login của người start Run ngay trong Pod, như một bước hệ thống cuối cùng nằm ngoài Flow (Recommended).** Vẫn là ghi từ Pod, nên ADR 0001 vẫn đúng.
+- b. `Open a pull request` ghi những gì nó biết tại thời điểm đó; Artifact chỉ hiện trong app.
+- c. Bắt buộc `Open a pull request` là Node cuối cùng, và ghép Artifact ngay trước nó.
+
+**Quyết định:**
+
+### Q37. Key của Ticket khi có nhiều organisation
+
+TIC-1 hiển thị key dạng `ledger-api#412`.
+
+- **a. Dùng tên repo; nếu hai Project trùng tên thì hiển thị `owner/repo#n` cho cả hai (Recommended).**
+- b. Luôn dùng `owner/repo#n`.
+
+**Quyết định:**
+
+### Q38. Loại token GitHub chỉ đọc
+
+- **a. Một fine-grained personal access token có quyền Issues: read và Pull requests: read trên các repo của Project, đặt trong cấu hình của app (Recommended).**
+- b. Một GitHub App cài trên các repo, chỉ đọc.
+
+**Quyết định:**
+
+### Q39. Bật một Project
+
+- **a. Gõ `owner/repo`; app dùng token của nó kiểm tra repo đọc được không và đưa ra danh sách branch để chọn base branch (Recommended).**
+- b. Chọn từ danh sách mọi repo mà token đọc được.
+
+**Quyết định:**
+
+---
+
+## F. Flow
+
+### Q40. Thao tác trên Flow đang bị khoá
+
+FLW-7 khoá Flow khi có Active Run đang dùng nó.
+
+- **a. Flow bị khoá vẫn xem và clone được, nhưng không sửa hay xoá được; editor cho biết Run nào đang giữ khoá (Recommended).**
+- b. Flow bị khoá cũng không clone được.
+
+**Quyết định:**
+
+### Q41. Ai được sửa hoặc xoá Flow, Task
+
+v1 không có phân quyền.
+
+- **a. Member nào cũng sửa hoặc xoá được mọi Flow, Task không phải mẫu; mọi thay đổi đều được audit (Recommended).**
+- b. Chỉ Member đã tạo ra nó.
+
+**Quyết định:**
+
+### Q42. Sửa một Task đang được Flow dùng
+
+- **a. Không sửa được Task khi có Flow nào dùng nó đang bị khoá; khi sửa thì mọi Flow dùng Task đó đều thay đổi theo (Recommended).**
+- b. Node copy Task khi được thêm vào, nên sửa Task không bao giờ làm thay đổi Flow đã có.
+
+**Quyết định:**
+
+---
+
+## G. Đăng nhập, log và audit
+
+### Q43. Định dạng allowlist
+
+- **a. Một danh sách email cách nhau bằng dấu phẩy trong một biến môi trường, so sánh không phân biệt hoa thường; đổi danh sách cần restart hoặc deploy lại (Recommended).**
+- b. Một file cấu hình được đọc lại khi thay đổi, không cần restart.
+
+**Quyết định:**
+
+### Q44. Kết thúc phiên của email bị gỡ khỏi allowlist
+
+- **a. Mỗi request đều kiểm tra email của phiên với allowlist, nên việc gỡ có hiệu lực ngay ở request tiếp theo, kể cả các kết nối WebSocket và terminal đang mở (Recommended).**
+- b. Phiên kết thúc ở lần gia hạn tiếp theo.
+
+**Quyết định:**
+
+### Q45. Cho phép cả một domain công ty
+
+- **a. Không; allowlist chỉ gồm email chính xác, vì Gmail cá nhân cũng được dùng (Recommended).**
+- b. Cho phép thêm mục dạng `@company.com` để mở cho cả domain.
+
+**Quyết định:**
+
+### Q46. Che secret trong log
+
+NFR-1 yêu cầu che token và secret trong mọi log.
+
+- **a. Host Agent và app che các mẫu token đã biết (GitHub, Anthropic, OAuth) và giá trị của các secret đã biết trước khi lưu hoặc stream bất kỳ dòng log nào (Recommended).**
+- b. Chỉ che giá trị các secret mà app đang giữ.
+
+**Quyết định:**
+
+### Q47. Lưu log ở đâu
+
+- **a. Trong Postgres, chia thành từng đoạn theo Attempt, xoá theo job giữ log ở Q12 (Recommended).**
+- b. Trong object storage, Postgres chỉ giữ chỉ mục.
+
+**Quyết định:**
+
+---
+
+## Tóm tắt các gợi ý
+
+Nếu team đồng ý với mọi gợi ý, spec sẽ dựa trên các điểm sau:
+
+- Một seam test: app core với Host Agent giả nói đúng protocol thật; một spec cho toàn bộ v1, publish thành GitHub issue gắn label `ready-for-agent`; một repo chứa app, Host Agent và image.
+- Host trên một nền tảng cloud có quản lý với Postgres; TypeScript toàn bộ; Host Agent cài như service của hệ điều hành và kết nối bằng secret trong cấu hình.
+- Pod mặc định 2 CPU, 4 GB RAM, 2 Slot; image build bằng CI, có Node, Python và Claude Code.
+- App điều phối Run từng Node một qua một WebSocket có thể resume; 30 giây không có heartbeat thì Run đang Running thành Interrupted; tiến trình mồ côi bị kill.
+- Agent Node và Grill Node trả kết quả có cấu trúc; Grill resume đúng phiên Claude Code; feedback Reject được thêm vào Node được retry.
+- Artifact được ghép từ các Output và ghi vào nội dung pull request từ trong Pod khi Run kết thúc.
+- Sync cập nhật cả Ticket và pull request đã biết; trạng thái pull request cũng được đọc khi mở trang.
+- Phiên đăng nhập 7 ngày (tối đa 30); allowlist được kiểm tra ở mọi request; log lưu trong Postgres 90 ngày.
