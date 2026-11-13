@@ -4,6 +4,7 @@
 | --- | --- |
 | [overview.md](overview.md) | **Start here:** a one-page brief of what Clauderon does, for leads and newcomers |
 | [requirements/v1-requirements.md](requirements/v1-requirements.md) | v1 requirements: the source of truth for scope, features and decisions |
+| [spec-questions.md](spec-questions.md) | Questions the team answers before the v1 spec, each with suggested options |
 | [adr/](adr/) | Architecture decision records, one decision per file |
 | [prototype/clauderon-prototype.html](prototype/clauderon-prototype.html) | Clickable UI prototype built from the v1 requirements, on simulated data; open it in a browser |
 | [../CONTEXT.md](../CONTEXT.md) | Domain glossary: the words to use in code, UI and conversation |
