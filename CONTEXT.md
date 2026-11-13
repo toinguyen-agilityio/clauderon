@@ -1,17 +1,17 @@
 # Clauderon
 
-A self-hosted web app for one team to run GitHub issues through Flows on the team's own Pods, and to track the resulting Runs and their outputs.
+A shared web app for one team to run GitHub issues through Flows on each Member's Pod, and to track the resulting Runs and their outputs.
 
 ## Language
 
 ### People
 
 **Member**:
-A person using the app, known only by the username they type when signing in; anyone can do anything, and the username is kept for display and audit.
+A person using the app, known only by the username they type when signing in, with at most one Pod; any Member can respond to or cancel any Run, and the username is kept for display and audit.
 _Avoid_: User, account, admin
 
 **Starter**:
-The Member who started a Run, recorded with it for display; it grants no special rights.
+The Member who started a Run; the Run executes on the Starter's Pod under their Claude Code and GitHub logins.
 _Avoid_: Owner, requester, author
 
 ### Work
@@ -30,13 +30,25 @@ _Avoid_: Ticket state, column
 
 ### Execution
 
-**Pod**:
-A machine the team already owns, running a Pod Daemon, where Runs execute.
-_Avoid_: VM, server, host, runner, worker
+**Pod Host**:
+The one team machine running Docker where every Pod lives.
+_Avoid_: Server, Docker host, workstation, VM
 
-**Pod Daemon**:
-The process installed on a Pod that connects out to this app and carries out Nodes for it.
-_Avoid_: Agent, runner, client
+**Host Agent**:
+The process on the Pod Host that connects out to this app and creates, runs and reports on Pods and their Runs.
+_Avoid_: Pod Daemon, agent, runner, client
+
+**Pod**:
+One Member's Docker container on the Pod Host, holding that Member's Claude Code and gh logins, where every Run they start executes.
+_Avoid_: VM, server, machine, runner, worker
+
+**Workspace**:
+A Pod's persistent storage, kept across Stop and Recreate: the owner's logins, a clone of each Project and a worktree per Run.
+_Avoid_: Volume, home, disk
+
+**Pod Ready**:
+The state of a Pod that is running with both Claude Code and gh logged in.
+_Avoid_: Online, healthy
 
 **Slot**:
 One unit of a Pod's capacity; each Run that is running or waiting for a human occupies one Slot, and Runs beyond a Pod's Slots wait in its queue.
@@ -78,11 +90,11 @@ _Avoid_: Artifact type, data type
 ### Runs
 
 **Run**:
-One execution of one Flow for exactly one Ticket on one Pod, in its own worktree and branch.
+One execution of one Flow for exactly one Ticket on its Starter's Pod, in its own worktree and branch.
 _Avoid_: Execution, job, build
 
 **Batch**:
-The set of Runs started together in one action, one per selected Ticket, on one Pod; a grouping for viewing only.
+The set of Runs started together in one action, one per selected Ticket, on the Starter's Pod; a grouping for viewing only.
 _Avoid_: Bulk run, group run
 
 **Attempt**:
@@ -93,7 +105,7 @@ _Avoid_: RunStep, try, execution
 A Run that has not ended as Succeeded or Cancelled, including a Failed or Interrupted one; a Ticket has at most one Active Run, and a Flow cannot be edited while an Active Run uses it.
 
 **Interrupted**:
-The state of a Run whose Pod lost its heartbeat mid-Node.
+The state of a Run whose Pod stopped, or whose Host Agent lost its connection, mid-Node; only a Retry continues it.
 _Avoid_: Crashed, lost, orphaned
 
 **Retry**:
