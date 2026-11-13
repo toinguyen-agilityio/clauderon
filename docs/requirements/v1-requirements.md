@@ -142,7 +142,7 @@ Priority: **Must** / **Should** / **Could**.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| POD-1 | One Pod Host: the Host Agent on it connects out to the app over HTTPS and carries out every Pod and Run command; the Pod Host needs no inbound port ([ADR 0005](../../adr/0005-pods-are-member-containers-on-one-pod-host.md)). | Must |
+| POD-1 | One Pod Host: the Host Agent on it connects out to the app over HTTPS and carries out every Pod and Run command; the Pod Host needs no inbound port ([ADR 0003](../adr/0003-pods-are-member-containers-on-one-pod-host.md)). | Must |
 | POD-2 | **Create my Pod**: a Member without a Pod creates one Docker container from the standard Ubuntu image, with a Workspace volume, Slots (default 2) and CPU/RAM limits. A Member has at most one Pod. | Must |
 | POD-3 | Every Run runs on its Starter's Pod. Running Runs never exceed the Pod's Slots; extra Runs wait in that Pod's queue and start first-in, first-out. | Must |
 | POD-4 | Pods page: a Pod Host card (Host Agent connected or not, Docker running, architecture, total CPU, RAM and disk) containing every Pod with its owner, status, image, Claude Code and gh login state, Slots in use and queue. | Must |
@@ -152,7 +152,7 @@ Priority: **Must** / **Should** / **Could**.
 | POD-8 | Show measured CPU, RAM and disk use per Pod. | Could |
 | POD-9 | Web terminal into the Pod, for its owner only (by username), to log in to Claude Code and gh and to inspect the Workspace. Every terminal session is recorded in the audit log. | Must |
 | POD-10 | The Workspace keeps the Member's Claude Code and gh logins, one clone per Project and one git worktree per Run; it survives Stop and Recreate. | Must |
-| POD-11 | Pushes and pull requests use the Starter's own gh login in their Pod, so pull requests carry the Starter's GitHub name ([ADR 0003](../../adr/0003-pods-push-with-their-own-git-login.md)). | Must |
+| POD-11 | Pushes and pull requests use the Starter's own gh login in their Pod, so pull requests carry the Starter's GitHub name ([ADR 0001](../adr/0001-pods-push-with-their-own-git-login.md)). | Must |
 
 ### 4.3 Tickets
 
@@ -345,7 +345,7 @@ How each difference between the two drafts was settled. "Team" is the team draft
 | People | One team; sign in by typing a username, no verification | New |
 | Who can approve or cancel | Any member; actions are recorded with the username | New |
 | Timeline | No fixed deadline; milestones | Team |
-| GitHub writes | The Pod pushes and opens pull requests with its own git/gh login | New ([ADR 0003](../../adr/0003-pods-push-with-their-own-git-login.md)) |
+| GitHub writes | The Pod pushes and opens pull requests with its own git/gh login | New ([ADR 0001](../adr/0001-pods-push-with-their-own-git-login.md)) |
 | GitHub reads | The app holds one read-only token for issues and pull requests | New |
 | Issue comments | None; the app never writes to GitHub | Practice |
 | Ticket sync | Manual Sync button only | Practice |
@@ -355,7 +355,7 @@ How each difference between the two drafts was settled. "Team" is the team draft
 | Pod Environment | Dropped; the Pod's own environment is used | New |
 | Pod health and ports | Measured CPU, RAM, disk; forwarded-port metadata (ports dropped 2026-11-13) | Practice |
 | Heartbeat and Interrupted | Kept | Team |
-| Flow shape | Typed DAG on a canvas, no cycles | Practice ([ADR 0004](../../adr/0004-flows-are-typed-dags-run-sequentially.md)) |
+| Flow shape | Typed DAG on a canvas, no cycles | Practice ([ADR 0002](../adr/0002-flows-are-typed-dags-run-sequentially.md)) |
 | Node execution | One Node at a time, in topological order | New |
 | Node kinds | Tasks of kind Agent, Command or Human; Human is Approve or Grill | Merged |
 | Grill | Resume the same Claude session | New |
@@ -379,7 +379,7 @@ Updates on 2026-11-13, moving Pods to Docker on one machine:
 | --- | --- | --- |
 | Pod | One Docker container per Member, on one Pod Host | Team machines, each a Pod |
 | Pod Host | One always-on team machine running Docker | Several machines |
-| Control path | A Host Agent on the Pod Host connects out to the app ([ADR 0005](../../adr/0005-pods-are-member-containers-on-one-pod-host.md)) | Pod Daemon per Pod |
+| Control path | A Host Agent on the Pod Host connects out to the app ([ADR 0003](../adr/0003-pods-are-member-containers-on-one-pod-host.md)) | Pod Daemon per Pod |
 | Web app | Shared web app with its own database, hosted elsewhere; hosting is an open question | Self-hosted on the same machine |
 | Pod lifecycle | The owner creates, starts, stops, recreates and deletes their Pod from the app | App never provisions Pods |
 | Workspace | A volume per Pod keeps logins, clones and worktrees; survives Stop and Recreate; deleted with the Pod | — |
@@ -396,7 +396,7 @@ Updates on 2026-11-13, moving Pods to Docker on one machine:
 
 ## 10. Glossary
 
-The full glossary is [CONTEXT.md](../../../CONTEXT.md). Key terms:
+The full glossary is [CONTEXT.md](../../CONTEXT.md). Key terms:
 
 | Term | Meaning |
 | --- | --- |
@@ -422,8 +422,8 @@ The full glossary is [CONTEXT.md](../../../CONTEXT.md). Key terms:
 
 ## 11. Related documents
 
-- [CONTEXT.md](../../../CONTEXT.md): domain glossary
-- [docs/adr/](../../adr/): architecture decision records
+- [CONTEXT.md](../../CONTEXT.md): domain glossary
+- [docs/adr/](../adr/): architecture decision records
 
 ## 12. Next steps
 

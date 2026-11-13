@@ -1,6 +1,6 @@
 # Pods push and open pull requests with their own git/gh login
 
-Members sign in by typing a username, so the app has no verified GitHub identity per person and holds no GitHub token that can write. Instead, everything that writes to GitHub happens inside the Starter's Pod: the Run pushes its branch and opens its pull request with the gh login the Starter set up in their own Pod (see ADR 0005), so the pull request carries the Starter's GitHub name. The app keeps only one read-only token to sync issues and read pull request state, and never writes to GitHub.
+Members sign in by typing a username, so the app has no verified GitHub identity per person and holds no GitHub token that can write. Instead, everything that writes to GitHub happens inside the Starter's Pod: the Run pushes its branch and opens its pull request with the gh login the Starter set up in their own Pod (see ADR 0003), so the pull request carries the Starter's GitHub name. The app keeps only one read-only token to sync issues and read pull request state, and never writes to GitHub.
 
 Updated 2026-11-13: Pods became one container per Member, so "the Pod's login" is now the Starter's own login rather than a shared or per-machine account.
 
