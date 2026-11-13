@@ -7,8 +7,8 @@ A shared web app for one team to run GitHub issues through Flows on each Member'
 ### People
 
 **Member**:
-A person using the app, known only by the username they type when signing in, with at most one Pod; any Member can respond to or cancel any Run, and the username is kept for display and audit.
-_Avoid_: User, account, admin
+A person who signs in with a Google account whose email is on the app's allowlist, identified by that email, with at most one Pod; any Member can respond to or cancel any Run, and their email is kept for audit.
+_Avoid_: User, account, admin, username
 
 **Starter**:
 The Member who started a Run; the Run executes on the Starter's Pod under their Claude Code and GitHub logins.

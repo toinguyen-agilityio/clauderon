@@ -1,6 +1,6 @@
 # Clauderon — Requirements v1 (final)
 
-> **Version:** v1 final · **Date:** 2026-11-12, updated 2026-11-13 (Pods are per-Member Docker containers on one Pod Host) · **Status:** Requirements settled; no technical design or code yet.
+> **Version:** v1 final · **Date:** 2026-11-12, updated 2026-11-13 (Pods are per-Member Docker containers on one Pod Host; sign-in with Google) · **Status:** Requirements settled; no technical design or code yet.
 > **Sources:** merges two earlier drafts, a team draft and a practice draft, following the practice draft's outline. Neither is kept in the repo any more; git history has them. Every point where they differed was settled on 2026-11-12; see [section 9](#9-decision-log-2026-11-12).
 > **Next step:** design, then spec, then implementation plan (section 12).
 
@@ -89,6 +89,7 @@ Acceptance checks:
 | A3 | The Flow editor rejects an edge whose Output Type does not match the input, and rejects any cycle | Unit tests of the validator |
 | A4 | Each Run shows the correct state of every Node: queued, running, waiting for human, succeeded, failed | Manual script plus runner unit tests |
 | A5 | Reloading the page or restarting the app loses no Pods, Flows, Runs or logs | Manual check |
+| A7 | An allowlisted Google account signs in and its email shows on its actions; a Google account not on the allowlist is refused; removing an email ends that Member's session | Manual check |
 
 ---
 
@@ -96,7 +97,7 @@ Acceptance checks:
 
 ### In scope
 
-- **People:** one team on one shared web app with its own database. A member signs in by typing a username, with no verification.
+- **People:** one team on one shared web app with its own database. A member signs in with their Google account; only email addresses on the app's allowlist get in.
 - **Projects:** each Project is one GitHub repository and its base branch. Several Projects can be enabled.
 - **Pod Host:** exactly one team machine running Docker (for example Docker Desktop on an ARM64 Mac), always on, with one Host Agent that connects out to the app.
 - **Pods:** one Docker container per Member on the Pod Host, created, started, stopped, recreated and deleted from the app; one standard Ubuntu image; a Workspace volume per Pod; Slots and CPU/RAM limits; a web terminal for the owner to log in to Claude Code and gh; measured CPU, RAM and disk use.
@@ -107,7 +108,7 @@ Acceptance checks:
 
 ### Out of scope
 
-- Real authentication (GitHub OAuth, SSO), roles and permissions, multiple teams, billing.
+- Sign-in methods other than Google (password, GitHub OAuth, other SSO), managing the allowlist from the app, roles and permissions, multiple teams, billing.
 - Ticket sources other than GitHub Issues, and code hosts other than GitHub.
 - Agents other than Claude Code.
 - More than one Pod Host; Pods on machines other than the Pod Host; VMs.
@@ -133,7 +134,8 @@ Priority: **Must** / **Should** / **Could**.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| MEM-1 | Sign in by typing a username; the app remembers it in the browser and shows it on every action the member takes. | Must |
+| MEM-1 | Sign in with Google. Only verified Google email addresses on the allowlist can sign in; any other address sees an "access denied" page. A Member is identified by that email, shown by the Google name and picture, and named on every action they take. Sign out ends the session. | Must |
+| MEM-3 | The allowlist of email addresses lives in the app's configuration, set by whoever runs the app. The first sign-in of an allowed email creates the Member. Removing an email blocks new sign-ins and ends its open sessions; the Member's Pod, Runs and audit entries are kept. | Must |
 | MEM-2 | Every member can approve, reject, answer, cancel and retry any Run. Starting a Run and opening a Pod's terminal are tied to the Member's own Pod (POD-3, POD-9). | Must |
 | PRJ-1 | Enable a GitHub repository as a Project, with its base branch. | Must |
 | PRJ-2 | Store one read-only GitHub token for the app (Issues and Pull requests read), encrypted at rest. | Must |
@@ -150,7 +152,7 @@ Priority: **Must** / **Should** / **Could**.
 | POD-6 | The owner can Start, Stop and **Recreate** their Pod. Recreate replaces the container with the current image and keeps the Workspace; the Pod shows when a newer image is available. Stop and Recreate are refused while the Pod has Running or Waiting Runs. | Must |
 | POD-7 | **Delete Pod** removes the container and its Workspace, logins included; refused while the Pod has Active Runs. | Should |
 | POD-8 | Show measured CPU, RAM and disk use per Pod. | Could |
-| POD-9 | Web terminal into the Pod, for its owner only (by username), to log in to Claude Code and gh and to inspect the Workspace. Every terminal session is recorded in the audit log. | Must |
+| POD-9 | Web terminal into the Pod, for its owner only (the signed-in Member whose Pod it is), to log in to Claude Code and gh and to inspect the Workspace. Every terminal session is recorded in the audit log. | Must |
 | POD-10 | The Workspace keeps the Member's Claude Code and gh logins, one clone per Project and one git worktree per Run; it survives Stop and Recreate. | Must |
 | POD-11 | Pushes and pull requests use the Starter's own gh login in their Pod, so pull requests carry the Starter's GitHub name ([ADR 0001](../adr/0001-pods-push-with-their-own-git-login.md)). | Must |
 
@@ -200,7 +202,7 @@ Output Types for v1: `issue`, `plan`, `branch`, `test-result`, `pull-request`, `
 | RUN-12 | When a Pod stops or crashes, or the Host Agent loses its connection, the Pod's running Runs become `Interrupted`; queued Runs wait for the Pod to run again. Nothing is retried automatically: the Starter checks and retries. After an app restart, Runs left running are marked `Interrupted`. | Must |
 | RUN-13 | Dry-run: a simulated runner (each Node 2–8 s, configurable failure rate, fake Outputs such as `branch: feat/412-retry`, `pr: #88`). It occupies a Slot and locks the Flow but does not count toward the Ticket's Active Run and never touches GitHub or Claude. Dry-run Runs are clearly marked. | Must |
 | RUN-14 | The worktree is deleted when a Run ends as `Succeeded` or `Cancelled`; it is kept while the Run is `Failed` or `Interrupted`. | Should |
-| RUN-15 | Every action on a Run (start, approve, reject, answer, cancel, retry) and every Pod action (create, start, stop, recreate, delete, terminal session) records the username and time. | Should |
+| RUN-15 | Every action on a Run (start, approve, reject, answer, cancel, retry) and every Pod action (create, start, stop, recreate, delete, terminal session) records the Member's email and time. | Should |
 
 **Run lifecycle:**
 
@@ -244,7 +246,7 @@ A Run holds a Slot only while Running or Waiting for human.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
-| NFR-1 | Security | The app's GitHub token is encrypted at rest; tokens and secrets are masked in every log the app stores or shows. | Must |
+| NFR-1 | Security | The app's GitHub token and Google OAuth client secret are encrypted at rest or kept out of the database; tokens and secrets are masked in every log the app stores or shows; sign-in sessions use secure, HTTP-only cookies and expire. | Must |
 | NFR-2 | Audit | See RUN-15. | Should |
 | NFR-3 | Resilience | The Host Agent reconnects by itself after a network drop or a Pod Host restart. | Must |
 | NFR-6 | Isolation | Each Pod has its own container, Workspace volume and CPU/RAM limits, so one Member's Runs cannot read another Member's Workspace or starve the Pod Host. | Must |
@@ -255,7 +257,7 @@ A Run holds a Slot only while Running or Waiting for human.
 
 | Screen | Shows | Main actions |
 | --- | --- | --- |
-| Sign in | Username field | Enter the app |
+| Sign in | Sign in with Google button; access denied page for emails not on the allowlist | Sign in, sign out |
 | Projects | Enabled repositories | Enable a repo, set base branch, Sync |
 | Tickets | Tickets per Project with derived status | Search, filter, select, Start |
 | Start dialog | Flow, mode, extra instructions, selected Tickets, the Starter's Pod with its Slots | Start the Batch |
@@ -284,7 +286,7 @@ A Run holds a Slot only while Running or Waiting for human.
 - The Clauderon web app and its database are hosted somewhere every Member can reach; where is an open question.
 - The standard image is Ubuntu-based with git, gh, Node and the Claude Code CLI, built for the Pod Host's architecture.
 - Claude Code runs headless in a container, can resume a session (for Grill), and reports output and token usage as it goes.
-- The username sign-in is trusted: anyone can type any name. Usernames are for display and audit, not security.
+- Every Member has a Google account (Google Workspace or personal Gmail) with the email on the allowlist. The app is registered as a Google OAuth client, and its URL is the redirect target.
 - Tech stack is undecided (the practice draft suggested React, TypeScript, Vite, React Flow, Zustand and Vitest for the UI).
 
 ---
@@ -295,13 +297,13 @@ A Run holds a Slot only while Running or Waiting for human.
 | --- | --- | --- | --- |
 | R1 | **Company policy:** company repositories, personal Claude subscriptions on Pods and a bot-like account opening pull requests | High | Ask IT and leads before M1. Fallback: a sandbox repository |
 | R2 | **Broad personal credentials:** an issue's text reaches the agent's prompt, and a Member's gh login can usually reach every repository they can, so a malicious issue could steer the agent beyond the Project | High | Log in gh with a fine-grained token limited to the Projects' repositories; show the gh account and its scope on the Pod page |
-| R7 | **Impersonation through usernames:** anyone who types another Member's username can start Runs on that Member's Pod, spending their Claude quota and opening pull requests under their GitHub name | High | Accepted for v1 by decision; the audit log records every action; revisit with real sign-in |
+| R7 | **Stolen Google session:** whoever holds a Member's signed-in session or Google account can start Runs on that Member's Pod, spending their Claude quota and opening pull requests under their GitHub name | Medium | Google sign-in with verified email and allowlist; sessions expire; removing an email ends its sessions; every action is audited |
 | R8 | **One Pod Host is a single point of failure:** if it is off, offline or out of disk, no Member can run anything | Medium | Keep it on a UPS and wired network; Interrupted Runs are retried by hand; show Pod Host health on the Pods page |
 | R9 | **Docker Desktop licence:** companies above 250 employees or USD 10 million revenue need a paid subscription | Low | Check with IT; an alternative Docker engine works the same for Clauderon |
 | R3 | **Anthropic terms** for running Claude Code headless on a subscription from a separate app | Medium | Check the official terms during design. Fallback: an API key on the Pod |
 | R4 | Subscription quota runs out mid-Run | Medium | The Node fails with a clear reason and can be retried; load-test with Dry-run |
 | R5 | A Node waiting for a person holds a Slot indefinitely | Medium | Needs you queue; any member can answer or cancel |
-| R6 | Usernames can be spoofed, so the audit trail is advisory | Low | Accepted for v1; real sign-in is out of scope; see R7 |
+| R6 | **Allowlist drift:** someone who leaves the team keeps access until their email is removed from the configuration | Low | Remove the email when a Member leaves; their Runs and audit entries stay |
 
 ---
 
@@ -311,7 +313,7 @@ Proposed split for the team to confirm. No dates: each milestone ends when its c
 
 | Milestone | Delivers | Check |
 | --- | --- | --- |
-| **M0 — Model and seed** | Domain model, persistence, seeded Tasks and Flows, username sign-in | Model unit tests pass; A5 |
+| **M0 — Model and seed** | Domain model, persistence, seeded Tasks and Flows, Google sign-in with the allowlist | Model unit tests pass; A5, A7 |
 | **M1 — Walking skeleton** | Pod Host with its Host Agent, Create my Pod, terminal login, one Project, Sync, a fixed sample Flow with Agent and Command Nodes, live logs, real branch and pull request | A1 |
 | **M2 — Flows and scheduling** | Canvas editor and validator, clone samples, Flow edit lock, a Pod per Member with Slots, limits and queue, Batches, Dry-run | A2, A3, A6 |
 | **M3 — People in the loop** | Approve and Grill Nodes, Needs you, Retry from any Node, Cancel, Attempts, audit | A4 |
@@ -332,6 +334,7 @@ Proposed split for the team to confirm. No dates: each milestone ends when its c
 7. Can cost be shown in money when Claude Code runs on a subscription, or only as tokens?
 8. Log retention and backup schedule.
 9. Tech stack for the app.
+10. Who owns the Google OAuth client (which Google Cloud project), and how long a sign-in session lasts before Google sign-in is asked again?
 
 ---
 
@@ -342,8 +345,8 @@ How each difference between the two drafts was settled. "Team" is the team draft
 | Topic | Decision | Follows |
 | --- | --- | --- |
 | Purpose | A product the team uses, not a practice exercise | Team |
-| People | One team; sign in by typing a username, no verification | New |
-| Who can approve or cancel | Any member; actions are recorded with the username | New |
+| People | One team; sign in by typing a username, no verification (superseded 2026-11-13: Google sign-in, see below) | New |
+| Who can approve or cancel | Any member; actions are recorded with who did them | New |
 | Timeline | No fixed deadline; milestones | Team |
 | GitHub writes | The Pod pushes and opens pull requests with its own git/gh login | New ([ADR 0001](../adr/0001-pods-push-with-their-own-git-login.md)) |
 | GitHub reads | The app holds one read-only token for issues and pull requests | New |
@@ -389,7 +392,7 @@ Updates on 2026-11-13, moving Pods to Docker on one machine:
 | Run placement | Always on the Starter's Pod; no Pod picker, no moving Runs | Starter picks a Pod |
 | Start rule | Only when the Starter's Pod has both logins; a stopped Pod queues | — |
 | Pod down | Running → Interrupted; queued waits; no automatic Retry | Heartbeat lost → Interrupted, move queued Runs |
-| Sign-in | Still a typed username; impersonation risk accepted (R7) | — |
+| Sign-in | Google sign-in; only emails on an allowlist in the app's configuration; a Member is identified by email; typed usernames removed; R7 lowered to Medium | Typed username |
 | Ports | Forwarded ports dropped from v1 | Port metadata |
 
 ---

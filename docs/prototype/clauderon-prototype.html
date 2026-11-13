@@ -940,20 +940,29 @@ function renderSide(){
       ${item('tickets','Tickets',IC.tickets)}${item('runs','Runs',IC.runs)}${item('needs-you','Needs you',IC.needs,n||'')}${item('flows','Flows',IC.flows)}${item('pods','Pods',IC.pods)}${item('projects','Projects',IC.projects)}
     </nav>
     <div class="side-foot">
-      <div class="me">${avatar(S.me)}<div class="me-text grow"><div style="font-weight:600">${esc(S.me)}</div>${(()=>{ const p=podOf(S.me); return p?`<a href="#pod-${p.id}" class="small mono">${esc(p.name)} · ${podReady(p)?'ready':(POD_STATE[p.state]||'').toLowerCase()}</a>`:'<a href="#pods" class="small">Create my Pod</a>'; })()}<button class="btn ghost sm" style="padding:0;height:auto" data-act="switch-user">Switch user</button></div></div>
+      <div class="me">${avatar(S.me)}<div class="me-text grow"><div style="font-weight:600">${esc(S.meName||S.me)}</div><div class="small faint" style="overflow:hidden;text-overflow:ellipsis">${esc(meEmail())}</div>${(()=>{ const p=podOf(S.me); return p?`<a href="#pod-${p.id}" class="small mono">${esc(p.name)} · ${podReady(p)?'ready':(POD_STATE[p.state]||'').toLowerCase()}</a>`:'<a href="#pods" class="small">Create my Pod</a>'; })()}<button class="btn ghost sm" style="padding:0;height:auto" data-act="switch-user">Sign out</button></div></div>
       <div class="seg theme-seg" role="group" aria-label="Theme">${['light','system','dark'].map(x=>`<button data-act="theme" data-v="${x}" class="${th===x?'on':''}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div>
     </div>`;
 }
+const ALLOW=['huy@agilityio.com','linh@agilityio.com','toi@agilityio.com','minh@agilityio.com'];
+const G_ACCTS=[['Huy Pham','huy@agilityio.com'],['Linh Tran','linh@agilityio.com'],['Toi Nguyen','toi@agilityio.com'],['Huy (personal)','huy.pham@gmail.com']];
+function meEmail(){ return S.meEmail||(S.me?S.me+'@agilityio.com':''); }
+const G_LOGO='<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
 function signInView(){
-  const recent=['huy','linh','toi','minh'];
-  return `<div class="signin"><form class="card signin-card" id="signin-form" autocomplete="off">
-    <div class="brand"><div class="brand-mark">C/</div><div><div class="brand-name">Clauderon</div><div class="brand-sub">agilityio · team workspace</div></div></div>
-    <div class="stack" style="gap:6px"><h1>Sign in</h1><p class="muted">Type your username. There is no password: the name is shown on every Run you start and every approval you give. ${req('MEM-1')}</p></div>
-    <div class="field"><label for="si-name">Username</label><input class="input" id="si-name" name="u" placeholder="e.g. huy" maxlength="32" required></div>
-    <div class="stack" style="gap:6px"><span class="eyebrow">Recent on this browser</span><div class="chips">${recent.map(n=>`<button type="button" class="fchip" data-act="si-pick" data-v="${n}">${avatar(n)} ${n}</button>`).join('')}</div></div>
-    <button class="btn primary" type="submit" style="justify-content:center">Continue</button>
+  const brand=`<div class="brand"><div class="brand-mark">C/</div><div><div class="brand-name">Clauderon</div><div class="brand-sub">agilityio · team workspace</div></div></div>`;
+  if(U.denied) return `<div class="signin"><div class="card signin-card">${brand}
+    <div class="stack" style="gap:6px"><h1>Access denied</h1><p class="muted"><b>${esc(U.denied)}</b> is not on this app's allowlist. Ask whoever runs Clauderon to add your email, then sign in again. ${req('MEM-3')}</p></div>
+    <button class="btn primary" data-act="si-back" style="justify-content:center">Use another Google account</button></div></div>`;
+  if(U.gpick) return `<div class="signin"><div class="card signin-card">
+    <div class="stack" style="gap:6px;align-items:center;text-align:center">${G_LOGO.replace(/18/g,'28')}<h1 style="font-size:20px">Choose an account</h1><p class="muted small">to continue to Clauderon</p></div>
+    <div class="stack" style="gap:4px">${G_ACCTS.map(([n,e])=>`<button type="button" class="btn ghost" data-act="si-google-pick" data-v="${e}" data-n="${esc(n)}" style="justify-content:flex-start;gap:12px;height:auto;padding:10px 12px;text-align:left">${avatar(e)}<span class="stack" style="gap:0"><b>${esc(n)}</b><span class="small muted">${esc(e)}</span></span></button>`).join('')}</div>
+    <p class="faint small">Prototype: a simulated Google account chooser. The allowlist is ${ALLOW.map(esc).join(', ')}.</p>
+    <button class="btn" data-act="si-back" style="justify-content:center">Cancel</button></div></div>`;
+  return `<div class="signin"><div class="card signin-card">${brand}
+    <div class="stack" style="gap:6px"><h1>Sign in</h1><p class="muted">Use your Google account. Only emails on the team's allowlist can sign in, and your email is recorded on every Run you start and every approval you give. ${req('MEM-1')}</p></div>
+    <button class="btn" data-act="si-google" style="justify-content:center;gap:10px;height:44px">${G_LOGO} Sign in with Google</button>
     <p class="faint small">Prototype: data is simulated and stays in this browser.</p>
-  </form></div>`;
+  </div></div>`;
 }
 
 /* ---------------------------------------------------------------- views */
@@ -1154,7 +1163,7 @@ function runView(id){
     ${tab==='diff'?`<div class="card-pad">${diffView(r)}</div>`:''}
     ${tab==='artifact'?`<div class="card-pad">${artifactView(r)}</div>`:''}
     ${tab==='usage'?`<div class="card-pad">${usageView(r)}</div>`:''}
-    ${tab==='activity'?`<div class="card-pad"><p class="muted small" style="margin-bottom:8px">Who did what, and when. Usernames are typed at sign-in and are not verified. ${req('RUN-15')}</p><ul class="feed">${r.audit.slice().reverse().map(e=>`<li>${e.who==='app'?'<span class="avatar">C/</span>':avatar(e.who)}<span class="small"><b>${e.who==='app'?'Clauderon':esc(e.who)}</b> ${esc(e.what)}</span><span class="faint small">${ago(e.at)}</span></li>`).join('')}</ul></div>`:''}
+    ${tab==='activity'?`<div class="card-pad"><p class="muted small" style="margin-bottom:8px">Who did what, and when. Members are identified by their Google email. ${req('RUN-15')}</p><ul class="feed">${r.audit.slice().reverse().map(e=>`<li>${e.who==='app'?'<span class="avatar">C/</span>':avatar(e.who)}<span class="small"><b>${e.who==='app'?'Clauderon':esc(e.who)}</b> ${esc(e.what)}</span><span class="faint small">${ago(e.at)}</span></li>`).join('')}</ul></div>`:''}
   </div>
   ${r.pr&&r.pr.state==='open'?`<div class="proto-note row between"><span>Prototype: GitHub events the app would read on the next Sync.</span><button class="btn sm" data-act="merge-pr" data-id="${r.id}">Simulate: PR merged on GitHub</button></div>`:''}`;
 }
@@ -1639,7 +1648,7 @@ function taskModal(){
 function readTaskFields(){ const t=U.modal.task; const v=id=>{ const el=document.getElementById(id); return el?el.value:null; }; if(v('tm-name')!=null) t.name=v('tm-name'); if(v('tm-cmd')!=null) t.command=v('tm-cmd'); if(v('tm-ins')!=null) t.instructions=v('tm-ins'); }
 
 /* ---- reset & misc modals */
-function resetModal(){ return `<div class="modal" role="dialog" aria-modal="true" style="width:min(440px,100%)"><div class="modal-h"><h2>Reset demo data?</h2><button class="btn ghost sm" data-act="modal-close" aria-label="Close">${IC.x}</button></div><div class="modal-b"><p>All Runs, Flows and Pods go back to the seeded sample data. Your username is kept.</p></div><div class="modal-f"><button class="btn" data-act="modal-close">Keep my data</button><button class="btn danger solid" data-act="reset-confirm">Reset</button></div></div>`; }
+function resetModal(){ return `<div class="modal" role="dialog" aria-modal="true" style="width:min(440px,100%)"><div class="modal-h"><h2>Reset demo data?</h2><button class="btn ghost sm" data-act="modal-close" aria-label="Close">${IC.x}</button></div><div class="modal-b"><p>All Runs, Flows and Pods go back to the seeded sample data. You stay signed in.</p></div><div class="modal-f"><button class="btn" data-act="modal-close">Keep my data</button><button class="btn danger solid" data-act="reset-confirm">Reset</button></div></div>`; }
 
 function renderModal(){
   const el=document.getElementById('modal'); if(!el) return;
@@ -1671,8 +1680,10 @@ document.addEventListener('click',e=>{
   if(['tk-sel','tk-all','ed-off','tm-req','tm-opt','ids','sd-flow','sd-pod','rt-node'].includes(act)) return; // handled on change
   if(el.tagName==='SELECT') return;
   switch(act){
-    case 'si-pick': { const i=document.getElementById('si-name'); if(i){ i.value=el.dataset.v; i.focus(); } break; }
-    case 'switch-user': S.me=null; save(); document.getElementById('app').innerHTML=''; renderApp(); break;
+    case 'si-google': U.gpick=true; U.denied=null; renderApp(); break;
+    case 'si-back': U.gpick=false; U.denied=null; renderApp(); break;
+    case 'si-google-pick': { const e=el.dataset.v; U.gpick=false; if(!ALLOW.includes(e)){ U.denied=e; renderApp(); break; } S.me=e.split('@')[0]; S.meEmail=e; S.meName=el.dataset.n; save(); renderApp(); toast(`Signed in as ${e}`); break; }
+    case 'switch-user': S.me=null; S.meEmail=null; S.meName=null; U.gpick=false; U.denied=null; save(); toast('Signed out'); document.getElementById('app').innerHTML=''; renderApp(); break;
     case 'theme': setPref('theme',el.dataset.v); applyTheme(); renderSide(); break;
     case 'sim': U.sim=!U.sim; renderSim(); break;
     case 'speed': S.speed=+el.dataset.v; renderSim(); break;
@@ -1782,7 +1793,6 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('submit',e=>{
   e.preventDefault(); const f=e.target;
-  if(f.id==='signin-form'){ const v=(document.getElementById('si-name').value||'').trim().toLowerCase().replace(/\s+/g,'-'); if(!v) return; S.me=v; save(); renderApp(); toast(`Signed in as ${v}`); return; }
   if(f.id==='create-form'){ if(podOf(S.me)) return; const t=now(); const p={id:'pod-'+S.me,name:'pod-'+S.me,owner:S.me,state:'creating',slots:Math.max(1,Math.min(6,parseInt(document.getElementById('cp-slots').value,10)||2)),cpuLimit:+document.getElementById('cp-cpu').value,ramLimit:+document.getElementById('cp-ram').value,image:S.host.latestImage,claude:{ok:false,acct:null},gh:{ok:false,user:null},cpu:0,ram:0,wsGB:.4,createdAt:t,audit:[{at:t,who:S.me,what:'Created the Pod'}]}; S.pods.push(p); U.modal=null; renderModal(); toast(`Creating ${p.name}…`); location.hash='pod-'+p.id; setTimeout(()=>{ p.state='running'; p.cpu=6; p.ram=18; toast(`${p.name} is running · log in to Claude Code and gh`); rerender(); },3000/(S.speed||1)); return; }
   if(f.id==='term-form'){ const i=document.getElementById('term-in'); const p=podById(U.modal.podId); termRun(p,i.value); renderModal(); return; }
   if(f.id==='token-form'){ const v=document.getElementById('tk-new').value; S.ghToken='••••'+(v.slice(-4)||'xxxx'); U.modal=null; renderModal(); toast('Token replaced · stored encrypted'); rerender(); return; }

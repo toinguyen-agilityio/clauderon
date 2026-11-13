@@ -12,4 +12,4 @@ Each Member gets one Docker container, built from one standard Ubuntu image, on 
 
 - The Pod Host is a single point of failure: when it, Docker or the Host Agent is down, every running Run becomes Interrupted and nothing new starts.
 - A Member who has not logged in to Claude Code and gh in their Pod cannot start Runs.
-- Because sign-in is only a typed username, anyone typing another Member's name can use that Member's Pod and credentials; this is accepted for v1.
+- Anyone holding a Member's signed-in session can use that Member's Pod and credentials, so sign-in uses Google with an email allowlist (updated 2026-11-13; originally a typed username).
