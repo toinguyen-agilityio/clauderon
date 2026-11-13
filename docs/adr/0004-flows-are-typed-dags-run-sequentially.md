@@ -4,7 +4,7 @@ A Flow is a directed acyclic graph drawn on a canvas, and an edge is allowed onl
 
 ## Considered Options
 
-- **Linear list of Steps with Loop-backs** (the team draft): models fix-test-review loops directly, but gives up the typed canvas and its validation.
+- **Linear list of Steps with Loop-backs** (an earlier draft): models fix-test-review loops directly, but gives up the typed canvas and its validation.
 - **Parallel branches with one worktree per branch**: real parallelism, but needs merging worktrees where branches meet.
 
 ## Consequences
