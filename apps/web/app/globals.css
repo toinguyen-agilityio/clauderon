@@ -1,0 +1,269 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --border: #d9dde3;
+  --text: #1c2430;
+  --muted: #5d6877;
+  --accent: #2f6fed;
+  --accent-text: #ffffff;
+  --danger: #c62f2f;
+  --danger-bg: #fdecec;
+  --ok: #1d7f4e;
+  --chip: #eef1f5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161c;
+    --panel: #1b212a;
+    --border: #2f3947;
+    --text: #e6eaf0;
+    --muted: #9aa6b5;
+    --accent: #6c9bff;
+    --accent-text: #0d1320;
+    --danger: #ff8080;
+    --danger-bg: #3a1f22;
+    --ok: #5fd39a;
+    --chip: #263040;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+input,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  width: 100%;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: 260px 1fr 300px;
+  height: 100vh;
+}
+
+.side {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.side.right {
+  border-right: 0;
+  border-left: 1px solid var(--border);
+}
+
+.side h1 {
+  font-size: 16px;
+  margin: 0 0 16px;
+}
+
+.side h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 20px 0 8px;
+}
+
+.side h2:first-of-type {
+  margin-top: 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  width: 100%;
+  padding: 8px 10px;
+}
+
+.item.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.chip {
+  background: var(--chip);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.chip.danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.chip.ok {
+  color: var(--ok);
+}
+
+.canvas {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.toolbar {
+  align-items: center;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px;
+}
+
+.toolbar input {
+  font-weight: 600;
+  max-width: 320px;
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.notice {
+  background: var(--danger-bg);
+  border-bottom: 1px solid var(--border);
+  color: var(--danger);
+  padding: 8px 16px;
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.task-node {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 190px;
+}
+
+.task-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.task-node.has-problem {
+  border-color: var(--danger);
+}
+
+.task-node header {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-weight: 600;
+}
+
+.port {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 12px;
+  position: relative;
+}
+
+.port.out {
+  text-align: right;
+}
+
+.port.off {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.port b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.problems {
+  color: var(--danger);
+  margin: 0;
+  padding-left: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.check {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.check input {
+  width: auto;
+}
+
+.muted {
+  color: var(--muted);
+}
