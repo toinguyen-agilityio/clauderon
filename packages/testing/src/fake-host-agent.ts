@@ -11,6 +11,9 @@ import {
 
 export type HelloOverrides = Partial<Payload<"hello">>;
 
+/** A scripted reply to one Gateway message type. */
+export type Responder<T extends MessageType> = (payload: Payload<T>, agent: FakeHostAgent) => void;
+
 /**
  * Speaks the real Host Agent protocol from a test (spec "test seam"): sends
  * hello, resends what the Gateway missed, acknowledges and records what it
@@ -24,6 +27,7 @@ export class FakeHostAgent {
   closeCode: number | null = null;
   autoAck = true;
   private socket: LinkSocket | null = null;
+  private responders = new Map<string, Responder<MessageType>>();
 
   constructor(private readonly processId = "fake-process-1") {}
 
@@ -52,6 +56,17 @@ export class FakeHostAgent {
         }),
       ),
     );
+  }
+
+  /** Scripts the reply to a message type (spec "test seam"): succeed, fail, stream logs. */
+  respond<T extends MessageType>(type: T, responder: Responder<T>): this {
+    this.responders.set(type, responder as Responder<MessageType>);
+    return this;
+  }
+
+  /** Numbered messages of one type received so far. */
+  of<T extends MessageType>(type: T): Payload<T>[] {
+    return this.received.filter((e) => e.type === type).map((e) => e.payload as Payload<T>);
   }
 
   send<T extends MessageType>(type: T, payload: Payload<T>): Envelope {
@@ -86,7 +101,9 @@ export class FakeHostAgent {
       return;
     }
     if (envelope.id === 0) return;
-    if (this.buffer.accept(envelope) !== "duplicate") this.received.push(envelope);
+    const fresh = this.buffer.accept(envelope) !== "duplicate";
+    if (fresh) this.received.push(envelope);
     if (this.autoAck) this.ack();
+    if (fresh) this.responders.get(envelope.type)?.(envelope.payload as never, this);
   }
 }
