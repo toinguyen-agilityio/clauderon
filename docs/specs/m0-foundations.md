@@ -77,6 +77,7 @@ type Envelope<T> = {
 };
 ```
 
+- `hello`, `welcome`, `ack` and `heartbeat` are control messages: they carry `id: 0` and are never buffered or resent, so acks are not acknowledged and heartbeats do not pile up while the link is down. Every other message is numbered.
 - Each side keeps its sent messages until the other side acknowledges them (`ack` with the highest id received in order), and stores the last id it received.
 - On connect the Host Agent sends `hello` with `lastReceivedId`; the Gateway replies `welcome` with its own `lastReceivedId`. Each side then resends everything after the other's `lastReceivedId`. Receivers drop ids they have already seen.
 - The Host Agent sends `heartbeat` every 10 s. The Gateway records `last_heartbeat_at`. What happens after 30 s without one is M3 (RUN-12); in M0 the Pod Host card only shows connected or not.
