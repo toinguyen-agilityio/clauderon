@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
-import { addToAllowlist, removeFromAllowlist } from "../../server/access";
-import { deps, requireMember } from "../../server/runtime";
+import { addToAllowlist, removeFromAllowlist } from "../../../server/access";
+import { deps, requireMember } from "../../../server/runtime";
 
 export type FormState = { error: string | null };
 
