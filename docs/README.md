@@ -14,3 +14,4 @@
 - [0001 · Pods push and open pull requests with their own git/gh login](adr/0001-pods-push-with-their-own-git-login.md)
 - [0002 · Flows are typed DAGs without cycles, run one Node at a time](adr/0002-flows-are-typed-dags-run-sequentially.md)
 - [0003 · Pods are per-Member Docker containers on one Pod Host, driven by a Host Agent](adr/0003-pods-are-member-containers-on-one-pod-host.md)
+- [0004 · The web app runs on Vercel, with an always-on Gateway for long-lived connections](adr/0004-web-app-on-vercel-with-an-always-on-gateway.md)
