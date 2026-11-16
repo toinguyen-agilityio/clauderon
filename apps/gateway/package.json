@@ -1,0 +1,23 @@
+{
+  "name": "@clauderon/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@clauderon/core": "workspace:*",
+    "@clauderon/db": "workspace:*",
+    "@clauderon/protocol": "workspace:*",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@clauderon/testing": "workspace:*",
+    "@types/ws": "^8.18.2"
+  }
+}

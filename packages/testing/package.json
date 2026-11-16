@@ -1,0 +1,19 @@
+{
+  "name": "@clauderon/testing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@clauderon/core": "workspace:*",
+    "@clauderon/db": "workspace:*",
+    "@clauderon/protocol": "workspace:*"
+  }
+}

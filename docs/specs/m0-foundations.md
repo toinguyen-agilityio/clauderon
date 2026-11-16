@@ -42,14 +42,15 @@ Postgres, migrations in `packages/db`. Ids are UUIDs except where noted; times a
 | --- | --- | --- |
 | `member` | `email` (unique, lower-cased), `name`, `picture_url`, `last_sign_in_at` | Created at first allowed sign-in |
 | `allowlist_entry` | `email` (primary key, lower-cased), `added_by_email`, `added_at` | Exact emails only, no domains (MEM-3) |
-| `session` | `member_id`, `expires_at`, `ended_at` | Server-side so it can be ended at once; 24 h (MEM-1) |
+| `member_account` | `provider`, `provider_account_id` (together the primary key), `member_id` | Links the Google account for Auth.js; holds no OAuth tokens (NFR-1) |
+| `session` | `token_hash` (unique, SHA-256 of the cookie value), `member_id`, `expires_at`, `ended_at` | Server-side so it can be ended at once; 24 h (MEM-1). The cookie value itself is never stored |
 | `audit_entry` | `actor_email`, `action`, `subject_type`, `subject_id`, `detail` (jsonb), `at` | Append-only (RUN-15) |
-| `pod_host` | single row: `connected`, `connected_at`, `last_heartbeat_at`, `agent_version`, `arch`, `cpus`, `memory_mb`, `disk_gb`, `docker_running`, `last_received_id`, `last_sent_id` | Message ids for resuming (RUN-12) |
+| `pod_host` | single row: `connected`, `connected_at`, `last_heartbeat_at`, `agent_version`, `process_id`, `arch`, `cpus`, `memory_mb`, `disk_gb`, `docker_running`, `last_received_id`, `last_sent_id` | Message ids for resuming (RUN-12) |
 | `pod` | `member_id` (unique), `container_id`, `status` (`creating`, `running`, `stopped`, `error`, `deleting`), `image_tag`, `image_digest`, `slots`, `cpus`, `memory_mb`, `claude_logged_in`, `gh_logged_in`, `gh_account`, `gh_token_scope` (jsonb), `logins_checked_at`, `metrics` (jsonb) | One per Member (POD-2) |
 | `project` | `owner`, `repo`, `base_branch`, `enabled_by_email` | Unique (`owner`, `repo`) |
 | `ticket` | `project_id`, `number`, `title`, `body`, `labels` (jsonb), `author_login`, `author_association`, `issue_state`, `url`, `synced_at` | Unique (`project_id`, `number`); no stored status (TIC-6) |
-| `node` | `name`, `kind` (`ticket`, `agent`, `command`, `approve`, `grill`), `instructions`, `command`, `inputs` (jsonb `[{name, type, required}]`), `outputs` (jsonb `[{name, type, optional}]`), `is_sample`, `updated_by_email`, `updated_at` | Node library (FLW-1) |
-| `flow` | `name`, `is_sample`, `cloned_from_id`, `updated_by_email`, `updated_at` | |
+| `node` | `slug` (unique, samples only), `name`, `kind` (`ticket`, `agent`, `command`, `approve`, `grill`), `instructions`, `command`, `inputs` (jsonb `[{name, type, required}]`), `outputs` (jsonb `[{name, type, optional}]`), `is_sample`, `updated_by_email`, `updated_at` | Node library (FLW-1) |
+| `flow` | `slug` (unique, samples only), `name`, `is_sample`, `cloned_from_id`, `updated_by_email`, `updated_at` | |
 | `flow_node` | `flow_id`, `node_id`, `label`, `extra_instructions`, `enabled_optional_outputs` (jsonb), `x`, `y` | A placement of a library Node (FLW-6) |
 | `flow_edge` | `flow_id`, `from_flow_node_id`, `from_output`, `to_flow_node_id`, `to_input` | |
 | `batch` | `flow_id`, `starter_member_id`, `mode` (`real`, `dry`), `extra_instructions` | |
@@ -77,7 +78,9 @@ type Envelope<T> = {
 };
 ```
 
+- `hello`, `welcome`, `ack` and `heartbeat` are control messages: they carry `id: 0` and are never buffered or resent, so acks are not acknowledged and heartbeats do not pile up while the link is down. Every other message is numbered.
 - Each side keeps its sent messages until the other side acknowledges them (`ack` with the highest id received in order), and stores the last id it received.
+- Ids only jump ahead when a sender restarted and lost messages it can no longer resend (the Gateway's outbox is in memory). The receiver delivers past such a gap and logs it rather than waiting, so the link never stalls; Run state lives in the database, not in lost messages.
 - On connect the Host Agent sends `hello` with `lastReceivedId`; the Gateway replies `welcome` with its own `lastReceivedId`. Each side then resends everything after the other's `lastReceivedId`. Receivers drop ids they have already seen.
 - The Host Agent sends `heartbeat` every 10 s. The Gateway records `last_heartbeat_at`. What happens after 30 s without one is M3 (RUN-12); in M0 the Pod Host card only shows connected or not.
 - The Host Agent reconnects with backoff 1 s, 2 s, 4 s … capped at 10 s, forever (NFR-3).
@@ -183,7 +186,7 @@ The spike (§8, slice M0-02) confirms the exact CLI flags (expected: `claude -p 
 - **Allowed** when the lower-cased email is in `OPERATOR_EMAILS` or in `allowlist_entry`. Otherwise show the access denied page with the email and no session.
 - First allowed sign-in creates the `member` row; every sign-in updates name, picture and `last_sign_in_at`.
 - **Session:** a `session` row with `expires_at` = now + 24 h, referenced by a secure, HTTP-only, `SameSite=Lax` cookie. Sign out sets `ended_at`.
-- **Every request** (web and Gateway) loads the session and re-checks the allowlist. A removed email gets 401 and the cookie is cleared. Open WebSockets re-check through the hook in §7.1.
+- **Every request** (web and Gateway) loads the session and re-checks the allowlist. A removed email gets 401 and the cookie is cleared. API routes answer 401; pages redirect through `/session-ended`, which clears the cookie and sends the browser to Sign in. Open WebSockets re-check through the hook in §7.1.
 - **Allowlist page** at `/allowlist`, Operator only (others get 404): table of emails with who added each and when; Operator emails shown first, marked "from configuration", not removable; add (validate the email shape, lower-case, reject duplicates); remove. Both write an audit entry (`allowlist.add`, `allowlist.remove`).
 
 ### 7.1 Ending connections at once
