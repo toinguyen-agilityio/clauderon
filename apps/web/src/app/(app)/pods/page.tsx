@@ -1,20 +1,19 @@
-import { getPodHost } from "@clauderon/db";
+import { Avatar } from "../../../components/brand";
+import { ago } from "../../../components/format";
 import { Icon } from "../../../components/icons";
-import { deps } from "../../../server/runtime";
+import { StatePill } from "../../../components/state-pill";
+import { viewPods } from "../../../server/pods";
+import { deps, requireMember } from "../../../server/runtime";
+import { createPodAction } from "./actions";
+import { PodActions } from "./pod-actions";
 
 export const dynamic = "force-dynamic";
 
-function ago(date: Date | null, now: Date): string {
-  if (!date) return "never";
-  const seconds = Math.max(0, Math.round((now.getTime() - date.getTime()) / 1000));
-  if (seconds < 45) return "just now";
-  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`;
-  return `${Math.round(seconds / 86400)} d ago`;
-}
+const login = (ok: boolean, label: string) => <span className={`pill ${ok ? "ok" : "fail"}`}>{`${label} ${ok ? "logged in" : "not logged in"}`}</span>;
 
 export default async function PodsPage() {
-  const host = await getPodHost(deps().db);
+  const member = await requireMember();
+  const { host, pods, mine, limits, overCommitted } = await viewPods(deps(), member);
   const now = new Date();
   const connected = host?.connected === true;
   const facts = host
@@ -38,6 +37,13 @@ export default async function PodsPage() {
             start always run on your Pod.
           </p>
         </div>
+        {!mine && (
+          <form action={createPodAction}>
+            <button type="submit" className="btn primary">
+              Create my Pod
+            </button>
+          </form>
+        )}
       </div>
 
       <div className="card host" data-testid="pod-host">
@@ -53,6 +59,9 @@ export default async function PodsPage() {
               </h2>
               <p className="small faint" style={{ marginTop: 2 }}>
                 {facts.length > 0 ? facts.join(" · ") : "The Host Agent has not connected yet."}
+              </p>
+              <p className="small faint">
+                Pods&apos; limits: {limits.cpus} CPU · {Math.round(limits.memoryMb / 1024)} GB
               </p>
             </div>
           </div>
@@ -72,12 +81,72 @@ export default async function PodsPage() {
             </div>
           </div>
         )}
+        {overCommitted && (
+          <div className="banner info" style={{ margin: "0 16px" }}>
+            <div className="grow small">
+              <b>The Pods&apos; limits add up to more than the Pod Host has.</b> Pods still start; they share the machine when busy.
+            </div>
+          </div>
+        )}
 
         <div className="host-body">
-          <div className="empty card" style={{ borderStyle: "dashed" }}>
-            <b>No Pods yet</b>
-            Creating your own Pod arrives with the walking skeleton (M1).
-          </div>
+          {pods.length === 0 ? (
+            <div className="empty card" style={{ borderStyle: "dashed" }}>
+              <b>No Pods yet</b>
+              Create your Pod to log in to Claude Code and gh and start Runs.
+            </div>
+          ) : (
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Owner</th>
+                    <th>Status</th>
+                    <th>Image</th>
+                    <th>Logins</th>
+                    <th>gh account and repositories</th>
+                    <th>Slots</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pods.map((pod) => (
+                    <tr key={pod.id} data-testid={pod.mine ? "my-pod" : undefined}>
+                      <td>
+                        <div className="row" style={{ gap: 8 }}>
+                          <Avatar name={pod.owner.name} email={pod.owner.email} picture={pod.owner.pictureUrl} />
+                          <span>{pod.owner.name ?? pod.owner.email}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="stack" style={{ gap: 4 }}>
+                          <StatePill state={pod.status} />
+                          {pod.ready && <span className="pill ok">Pod Ready</span>}
+                        </div>
+                      </td>
+                      <td className="mono small">{pod.imageTag.split("/").at(-1)}</td>
+                      <td>
+                        <div className="stack" style={{ gap: 4 }}>
+                          {login(pod.claudeLoggedIn, "Claude Code")}
+                          {login(pod.ghLoggedIn, "gh")}
+                          <span className="faint small">checked {ago(pod.loginsCheckedAt, now)}</span>
+                        </div>
+                      </td>
+                      <td className="small">
+                        <div>{pod.ghAccount ?? <span className="faint">—</span>}</div>
+                        <div className="faint">{pod.tokenRepos.length > 0 ? pod.tokenRepos.join(", ") : "no Project reachable"}</div>
+                      </td>
+                      <td className="num">
+                        {pod.inUse} / {pod.slots}
+                        <div className="faint small">{pod.queued} queued</div>
+                      </td>
+                      <td>{pod.mine && <PodActions podId={pod.id} status={pod.status} />}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </>

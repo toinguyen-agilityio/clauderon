@@ -184,3 +184,27 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .side-foot .me-text, .side-foot .theme-seg { display: none; }
   .main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-top: 18px; }
 }
+
+/* M1: tables of Pods, filters, dialog, terminal, Run timeline and live log */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.filters .input, .filters select { height: 32px; }
+select.input { padding-right: 8px; }
+.pager { display: flex; gap: 8px; justify-content: flex-end; align-items: center; padding: 10px 16px; }
+.pod-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.pod-actions form { display: inline; }
+dialog.dialog { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); color: var(--fg); padding: 0; width: min(560px, calc(100vw - 32px)); box-shadow: var(--shadow); }
+dialog.dialog::backdrop { background: var(--scrim); }
+.dialog-body { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
+.dialog-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); }
+.term { background: var(--term-bg); border-radius: var(--r); padding: 8px; height: calc(100vh - 220px); min-height: 320px; }
+.term > div { height: 100%; }
+.run-grid { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; align-items: start; }
+@media (max-width: 860px) { .run-grid { grid-template-columns: 1fr; } }
+.timeline { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.timeline button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid transparent; border-radius: var(--r-sm); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.timeline button:hover { background: var(--hover); }
+.timeline button[aria-current="true"] { border-color: var(--line-strong); background: var(--sunk); }
+.log { margin: 0; background: var(--term-bg); color: var(--term-fg); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; padding: 12px; border-radius: var(--r-sm); height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.log .stderr { color: var(--fail); }
+.log .system { color: var(--wait); }
+.output-value { margin: 0; background: var(--code-bg); font-family: var(--font-mono); font-size: 12px; padding: 10px; border-radius: var(--r-sm); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; }
