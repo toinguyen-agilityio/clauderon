@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq, gt, isNull, sql, type SQL } from "drizzle-orm";
 import pg from "pg";
-import type { Db } from "./client.js";
-import { allowlistEntry, auditEntry, member, session } from "./schema.js";
+import type { Db } from "./client";
+import { allowlistEntry, auditEntry, member, memberAccount, session } from "./schema";
 
 // Sign-in, sessions and the allowlist (spec M0 §7). Web and Gateway both use
 // these, so every request re-checks the allowlist the same way.
@@ -198,4 +198,46 @@ export async function listenMemberRevoked(url: string, onRevoked: (email: string
   });
   await client.query(`listen ${MEMBER_REVOKED_CHANNEL}`);
   return () => client.end();
+}
+
+// Member lookups for the Auth.js adapter.
+
+export async function findMemberById(db: Db, id: string): Promise<Member | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const [row] = await db.select().from(member).where(eq(member.id, id));
+  return row ?? null;
+}
+
+export async function findMemberByEmail(db: Db, email: string): Promise<Member | null> {
+  const [row] = await db.select().from(member).where(eq(member.email, normalizeEmail(email)));
+  return row ?? null;
+}
+
+export async function findMemberByAccount(db: Db, provider: string, providerAccountId: string): Promise<Member | null> {
+  const [row] = await db
+    .select({ member })
+    .from(memberAccount)
+    .innerJoin(member, eq(member.id, memberAccount.memberId))
+    .where(and(eq(memberAccount.provider, provider), eq(memberAccount.providerAccountId, providerAccountId)));
+  return row?.member ?? null;
+}
+
+/** Links an OAuth account to a Member. Tokens are never passed in or kept. */
+export async function linkMemberAccount(db: Db, link: { provider: string; providerAccountId: string; memberId: string }): Promise<void> {
+  await db.insert(memberAccount).values(link).onConflictDoNothing();
+}
+
+export async function upsertMember(db: Db, profile: { email: string; name: string | null; pictureUrl: string | null }, now: Date) {
+  const email = normalizeEmail(profile.email);
+  const [row] = await db
+    .insert(member)
+    .values({ email, name: profile.name, pictureUrl: profile.pictureUrl, lastSignInAt: now })
+    .onConflictDoUpdate({ target: member.email, set: { name: profile.name, pictureUrl: profile.pictureUrl } })
+    .returning();
+  return row!;
+}
+
+export async function updateMemberProfile(db: Db, id: string, profile: { name: string | null; pictureUrl: string | null }) {
+  const [row] = await db.update(member).set(profile).where(eq(member.id, id)).returning();
+  return row!;
 }
