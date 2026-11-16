@@ -1,0 +1,10 @@
+# Local Postgres for development and tests. Not used in production.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: clauderon
+      POSTGRES_PASSWORD: clauderon
+      POSTGRES_DB: clauderon
+    ports:
+      - "54329:5432"
