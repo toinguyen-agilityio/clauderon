@@ -37,6 +37,9 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
  && npm cache clean --force
 
+# The "Open a pull request" Node's script (spec M1 §4.5).
+COPY --chmod=0755 clauderon-open-pr /usr/local/bin/clauderon-open-pr
+
 # Ubuntu images ship a user with uid 1000; replace it with `pod`.
 RUN userdel --remove ubuntu 2>/dev/null || true \
  && useradd --create-home --uid 1000 --user-group --shell /bin/bash pod \
