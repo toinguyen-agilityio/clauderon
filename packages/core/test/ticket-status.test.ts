@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ticketStatus, type RunForStatus } from "../src/index.js";
+import { ticketStatus, type RunForStatus } from "../src/index";
 
 const open = { issueState: "open" as const };
 const at = (n: number) => new Date(Date.UTC(2026, 10, 16, 0, n));

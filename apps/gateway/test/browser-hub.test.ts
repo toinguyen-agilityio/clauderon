@@ -11,7 +11,7 @@ import {
 } from "@clauderon/db";
 import { CloseCode, createGatewayTicket } from "@clauderon/protocol";
 import { FakeClock, createTestDatabase, memorySocketPair, settle, type TestDatabase } from "@clauderon/testing";
-import { BrowserHub } from "../src/browser-hub.js";
+import { BrowserHub } from "../src/browser-hub";
 
 const SECRET = "session-secret";
 const operators = ["op@example.com"];

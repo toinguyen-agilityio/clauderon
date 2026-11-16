@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canConnect, topologicalOrder, validateFlow, type Flow } from "../src/index.js";
-import { basicDelivery, edge, fn, library, planAndDeliver } from "./fixtures.js";
+import { canConnect, topologicalOrder, validateFlow, type Flow } from "../src/index";
+import { basicDelivery, edge, fn, library, planAndDeliver } from "./fixtures";
 
 const codes = (flow: Flow) => validateFlow(flow, library).map((p) => p.code);
 

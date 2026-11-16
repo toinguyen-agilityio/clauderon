@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import WebSocket from "ws";
 import { fromWebSocket } from "@clauderon/protocol";
-import type { Connector, HostFacts, StateStore } from "./agent.js";
+import type { Connector, HostFacts, StateStore } from "./agent";
 
 const run = promisify(execFile);
 

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { getPodHost, sql, type Db } from "@clauderon/db";
 import { CloseCode, controlMessage, serialize } from "@clauderon/protocol";
 import { FakeClock, FakeHostAgent, createTestDatabase, memorySocketPair, settle, type TestDatabase } from "@clauderon/testing";
-import { HostLink } from "../src/host-link.js";
+import { HostLink } from "../src/host-link";
 
 const SECRET = "host-agent-secret";
 let test: TestDatabase;

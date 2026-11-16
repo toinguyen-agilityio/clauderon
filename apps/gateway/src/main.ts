@@ -1,8 +1,8 @@
 import { systemClock } from "@clauderon/core";
 import { connect, listenMemberRevoked, parseOperatorEmails } from "@clauderon/db";
-import { BrowserHub } from "./browser-hub.js";
-import { HostLink } from "./host-link.js";
-import { createGatewayServer } from "./server.js";
+import { BrowserHub } from "./browser-hub";
+import { HostLink } from "./host-link";
+import { createGatewayServer } from "./server";
 
 function required(name: string): string {
   const value = process.env[name];

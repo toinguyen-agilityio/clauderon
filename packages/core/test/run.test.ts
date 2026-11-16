@@ -10,8 +10,8 @@ import {
   type AttemptView,
   type RunEvent,
   type RunState,
-} from "../src/index.js";
-import { basicDelivery, library, planAndDeliver } from "./fixtures.js";
+} from "../src/index";
+import { basicDelivery, library, planAndDeliver } from "./fixtures";
 
 // The lifecycle diagram of requirements §4.5, written out by hand.
 const allowed: Record<RunState, Partial<Record<RunEvent, RunState>>> = {

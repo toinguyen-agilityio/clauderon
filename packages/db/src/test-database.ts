@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { connect, migrate, type Db } from "./client.js";
+import { connect, type Db } from "./client";
+import { migrate } from "./migrate";
 
 export type TestDatabase = { db: Db; url: string; drop: () => Promise<void> };
 

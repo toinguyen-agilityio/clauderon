@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { validateFlow } from "@clauderon/core";
-import { listFlows, loadFlow, loadLibrary, schema, seedSamples, type Db } from "../src/index.js";
-import { createTestDatabase, type TestDatabase } from "../src/test-database.js";
+import { listFlows, loadFlow, loadLibrary, schema, seedSamples, type Db } from "../src/index";
+import { createTestDatabase, type TestDatabase } from "../src/test-database";
 
 let test: TestDatabase;
 let db: Db;

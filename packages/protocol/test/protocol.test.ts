@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ResumeBuffer, controlMessage, createGatewayTicket, parseEnvelope, serialize, verifyGatewayTicket } from "../src/index.js";
+import { ResumeBuffer, controlMessage, createGatewayTicket, parseEnvelope, serialize, verifyGatewayTicket } from "../src/index";
 
 describe("gateway ticket", () => {
   const now = new Date("2026-11-16T09:00:00Z");

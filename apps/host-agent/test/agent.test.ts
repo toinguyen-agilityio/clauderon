@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { controlMessage, parseEnvelope, serialize, type Envelope, type LinkSocket } from "@clauderon/protocol";
 import { FakeClock, memorySocketPair, settle, type MemorySocket } from "@clauderon/testing";
-import { HostAgent, type Connector, type HostFactsReader, type StateStore } from "../src/agent.js";
+import { HostAgent, type Connector, type HostFactsReader, type StateStore } from "../src/agent";
 
 const facts: HostFactsReader = async () => ({ arch: "arm64", cpus: 10, memoryMb: 32768, diskGb: 994, dockerRunning: true });
 

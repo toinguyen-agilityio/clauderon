@@ -1,8 +1,8 @@
 import { createServer, type Server } from "node:http";
 import { WebSocketServer } from "ws";
 import { fromWebSocket } from "@clauderon/protocol";
-import type { BrowserHub } from "./browser-hub.js";
-import type { HostLink } from "./host-link.js";
+import type { BrowserHub } from "./browser-hub";
+import type { HostLink } from "./host-link";
 
 /**
  * HTTP and WebSocket front of the Gateway: `/host-agent` for the Host Agent,

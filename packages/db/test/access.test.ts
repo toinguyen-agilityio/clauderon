@@ -11,8 +11,8 @@ import {
   schema,
   signIn,
   type Db,
-} from "../src/index.js";
-import { createTestDatabase, type TestDatabase } from "../src/test-database.js";
+} from "../src/index";
+import { createTestDatabase, type TestDatabase } from "../src/test-database";
 
 let test: TestDatabase;
 let db: Db;

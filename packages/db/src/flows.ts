@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NODE_KINDS, OUTPUT_TYPES, type Flow, type LibraryNode, type NodeInput, type NodeOutput } from "@clauderon/core";
-import type { Db } from "./client.js";
-import { flow, flowEdge, flowNode, node } from "./schema.js";
+import type { Db } from "./client";
+import { flow, flowEdge, flowNode, node } from "./schema";
 
 const isOutputType = (t: string): t is NodeInput["type"] => (OUTPUT_TYPES as readonly string[]).includes(t);
 

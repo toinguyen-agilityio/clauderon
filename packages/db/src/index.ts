@@ -1,7 +1,7 @@
-export * from "./access.js";
-export * from "./client.js";
-export * from "./flows.js";
-export * from "./pod-host.js";
-export * from "./seed.js";
-export * as schema from "./schema.js";
+export * from "./access";
+export * from "./client";
+export * from "./flows";
+export * from "./pod-host";
+export * from "./seed";
+export * as schema from "./schema";
 export { sql } from "drizzle-orm";

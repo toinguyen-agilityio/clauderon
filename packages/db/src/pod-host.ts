@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import type { Db } from "./client.js";
-import { podHost } from "./schema.js";
+import type { Db } from "./client";
+import { podHost } from "./schema";
 
 const ROW = 1;
 

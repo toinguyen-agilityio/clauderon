@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FakeClock, FakeGitHub, memorySocketPair, settle } from "../src/index.js";
+import { FakeClock, FakeGitHub, memorySocketPair, settle } from "../src/index";
 
 describe("FakeClock", () => {
   it("fires timers in order only when advanced", async () => {

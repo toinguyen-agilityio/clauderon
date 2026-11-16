@@ -1,4 +1,4 @@
-import { isActive, type RunState } from "./run.js";
+import { isActive, type RunState } from "./run";
 
 export type TicketStatus =
   | "Closed"

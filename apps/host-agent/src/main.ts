@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { systemClock } from "@clauderon/core";
-import { HostAgent } from "./agent.js";
-import { fileStateStore, readHostFacts, wsConnector } from "./runtime.js";
+import { HostAgent } from "./agent";
+import { fileStateStore, readHostFacts, wsConnector } from "./runtime";
 
 const VERSION = "0.1.0";
 

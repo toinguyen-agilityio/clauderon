@@ -1,4 +1,4 @@
-import type { Flow, FlowEdge, FlowNode, LibraryNode } from "../src/index.js";
+import type { Flow, FlowEdge, FlowNode, LibraryNode } from "../src/index";
 
 /** The sample library of requirements §4.4, keyed by slug. */
 export const library: LibraryNode[] = [

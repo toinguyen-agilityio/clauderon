@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mask } from "../src/index.js";
+import { mask } from "../src/index";
 
 describe("mask", () => {
   it("T0-9: hides every token pattern and known secret in a mixed log line", () => {

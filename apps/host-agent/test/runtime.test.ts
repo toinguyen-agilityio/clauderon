@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { fileStateStore, readHostFacts } from "../src/runtime.js";
+import { fileStateStore, readHostFacts } from "../src/runtime";
 
 let dir: string | null = null;
 afterEach(async () => {

@@ -1,5 +1,5 @@
-import type { Envelope } from "./envelope.js";
-import type { MessageType, Payload } from "./messages.js";
+import type { Envelope } from "./envelope";
+import type { MessageType, Payload } from "./messages";
 
 export type ResumeState = { lastSentId: number; lastReceivedId: number };
 export type Acceptance = "deliver" | "duplicate" | "gap";

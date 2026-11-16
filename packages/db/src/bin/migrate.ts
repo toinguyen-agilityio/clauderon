@@ -1,5 +1,6 @@
-import { connect, migrate } from "../client.js";
-import { seedSamples } from "../seed.js";
+import { connect } from "../client";
+import { migrate } from "../migrate";
+import { seedSamples } from "../seed";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is not set");

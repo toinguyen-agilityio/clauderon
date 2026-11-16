@@ -1,4 +1,4 @@
-import { topologicalOrder, type Flow, type LibraryNode } from "./flow.js";
+import { topologicalOrder, type Flow, type LibraryNode } from "./flow";
 
 export const RUN_STATES = ["queued", "running", "waiting_for_human", "succeeded", "failed", "interrupted", "cancelled"] as const;
 export type RunState = (typeof RUN_STATES)[number];

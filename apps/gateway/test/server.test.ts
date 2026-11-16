@@ -5,9 +5,9 @@ import WebSocket from "ws";
 import { getPodHost, type Db } from "@clauderon/db";
 import { CloseCode, controlMessage, serialize } from "@clauderon/protocol";
 import { FakeClock, createTestDatabase, type TestDatabase } from "@clauderon/testing";
-import { BrowserHub } from "../src/browser-hub.js";
-import { HostLink } from "../src/host-link.js";
-import { createGatewayServer } from "../src/server.js";
+import { BrowserHub } from "../src/browser-hub";
+import { HostLink } from "../src/host-link";
+import { createGatewayServer } from "../src/server";
 
 let test: TestDatabase;
 let db: Db;

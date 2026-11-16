@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { NodeInput, NodeKind, NodeOutput } from "@clauderon/core";
-import type { Db } from "./client.js";
-import { flow, flowEdge, flowNode, node } from "./schema.js";
+import type { Db } from "./client";
+import { flow, flowEdge, flowNode, node } from "./schema";
 
 // Sample Nodes and Flows of requirements §4.4 (FLW-8), keyed by slug so
 // seeding again updates them instead of adding copies.

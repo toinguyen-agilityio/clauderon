@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isMessageType, messageSchemas, type ControlType, type MessageType, type Payload } from "./messages.js";
+import { isMessageType, messageSchemas, type ControlType, type MessageType, type Payload } from "./messages";
 
 /**
  * Every message on the Host Agent link (spec M0 §4.1). `id` is per sender,
