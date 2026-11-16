@@ -82,7 +82,7 @@ Three choices worth knowing:
 
 ## Roadmap
 
-No fixed dates; each milestone ends when its check passes.
+Each milestone ends when its check passes. The proposed schedule fits all five into seven days: see the [seven-day roadmap](roadmap/v1-seven-day-plan.md) or its [visual page](https://claude.ai/artifact/T4AJv1hxGDNFb9Ktea7GV9).
 
 | Milestone | Delivers |
 | --- | --- |

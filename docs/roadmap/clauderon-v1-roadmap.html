@@ -1,0 +1,362 @@
+<title>Clauderon v1 Roadmap</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a module-by-day Gantt on top, milestone and check rails around it, day cards and plan notes below */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --line: #dce1e9;
+  --fg: #1a2130;
+  --muted: #5b6578;
+  --accent: #2f5bd3;
+  --m-found: #5b6578;
+  --m-pods: #b8541a;
+  --m-tick: #0f7c86;
+  --m-flow: #7a46c2;
+  --m-runs: #2f5bd3;
+  --m-track: #a3366a;
+  --m-rel: #1f7a4d;
+  --ok: #1f7a4d;
+  --ok-soft: #e3f3ea;
+  --warn: #9a6a00;
+  --warn-soft: #fbf1d6;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --surface: #1a1f28; --line: #2b3341; --fg: #e5e9f0; --muted: #98a2b4; --accent: #8ea6ff;
+    --m-found: #9aa4b6; --m-pods: #f0965c; --m-tick: #4ec4cc; --m-flow: #b996f0; --m-runs: #8ea6ff; --m-track: #ec84b4; --m-rel: #5fcf96;
+    --ok: #5fcf96; --ok-soft: #173327; --warn: #e6b84a; --warn-soft: #362b10;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #1a1f28; --line: #2b3341; --fg: #e5e9f0; --muted: #98a2b4; --accent: #8ea6ff;
+  --m-found: #9aa4b6; --m-pods: #f0965c; --m-tick: #4ec4cc; --m-flow: #b996f0; --m-runs: #8ea6ff; --m-track: #ec84b4; --m-rel: #5fcf96;
+  --ok: #5fcf96; --ok-soft: #173327; --warn: #e6b84a; --warn-soft: #362b10;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 48px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 17px; font-weight: 600; }
+h3 { font-size: 15px; font-weight: 600; }
+.eyebrow { font-family: var(--mono); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.lede { color: var(--muted); max-width: 72ch; margin: 6px 0 0; }
+.mono { font-family: var(--mono); }
+
+/* header and language switch */
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.head > div:first-child { min-width: 0; flex: 1 1 420px; }
+.lang { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 3px; gap: 2px; }
+.lang button {
+  font: 600 12px var(--mono); letter-spacing: 0.06em; padding: 6px 12px; border: 0; border-radius: 5px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.lang button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.lang button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* gantt */
+.gantt-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.gantt {
+  display: grid; grid-template-columns: 170px repeat(7, minmax(130px, 1fr));
+  min-width: 1080px; position: relative;
+}
+.g-head, .g-label { border-bottom: 1px solid var(--line); }
+.g-head { padding: 12px 10px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); border-right: 1px solid var(--line); }
+.g-head:last-of-type { border-right: 0; }
+.g-head .num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.ms { align-self: flex-start; font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: var(--fg); color: var(--bg); }
+.ms.rel { background: var(--ok); color: var(--surface); }
+.g-head .t { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
+.g-corner { background: var(--bg); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 12px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: flex-end; }
+.g-label {
+  position: sticky; left: 0; z-index: 2; background: var(--surface); border-right: 1px solid var(--line);
+  padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13.5px;
+}
+.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.g-track { grid-column: 2 / -1; display: grid; grid-template-columns: repeat(7, 1fr); padding: 8px 0; border-bottom: 1px solid var(--line);
+  background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: calc(100% / 7) 100%; }
+.bar {
+  margin: 3px 5px; padding: 6px 9px; border-radius: 6px; font-size: 12.5px; line-height: 1.3; font-weight: 500;
+  color: var(--fg); background: color-mix(in srgb, var(--c) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); border-left: 4px solid var(--c);
+  min-width: 0;
+}
+.bar .ids { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--muted); font-weight: 400; }
+.g-checks { grid-column: 2 / -1; display: grid; grid-template-columns: repeat(7, 1fr); background: var(--bg); }
+.g-checks > div { padding: 10px; border-right: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
+.g-checks > div:last-child { border-right: 0; }
+.badge { font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px; background: var(--ok-soft); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent); }
+.badge.big { background: var(--ok); color: var(--surface); }
+.badge.soft { background: transparent; color: var(--muted); border-color: var(--line); font-weight: 500; }
+.freeze { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-soft); padding: 2px 7px; border-radius: 4px; }
+.g-label.checks { background: var(--bg); color: var(--muted); font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; border-bottom: 0; }
+
+/* day cards */
+.days { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.day { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.day .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.day .num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.day ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.day .chk { margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
+
+/* notes */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.panel .sub { color: var(--muted); font-size: 13px; margin: 0; }
+.cut { list-style: none; margin: 0; padding: 0; counter-reset: c; display: flex; flex-direction: column; gap: 6px; }
+.cut li { counter-increment: c; display: flex; gap: 10px; align-items: baseline; }
+.cut li::before { content: counter(c); font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 16px; }
+.cut .mono { color: var(--muted); font-size: 12px; }
+.pre { display: grid; grid-template-columns: 30px 1fr auto; gap: 6px 10px; align-items: baseline; font-size: 13px; }
+.pre .k { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.pre .blk { font-family: var(--mono); font-size: 11px; color: var(--warn); white-space: nowrap; }
+@media (max-width: 640px) { h1 { font-size: 24px; } }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow" data-vi="Clauderon · v1 · đề xuất 2026-11-16">Clauderon · v1 · proposal 2026-11-16</div>
+      <h1>Clauderon v1 Roadmap</h1>
+      <p class="lede" data-vi="Các milestone M0–M4 của requirements v1: mỗi hàng là một module, mỗi cột là một ngày. Cuối mỗi ngày gộp code vào <span class=&quot;mono&quot;>main</span> và chạy check bằng tay; AI agent viết phần lớn code, người chốt contract và review mọi diff.">Milestones M0–M4 of the v1 requirements, one module per row and one day per column. Each day ends with an integration on <span class="mono">main</span> and a hand-run check; AI agents write most of the code, people fix the contracts and review every diff.</p>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" id="lang-en" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" id="lang-vi" data-lang="vi" aria-pressed="false">VI</button>
+    </div>
+  </header>
+
+  <div class="gantt-scroll">
+    <div class="gantt">
+      <div class="g-corner" data-vi="Module">Module</div>
+      <div class="g-head"><span class="num" data-vi="Ngày 1">Day 1</span><span class="ms">M0</span><span class="t" data-vi="Nền móng">Foundations</span></div>
+      <div class="g-head"><span class="num" data-vi="Ngày 2">Day 2</span><span class="ms">M1</span><span class="t" data-vi="Pods và Tickets">Pods and Tickets</span></div>
+      <div class="g-head"><span class="num" data-vi="Ngày 3">Day 3</span><span class="ms">M1</span><span class="t" data-vi="Pull request đầu tiên">First pull request</span></div>
+      <div class="g-head"><span class="num" data-vi="Ngày 4">Day 4</span><span class="ms">M2</span><span class="t" data-vi="Flows và xếp lịch">Flows and scheduling</span></div>
+      <div class="g-head"><span class="num" data-vi="Ngày 5">Day 5</span><span class="ms">M3</span><span class="t" data-vi="Con người tham gia">People in the loop</span></div>
+      <div class="g-head"><span class="num" data-vi="Ngày 6">Day 6</span><span class="ms">M4</span><span class="t" data-vi="Hoàn thiện">Refinement</span></div>
+      <div class="g-head"><span class="num" data-vi="Ngày 7">Day 7</span><span class="ms rel">v1</span><span class="t" data-vi="Release và dự phòng">Release and buffer</span></div>
+
+      <div class="g-label"><span class="sw" style="background:var(--m-found)"></span><span data-vi="Nền móng">Foundation</span></div>
+      <div class="g-track" style="--c:var(--m-found)">
+        <div class="bar" style="grid-column:1"><span data-vi="Monorepo, schema, protocol, đăng nhập">Monorepo, schema, protocol, sign-in</span><span class="ids">MEM-1..4</span></div>
+      </div>
+
+      <div class="g-label"><span class="sw" style="background:var(--m-pods)"></span><span data-vi="Pods và Pod Host">Pods and Pod Host</span></div>
+      <div class="g-track" style="--c:var(--m-pods)">
+        <div class="bar" style="grid-column:1"><span data-vi="Kết nối Host Agent, Pod image">Host Agent link, Pod image</span><span class="ids">POD-1 · POD-14</span></div>
+        <div class="bar" style="grid-column:2"><span data-vi="Vòng đời Pod, terminal, kiểm tra login">Lifecycle, terminal, login checks</span><span class="ids">POD-2..5 · POD-9</span></div>
+        <div class="bar" style="grid-column:4"><span data-vi="Slots và hàng đợi">Slots and queue</span><span class="ids">POD-3</span></div>
+        <div class="bar" style="grid-column:6"><span data-vi="Recreate, Delete, số liệu">Recreate, Delete, metrics</span><span class="ids">POD-6..8</span></div>
+      </div>
+
+      <div class="g-label"><span class="sw" style="background:var(--m-tick)"></span><span data-vi="Projects và Tickets">Projects and Tickets</span></div>
+      <div class="g-track" style="--c:var(--m-tick)">
+        <div class="bar" style="grid-column:2"><span>Projects, Sync, Tickets</span><span class="ids">PRJ · TIC-1..9</span></div>
+        <div class="bar" style="grid-column:6"><span data-vi="Chi tiết Ticket">Ticket detail</span><span class="ids">TIC-4</span></div>
+      </div>
+
+      <div class="g-label"><span class="sw" style="background:var(--m-flow)"></span><span>Flows</span></div>
+      <div class="g-track" style="--c:var(--m-flow)">
+        <div class="bar" style="grid-column:1"><span data-vi="Validator, dữ liệu mẫu">Validator, seeds</span><span class="ids">FLW-5 · FLW-8</span></div>
+        <div class="bar" style="grid-column:4"><span data-vi="Canvas editor, khoá Flow, thư viện Node">Canvas editor, lock, library</span><span class="ids">FLW-3..10</span></div>
+      </div>
+
+      <div class="g-label"><span class="sw" style="background:var(--m-runs)"></span><span>Runs</span></div>
+      <div class="g-track" style="--c:var(--m-runs)">
+        <div class="bar" style="grid-column:3"><span data-vi="Run engine, runner thật, PR">Run engine, real runner, PR</span><span class="ids">RUN-2 · RUN-10/11</span></div>
+        <div class="bar" style="grid-column:4"><span>Dry-run, Batches</span><span class="ids">RUN-13</span></div>
+        <div class="bar" style="grid-column:5"><span data-vi="Human Node, Retry, Cancel, Interrupted">Human Nodes, Retry, Cancel, Interrupted</span><span class="ids">FLW-2 · RUN-4..12</span></div>
+        <div class="bar" style="grid-column:6"><span data-vi="Artifact vào PR, dọn worktree">Artifact in PR, cleanup</span><span class="ids">TRK-5 · RUN-14</span></div>
+      </div>
+
+      <div class="g-label"><span class="sw" style="background:var(--m-track)"></span><span data-vi="Theo dõi">Tracking</span></div>
+      <div class="g-track" style="--c:var(--m-track)">
+        <div class="bar" style="grid-column:3"><span data-vi="Trang Run, log trực tiếp, danh sách Run">Run page, live logs, Runs list</span><span class="ids">TRK-1/2 · TRK-7</span></div>
+        <div class="bar" style="grid-column:5"><span data-vi="Needs you, audit log">Needs you, audit</span><span class="ids">RUN-5 · RUN-15</span></div>
+        <div class="bar" style="grid-column:6"><span data-vi="Diff, usage, Artifact, trang Batch">Diff, usage, Artifact, Batch page</span><span class="ids">TRK-3..6</span></div>
+      </div>
+
+      <div class="g-label"><span class="sw" style="background:var(--m-rel)"></span><span>Release</span></div>
+      <div class="g-track" style="--c:var(--m-rel)">
+        <div class="bar" style="grid-column:6"><span data-vi="Deploy staging">Staging deploy</span></div>
+        <div class="bar" style="grid-column:7"><span data-vi="Production, backup, demo">Production, backups, demo</span><span class="ids">NFR-5</span></div>
+      </div>
+
+      <div class="g-label checks" data-vi="Check">Check</div>
+      <div class="g-checks">
+        <div><span class="freeze" data-vi="Chốt contract">Contracts frozen</span><span class="badge soft" data-vi="test core">core tests</span></div>
+        <div><span class="badge">A7</span><span class="badge soft">Pod Ready</span></div>
+        <div><span class="badge big">A1</span></div>
+        <div><span class="badge">A2</span><span class="badge">A3</span><span class="badge">A6</span></div>
+        <div><span class="badge">A4</span><span class="badge">A5</span></div>
+        <div><span class="badge soft" data-vi="trọn luồng trên staging">full journey on staging</span></div>
+        <div><span class="badge big">A1–A7</span><span class="badge soft" data-vi="trên production">on production</span></div>
+      </div>
+    </div>
+  </div>
+
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <div>
+      <div class="eyebrow" data-vi="Từng ngày">Day by day</div>
+      <h2 data-vi="Mỗi ngày giao gì">What each day delivers</h2>
+    </div>
+    <div class="days">
+      <article class="day">
+        <div class="top"><span class="num" data-vi="Ngày 1">Day 1</span><span class="ms">M0</span></div>
+        <h3 data-vi="Nền móng">Foundations</h3>
+        <ul>
+          <li data-vi="Turborepo, lint, Vitest, CI">Turborepo, lint, Vitest, CI</li>
+          <li data-vi="Spike: chạy Claude Code headless trong container">Spike: Claude Code headless in a container</li>
+          <li data-vi="Chốt schema và protocol">Schema and protocol frozen</li>
+          <li data-vi="Domain core, Node và Flow mẫu">Domain core, sample Nodes and Flows</li>
+          <li data-vi="Đăng nhập Google, allowlist, trang Allowlist">Google sign-in, allowlist, Allowlist page</li>
+          <li data-vi="Kết nối Gateway ↔ Host Agent; Pod image">Gateway ↔ Host Agent link; Pod image</li>
+        </ul>
+        <div class="chk" data-vi="Check: test core, chặn email lạ, Host Agent đã kết nối">Check: core tests, unknown emails refused, Host Agent connected</div>
+      </article>
+      <article class="day">
+        <div class="top"><span class="num" data-vi="Ngày 2">Day 2</span><span class="ms">M1</span></div>
+        <h3 data-vi="Pods và Tickets">Pods and Tickets</h3>
+        <ul>
+          <li data-vi="Tạo, start, stop Pod; trang Pods">Create, start, stop a Pod; Pods page</li>
+          <li data-vi="Web terminal và kiểm tra login">Web terminal and login checks</li>
+          <li data-vi="Workspace: clone repo, mỗi Run một worktree">Workspace clone, worktree per Run</li>
+          <li data-vi="Projects, Sync, danh sách Tickets">Projects, Sync, Tickets list</li>
+          <li data-vi="Xoá email là cắt quyền truy cập ngay">Removing an email ends access at once</li>
+        </ul>
+        <div class="chk"><span class="badge">A7</span><span data-vi="Pod Ready; Sync kéo được issue thật">Pod Ready; Sync pulls real issues</span></div>
+      </article>
+      <article class="day">
+        <div class="top"><span class="num" data-vi="Ngày 3">Day 3</span><span class="ms">M1</span></div>
+        <h3 data-vi="Pull request thật đầu tiên">First real pull request</h3>
+        <ul>
+          <li data-vi="Run engine, chạy từng Node một">Run engine, one Node at a time</li>
+          <li data-vi="Agent Node và Command Node, kết quả JSON">Agent and Command Nodes, JSON result</li>
+          <li data-vi="Node Open a pull request">Open a pull request Node</li>
+          <li data-vi="Start dialog, trang Run, log trực tiếp, danh sách Run">Start dialog, Run page, live logs, Runs list</li>
+          <li data-vi="Che token trong log, lưu log theo Attempt">Log masking, logs stored per Attempt</li>
+        </ul>
+        <div class="chk"><span class="badge big">A1</span><span data-vi="Một Ticket thật ra một PR thật">One real Ticket ends in a real PR</span></div>
+      </article>
+      <article class="day">
+        <div class="top"><span class="num" data-vi="Ngày 4">Day 4</span><span class="ms">M2</span></div>
+        <h3 data-vi="Flows và xếp lịch">Flows and scheduling</h3>
+        <ul>
+          <li data-vi="Canvas editor với cạnh kiểm tra kiểu">Canvas editor with typed edges</li>
+          <li data-vi="Clone Flow mẫu, khoá Flow, thư viện Node">Clone samples, Flow lock, Node library</li>
+          <li data-vi="Slots và hàng đợi vào trước ra trước">Slots and first-in, first-out queue</li>
+          <li data-vi="Dry-run và Batches">Dry-run and Batches</li>
+        </ul>
+        <div class="chk"><span class="badge">A2</span><span class="badge">A3</span><span class="badge">A6</span></div>
+      </article>
+      <article class="day">
+        <div class="top"><span class="num" data-vi="Ngày 5">Day 5</span><span class="ms">M3</span></div>
+        <h3 data-vi="Con người tham gia">People in the loop</h3>
+        <ul>
+          <li data-vi="Approve Node và Grill Node">Approve and Grill Nodes</li>
+          <li data-vi="Trang Needs you">Needs you page</li>
+          <li data-vi="Retry từ Node bất kỳ, Cancel, Attempts">Retry from any Node, Cancel, Attempts</li>
+          <li data-vi="Heartbeat, Interrupted, Gateway khởi động lại">Heartbeat, Interrupted, Gateway restart</li>
+          <li data-vi="Audit log">Audit log</li>
+        </ul>
+        <div class="chk"><span class="badge">A4</span><span class="badge">A5</span></div>
+      </article>
+      <article class="day">
+        <div class="top"><span class="num" data-vi="Ngày 6">Day 6</span><span class="ms">M4</span></div>
+        <h3 data-vi="Hoàn thiện">Refinement</h3>
+        <ul>
+          <li data-vi="Diff, usage, Artifact, trang Batch">Diff, usage, Artifact, Batch page</li>
+          <li data-vi="Ghi Artifact vào nội dung PR">Artifact written into the PR body</li>
+          <li data-vi="Pod Recreate, Delete, số liệu">Pod Recreate, Delete, metrics</li>
+          <li data-vi="Dọn worktree; deploy staging">Worktree cleanup; staging deploy</li>
+        </ul>
+        <div class="chk" data-vi="Check: chạy trọn luồng trên staging">Check: full journey on staging</div>
+      </article>
+      <article class="day">
+        <div class="top"><span class="num" data-vi="Ngày 7">Day 7</span><span class="ms rel">v1</span></div>
+        <h3 data-vi="Release và dự phòng">Release and buffer</h3>
+        <ul>
+          <li data-vi="Deploy production, backup hằng ngày">Production deploy, daily backups</li>
+          <li data-vi="Hướng dẫn cài Host Agent và deploy">Host Agent install and deploy guides</li>
+          <li data-vi="Bug bash và quay video demo">Bug bash and recorded demo</li>
+          <li data-vi="Việc còn lại chuyển thành issue v1.1">Leftovers become v1.1 issues</li>
+        </ul>
+        <div class="chk"><span class="badge big">A1–A7</span><span data-vi="trên production">on production</span></div>
+      </article>
+    </div>
+  </section>
+
+  <div class="cols">
+    <section class="panel">
+      <div class="eyebrow" data-vi="Trước ngày 1">Before Day 1</div>
+      <h2 data-vi="Gỡ vướng cho cả tuần">Unblock the week</h2>
+      <div class="pre">
+        <span class="k">P1</span><span data-vi="Trả lời về repo công ty, điều khoản Claude, licence Docker (R1, R3, R9)">Answers on company repos, Claude terms, Docker licence (R1, R3, R9)</span><span class="blk" data-vi="Ngày 3">Day 3</span>
+        <span class="k">P2</span><span data-vi="Google OAuth client, consent screen đã publish">Google OAuth client, consent screen published</span><span class="blk" data-vi="Ngày 1">Day 1</span>
+        <span class="k">P3</span><span data-vi="GitHub token fine-grained chỉ đọc">Fine-grained read-only GitHub token</span><span class="blk" data-vi="Ngày 2">Day 2</span>
+        <span class="k">P4</span><span data-vi="Pod Host bật sẵn, Docker đang chạy">Pod Host on, Docker running</span><span class="blk" data-vi="Ngày 1">Day 1</span>
+        <span class="k">P5</span><span data-vi="Vercel, Railway hoặc Fly, Postgres managed, GHCR">Vercel, Railway or Fly, managed Postgres, GHCR</span><span class="blk" data-vi="Ngày 1">Day 1</span>
+        <span class="k">P6</span><span data-vi="Sandbox repo có issue thật và lệnh test">Sandbox repo with real issues and a test command</span><span class="blk" data-vi="Ngày 3">Day 3</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="eyebrow" data-vi="Làm việc với agent">Working with agents</div>
+      <h2 data-vi="Mỗi phần việc ra PR thế nào">How each slice ships</h2>
+      <ul>
+        <li data-vi="Mỗi phần việc một worktree, một PR dưới khoảng 400 dòng.">One slice, one worktree, one PR under about 400 lines.</li>
+        <li data-vi="Contract trước: schema và protocol chốt trong ngày 1.">Contracts first: schema and protocol fixed on Day 1.</li>
+        <li data-vi="Test qua một seam duy nhất: fake Host Agent, fake GitHub, fake clock.">Tests through one seam: fake Host Agent, fake GitHub, fake clock.</li>
+        <li data-vi="Người review mọi diff, kỹ hơn ở auth, che token, terminal và chỗ chạy lệnh.">People review every diff, with extra care on auth, masking, the terminal and command execution.</li>
+        <li data-vi="Agent đọc <span class=&quot;mono&quot;>CONTEXT.md</span> để đặt tên đúng.">Agents read <span class="mono">CONTEXT.md</span> for naming.</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <div class="eyebrow" data-vi="Nếu thiếu thời gian">If time runs short</div>
+      <h2 data-vi="Cắt theo thứ tự này">Cut in this order</h2>
+      <ol class="cut">
+        <li><span data-vi="Số liệu Pod">Pod metrics</span> <span class="mono">POD-8</span></li>
+        <li><span data-vi="Usage theo Node">Usage per Node</span> <span class="mono">TRK-4</span></li>
+        <li><span data-vi="Trang Batch">Batch page</span> <span class="mono">TRK-6</span></li>
+        <li><span data-vi="Xoá Pod">Delete Pod</span> <span class="mono">POD-7</span></li>
+        <li><span data-vi="Loại Grill của Human Node">Grill kind of Human Node</span> <span class="mono">FLW-2</span></li>
+        <li><span data-vi="Tìm kiếm và lọc Ticket">Ticket search and filter</span> <span class="mono">TIC-2</span></li>
+        <li><span data-vi="Kiểm tra digest khi Recreate">Recreate digest check</span></li>
+      </ol>
+      <p class="sub" data-vi="Ngày 7 là dự phòng. Không bao giờ bỏ check A1 ở ngày 3; nếu trễ, ngày 4 bắt đầu từ đó.">Day 7 is the buffer. A1 on Day 3 is never skipped; if it slips, Day 4 starts there.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  var nodes = Array.prototype.slice.call(document.querySelectorAll('[data-vi]'));
+  nodes.forEach(function (el) { el.setAttribute('data-en', el.innerHTML); });
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('.lang button'));
+  function setLang(lang) {
+    nodes.forEach(function (el) { el.innerHTML = el.getAttribute(lang === 'vi' ? 'data-vi' : 'data-en'); });
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-lang') === lang ? 'true' : 'false'); });
+    document.documentElement.setAttribute('lang', lang);
+    try { localStorage.setItem('roadmap-lang', lang); } catch (e) {}
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { setLang(b.getAttribute('data-lang')); }); });
+  var saved = null;
+  try { saved = localStorage.getItem('roadmap-lang'); } catch (e) {}
+  if (saved === 'vi') setLang('vi');
+})();
+</script>
