@@ -1,7 +1,11 @@
 export * from "./access";
 export * from "./client";
 export * from "./flows";
+export * from "./gateway-commands";
 export * from "./pod-host";
+export * from "./pods";
+export * from "./projects";
+export * from "./runs";
 export * from "./seed";
 export * as schema from "./schema";
 export { sql } from "drizzle-orm";
