@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { ResumeBuffer, controlMessage, parseEnvelope, serialize } from "../src/index.js";
+import { ResumeBuffer, controlMessage, createGatewayTicket, parseEnvelope, serialize, verifyGatewayTicket } from "../src/index.js";
+
+describe("gateway ticket", () => {
+  const now = new Date("2026-11-16T09:00:00Z");
+  it("names the session until it expires", () => {
+    const ticket = createGatewayTicket("s-1", now, "secret");
+    expect(verifyGatewayTicket(ticket, new Date(now.getTime() + 59_000), "secret")).toBe("s-1");
+    expect(verifyGatewayTicket(ticket, new Date(now.getTime() + 61_000), "secret")).toBeNull();
+  });
+
+  it("refuses a ticket signed with another secret or tampered with", () => {
+    const ticket = createGatewayTicket("s-1", now, "secret");
+    expect(verifyGatewayTicket(ticket, now, "other")).toBeNull();
+    const forged = createGatewayTicket("s-2", now, "secret").split(".")[0] + "." + ticket.split(".")[1];
+    expect(verifyGatewayTicket(forged, now, "secret")).toBeNull();
+    expect(verifyGatewayTicket("garbage", now, "secret")).toBeNull();
+  });
+});
 
 const hello = {
   agentVersion: "0.1.0",

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, sql, type SQL } from "drizzle-orm";
+import pg from "pg";
 import type { Db } from "./client.js";
 import { allowlistEntry, auditEntry, member, session } from "./schema.js";
 
@@ -65,11 +66,21 @@ export async function createSession(db: Db, memberId: string, token: string, now
  * ended on the spot.
  */
 export async function loadSession(db: Db, token: string, operators: readonly string[], now: Date) {
+  return loadLiveSession(db, eq(session.tokenHash, hashToken(token)), operators, now);
+}
+
+/** Same checks as `loadSession`, by session id (the Gateway's ticket names it). */
+export async function loadSessionById(db: Db, sessionId: string, operators: readonly string[], now: Date) {
+  if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return null;
+  return loadLiveSession(db, eq(session.id, sessionId), operators, now);
+}
+
+async function loadLiveSession(db: Db, match: SQL, operators: readonly string[], now: Date) {
   const [row] = await db
     .select({ session, member })
     .from(session)
     .innerJoin(member, eq(member.id, session.memberId))
-    .where(and(eq(session.tokenHash, hashToken(token)), isNull(session.endedAt), gt(session.expiresAt, now)));
+    .where(and(match, isNull(session.endedAt), gt(session.expiresAt, now)));
   if (!row) return null;
   if (!(await isAllowed(db, row.member.email, operators))) {
     await db.update(session).set({ endedAt: now }).where(eq(session.id, row.session.id));
@@ -173,4 +184,18 @@ export async function removeAllowlistEntry(
 
   await endMemberAccess(db, normalized, now, publish);
   return { ok: true };
+}
+
+/**
+ * Calls `onRevoked` for every `member.revoked` published by any web or
+ * Gateway instance. Returns a function that stops listening.
+ */
+export async function listenMemberRevoked(url: string, onRevoked: (email: string) => void): Promise<() => Promise<void>> {
+  const client = new pg.Client({ connectionString: url });
+  await client.connect();
+  client.on("notification", (message) => {
+    if (message.channel === MEMBER_REVOKED_CHANNEL && message.payload) onRevoked(message.payload);
+  });
+  await client.query(`listen ${MEMBER_REVOKED_CHANNEL}`);
+  return () => client.end();
 }
