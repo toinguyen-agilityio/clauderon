@@ -12,6 +12,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@clauderon/core": "workspace:*",
+    "@clauderon/db": "workspace:*",
     "@clauderon/protocol": "workspace:*"
   }
 }

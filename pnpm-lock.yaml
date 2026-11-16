@@ -97,6 +97,12 @@ importers:
 
   packages/testing:
     dependencies:
+      '@clauderon/core':
+        specifier: workspace:*
+        version: link:../core
+      '@clauderon/db':
+        specifier: workspace:*
+        version: link:../db
       '@clauderon/protocol':
         specifier: workspace:*
         version: link:../protocol
