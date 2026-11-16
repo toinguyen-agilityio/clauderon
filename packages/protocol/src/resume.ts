@@ -36,12 +36,18 @@ export class ResumeBuffer {
     return [...this.outbox];
   }
 
-  /** Decides whether a numbered message is new; advances on delivery only. */
+  /**
+   * Decides whether a numbered message is new. Over one ordered socket, with
+   * resending after welcome, ids only jump ahead when the sender restarted and
+   * lost messages it can no longer resend. Waiting for them would stall the
+   * link forever, so a gap is delivered too and reported for logging; Run
+   * state lives in the database, not in lost messages.
+   */
   accept(envelope: Envelope): Acceptance {
     if (envelope.id <= this.lastReceivedId) return "duplicate";
-    if (envelope.id !== this.lastReceivedId + 1) return "gap";
+    const gap = envelope.id !== this.lastReceivedId + 1;
     this.lastReceivedId = envelope.id;
-    return "deliver";
+    return gap ? "gap" : "deliver";
   }
 
   state(): ResumeState {

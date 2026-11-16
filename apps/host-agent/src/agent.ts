@@ -68,7 +68,7 @@ export class HostAgent {
 
   stop(): void {
     this.stopped = true;
-    this.clearTimers();
+    this.stopHeartbeat();
     this.socket?.close(1000, "stopping");
   }
 
@@ -107,7 +107,7 @@ export class HostAgent {
       this.log(`disconnected (${code})`);
       this.socket = null;
       this.welcomed = false;
-      this.clearTimers();
+      this.stopHeartbeat();
       this.scheduleReconnect();
     });
 
@@ -139,7 +139,7 @@ export class HostAgent {
     }, HEARTBEAT_MS);
   }
 
-  private clearTimers(): void {
+  private stopHeartbeat(): void {
     if (this.heartbeat) this.opts.clock.clearTimeout(this.heartbeat);
     this.heartbeat = null;
   }
@@ -159,7 +159,7 @@ export class HostAgent {
     if (envelope.type === "welcome") {
       this.welcomed = true;
       this.failures = 0;
-      this.clearTimers();
+      this.stopHeartbeat();
       this.beat();
       for (const missed of this.buffer.unacked((envelope.payload as Payload<"welcome">).lastReceivedId)) socket.send(serialize(missed));
       return;
@@ -171,7 +171,8 @@ export class HostAgent {
     if (envelope.id === 0) return;
 
     const acceptance = this.buffer.accept(envelope);
-    if (acceptance === "deliver") {
+    if (acceptance === "gap") this.log(`message ids jumped to ${envelope.id}: the sender lost earlier messages`);
+    if (acceptance !== "duplicate") {
       await this.opts.state.save({ lastReceivedId: this.buffer.lastReceivedId });
       if (parsed.known && isMessageType(envelope.type)) {
         for (const handler of this.handlers.get(envelope.type) ?? []) await handler(envelope.payload as never, envelope as never);
@@ -179,7 +180,7 @@ export class HostAgent {
         this.log(`unknown message type ${envelope.type}, acknowledged`);
       }
     }
-    if (acceptance !== "gap") socket.send(serialize(controlMessage("ack", { upTo: this.buffer.lastReceivedId })));
+    socket.send(serialize(controlMessage("ack", { upTo: this.buffer.lastReceivedId })));
   }
 
   private log(message: string): void {

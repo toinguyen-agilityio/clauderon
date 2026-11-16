@@ -29,5 +29,5 @@ const hub = new BrowserHub({
 await link.start();
 await listenMemberRevoked(databaseUrl, (email) => hub.revoke(email));
 
-const port = Number(process.env.GATEWAY_PORT ?? process.env.PORT ?? 4000);
+const port = Number(process.env.GATEWAY_PORT ?? 4000);
 createGatewayServer(link, hub).listen(port, () => console.log(`gateway listening on ${port}`));

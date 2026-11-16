@@ -78,9 +78,17 @@ describe("ResumeBuffer", () => {
     const env = (id: number) => ({ id, type: "pod.status", payload: {} });
     expect(buffer.accept(env(1))).toBe("deliver");
     expect(buffer.accept(env(1))).toBe("duplicate");
-    expect(buffer.accept(env(3))).toBe("gap");
     expect(buffer.accept(env(2))).toBe("deliver");
     expect(buffer.lastReceivedId).toBe(2);
+  });
+
+  it("delivers past a gap a restarted sender can no longer fill, so the link never stalls", () => {
+    const buffer = new ResumeBuffer({ lastReceivedId: 4 });
+    const env = (id: number) => ({ id, type: "pod.status", payload: {} });
+    expect(buffer.accept(env(9))).toBe("gap");
+    expect(buffer.lastReceivedId).toBe(9);
+    expect(buffer.accept(env(10))).toBe("deliver");
+    expect(buffer.accept(env(5))).toBe("duplicate");
   });
 
   it("starts from persisted ids", () => {

@@ -86,7 +86,7 @@ export class FakeHostAgent {
       return;
     }
     if (envelope.id === 0) return;
-    if (this.buffer.accept(envelope) === "deliver") this.received.push(envelope);
+    if (this.buffer.accept(envelope) !== "duplicate") this.received.push(envelope);
     if (this.autoAck) this.ack();
   }
 }

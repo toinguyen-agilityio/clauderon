@@ -50,6 +50,9 @@ export async function signIn(db: Db, profile: GoogleProfile, operators: readonly
   return { ok: true, member: row! };
 }
 
+/** Ids come from cookies and tickets; a malformed one must not reach a uuid column. */
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -71,7 +74,7 @@ export async function loadSession(db: Db, token: string, operators: readonly str
 
 /** Same checks as `loadSession`, by session id (the Gateway's ticket names it). */
 export async function loadSessionById(db: Db, sessionId: string, operators: readonly string[], now: Date) {
-  if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return null;
+  if (!isUuid(sessionId)) return null;
   return loadLiveSession(db, eq(session.id, sessionId), operators, now);
 }
 
@@ -203,7 +206,7 @@ export async function listenMemberRevoked(url: string, onRevoked: (email: string
 // Member lookups for the Auth.js adapter.
 
 export async function findMemberById(db: Db, id: string): Promise<Member | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const [row] = await db.select().from(member).where(eq(member.id, id));
   return row ?? null;
 }

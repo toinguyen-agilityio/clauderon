@@ -165,6 +165,16 @@ describe("HostLink", () => {
     expect(agentSide.closed).toBe(false);
   });
 
+  it("a restarted Gateway shows the Pod Host disconnected until the next hello", async () => {
+    connect(new FakeHostAgent());
+    await flush();
+    expect((await getPodHost(db))?.connected).toBe(true);
+
+    const restarted = new HostLink({ db, secret: SECRET, podImage: "img", clock, log: () => {} });
+    await restarted.start();
+    expect((await getPodHost(db))?.connected).toBe(false);
+  });
+
   it("a second connection replaces the first", async () => {
     const first = new FakeHostAgent();
     connect(first);

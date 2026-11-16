@@ -44,6 +44,8 @@ export class HostLink {
     const host = await getPodHost(this.opts.db);
     this.buffer = new ResumeBuffer({ lastSentId: host?.lastSentId ?? 0, lastReceivedId: host?.lastReceivedId ?? 0 });
     this.processId = host?.processId ?? null;
+    // No socket survives a Gateway restart: show disconnected until hello.
+    if (host?.connected) await recordHostDisconnected(this.opts.db);
   }
 
   get connected(): boolean {
@@ -117,11 +119,12 @@ export class HostLink {
     }
 
     const acceptance = this.buffer.accept(envelope);
-    if (acceptance === "deliver") {
+    if (acceptance === "gap") this.log(`message ids jumped to ${envelope.id}: the sender lost earlier messages`);
+    if (acceptance !== "duplicate") {
       await this.persistIds();
       await this.deliver(envelope, parsed.known);
     }
-    if (acceptance !== "gap") socket.send(serialize(controlMessage("ack", { upTo: this.buffer.lastReceivedId })));
+    socket.send(serialize(controlMessage("ack", { upTo: this.buffer.lastReceivedId })));
   }
 
   private async hello(socket: LinkSocket, hello: Payload<"hello">): Promise<void> {

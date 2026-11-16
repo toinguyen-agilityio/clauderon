@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { systemClock } from "@clauderon/core";
 import { connect, notifyMemberRevoked, parseOperatorEmails, type DbHandle } from "@clauderon/db";
-import { memberFromCookies, type AccessDeps } from "./access";
+import { SESSION_COOKIES, memberFromCookies, type AccessDeps } from "./access";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -28,7 +28,7 @@ export async function requireMember() {
   const store = await cookies();
   const live = await memberFromCookies(deps(), (name) => store.get(name)?.value);
   if (!live) {
-    const hadCookie = store.getAll().some((c) => c.name.endsWith("authjs.session-token"));
+    const hadCookie = SESSION_COOKIES.some((name) => store.has(name));
     redirect(hadCookie ? "/session-ended" : "/sign-in");
   }
   return live.member;
