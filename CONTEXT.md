@@ -10,6 +10,10 @@ A shared web app for one team to run GitHub issues through Flows on each Member'
 A person who signs in with a Google account whose email is on the app's allowlist, identified by that email, with at most one Pod; any Member can respond to or cancel any Run, and their email is kept for audit.
 _Avoid_: User, account, admin, username
 
+**Operator**:
+Whoever runs the app: holds its configuration and secrets, and is the only one who manages the allowlist; Operator emails are set in the app's configuration and are always allowed.
+_Avoid_: Admin, superuser, owner
+
 **Starter**:
 The Member who started a Run; the Run executes on the Starter's Pod under their Claude Code and GitHub logins.
 _Avoid_: Owner, requester, author
@@ -22,13 +26,17 @@ _Avoid_: Board, space, repo, workspace
 
 **Ticket**:
 An open GitHub issue in a Project's repository, pulled into this app by Sync; GitHub stays the source of truth.
-_Avoid_: Task, issue, job
+_Avoid_: Task, issue, job, card
 
 **Ticket Status**:
 The status shown for a Ticket, derived from its Runs, its pull request and the issue, never stored or set by hand.
 _Avoid_: Ticket state, column
 
 ### Execution
+
+**Gateway**:
+The always-on part of the app that holds the Host Agent's connection and the web terminals, watches the heartbeat and runs the Runs; the web app hands it everything that needs a long-lived connection.
+_Avoid_: Backend, server, worker, socket service
 
 **Pod Host**:
 The one team machine running Docker where every Pod lives.
@@ -56,28 +64,32 @@ _Avoid_: Worker, concurrency
 
 ### Flows
 
-**Task**:
-A reusable step definition in the library, of kind Agent, Command or Human, with instructions or a command, typed inputs and typed Outputs.
-_Avoid_: Step, job, action
+**Node**:
+A reusable step kept in the Node library, of kind Agent, Command, Human or Ticket, with instructions or a command, typed inputs and typed Outputs; a Flow places Nodes from the library, and each placement has its own name and extra instructions. Editing a library Node changes every Flow that uses it.
+_Avoid_: Task, step, stage, job, action
 
-**Agent Task**:
-A Task that gives instructions to Claude Code on a Pod.
+**Node library**:
+The set of Nodes, samples and Member-made, that Flows are built from.
+_Avoid_: Task library, catalogue, palette
 
-**Command Task**:
-A Task that runs a shell command on a Pod.
+**Ticket Node**:
+The one entry Node of every Flow; it emits the Ticket's `issue` to any Node that needs it.
+_Avoid_: Start node, trigger
+
+**Agent Node**:
+A Node that gives instructions to Claude Code on a Pod and ends with a structured result naming its Outputs.
+
+**Command Node**:
+A Node that runs a shell command on a Pod; exit code 0 means success.
 _Avoid_: Script step
 
-**Human Task**:
-A Task that pauses the Run until a Member responds: an Approve Task (approve or reject with feedback) or a Grill Task (Claude asks, a Member answers, Claude continues in the same session).
+**Human Node**:
+A Node that pauses the Run until a Member responds: an Approve Node (approve, or reject with feedback; passes its input through) or a Grill Node (Claude asks a batch of questions per round, a Member answers them in one form, and Claude resumes the same session until it produces its Outputs).
 _Avoid_: Gate, manual step, approval step
 
 **Flow**:
 A directed acyclic graph of Nodes that a Ticket is taken through.
 _Avoid_: Pipeline, workflow, template
-
-**Node**:
-One use of a Task inside a Flow, with its own extra instructions.
-_Avoid_: Step, stage, job
 
 **Output**:
 A typed value a Node produces, consumed by later Nodes through the Flow's edges.
@@ -105,11 +117,11 @@ _Avoid_: RunStep, try, execution
 A Run that has not ended as Succeeded or Cancelled, including a Failed or Interrupted one; a Ticket has at most one Active Run, and a Flow cannot be edited while an Active Run uses it.
 
 **Interrupted**:
-The state of a Run whose Pod stopped, or whose Host Agent lost its connection, mid-Node; only a Retry continues it.
+The state of a Run whose Pod stopped, or whose Host Agent sent no heartbeat for 30 seconds or restarted, mid-Node; only a Retry continues it. A shorter drop, or a restart of the Gateway, does not interrupt a Run.
 _Avoid_: Crashed, lost, orphaned
 
 **Retry**:
-A Member re-running a Failed or Interrupted Run from a Node they choose, which with every later Node gets a new Attempt.
+A Member re-running a Failed or Interrupted Run from a Node they choose, which with every later Node gets a new Attempt; the chosen Node is told the latest Reject feedback, why the last Node failed and an optional note, and the worktree is kept.
 _Avoid_: Rerun, restart, Loop-back
 
 **Cancel**:
