@@ -128,6 +128,8 @@ export const CloseCode = {
   Unauthorized: 4401,
   /** The Member's access was removed (MEM-3). */
   Revoked: 4403,
+  /** Not the Member's to open, e.g. another Member's terminal (POD-9). */
+  NotFound: 4404,
   /** A newer Host Agent connection replaced this one. */
   Replaced: 4409,
 } as const;
