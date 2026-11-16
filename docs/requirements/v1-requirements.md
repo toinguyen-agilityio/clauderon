@@ -2,7 +2,7 @@
 
 > **Version:** v1 final · **Date:** 2026-11-12, updated 2026-11-13 (Pods are per-Member Docker containers on one Pod Host; sign-in with Google) and 2026-11-16 (answers to the spec questions) · **Status:** Requirements and spec decisions settled; no code yet.
 > **Sources:** merges two earlier drafts, a team draft and a practice draft, following the practice draft's outline; every point where they differed was settled on 2026-11-12. The 47 spec questions and the review of their answers ([PR #3](https://github.com/toinguyen-agilityio/clauderon/pull/3)) were settled on 2026-11-16. See [section 9](#9-decision-log).
-> **Next step:** write the spec, then the implementation plan (section 12).
+> **Next step:** review the [milestone specs](../specs/README.md), then publish each as a GitHub issue (section 12).
 
 ---
 
@@ -344,17 +344,17 @@ A Run holds a Slot only while Running or Waiting for human.
 
 ## 7. Roadmap
 
-Proposed split for the team to confirm. No dates: each milestone ends when its check passes.
+Each milestone ends when its check passes. The split below follows the [seven-day roadmap](../roadmap/v1-seven-day-plan.md) (updated 2026-11-16: the Gateway and Host Agent link move to M0, Pod Start and Stop to M1, Interrupted Runs to M3, and A5 and A7 to the milestones that build what they test). Each milestone has a spec in [docs/specs](../specs/README.md).
 
 | Milestone | Delivers | Check |
 | --- | --- | --- |
-| **M0 — Model and seed** | Domain model, persistence, seeded Nodes and Flows, Google sign-in with the allowlist in the database, the Allowlist page for the Operator | Model unit tests pass; A5, A7 |
-| **M1 — Walking skeleton** | The Gateway, the Pod Host with its Host Agent, Create my Pod, terminal login, one Project, Sync, the fixed Flow `Basic ticket delivery` with Agent and Command Nodes, live logs, real branch and pull request | A1 |
-| **M2 — Flows and scheduling** | Canvas editor and validator, clone samples, Flow edit lock, a Pod per Member with Slots, limits and queue, Batches, Dry-run | A2, A3, A6 |
-| **M3 — People in the loop** | Approve and Grill Nodes, Needs you, Retry from any Node, Cancel, Attempts, audit | A4 |
-| **M4 — Refinement** | Usage, Artifact, diff, Batch page, Interrupted Runs, Pod Start/Stop/Recreate/Delete, Pod and Pod Host health, worktree cleanup | Demo of the full journey |
+| **M0 — Foundations** | Monorepo, database schema and Host Agent protocol, domain core, seeded Nodes and Flows, Google sign-in with the allowlist in the database, the Allowlist page, the Gateway and Host Agent link, the Pod image | Core unit tests pass; unknown emails refused; Host Agent connected |
+| **M1 — Walking skeleton** | Create my Pod, Start and Stop, terminal login, Projects, Sync, Tickets, the fixed Flow `Basic ticket delivery` with Agent and Command Nodes, live logs, real branch and pull request | A7, A1 |
+| **M2 — Flows and scheduling** | Canvas editor, clone samples, Flow edit lock, Node library editing, Slots, limits and queue, Batches, Dry-run | A2, A3, A6 |
+| **M3 — People in the loop** | Approve and Grill Nodes, Needs you, Retry from any Node, Cancel, Attempts, Interrupted Runs, audit | A4, A5 |
+| **M4 — Refinement and release** | Usage, Artifact, diff, Batch page, Ticket detail, Pod Recreate and Delete, measured use, worktree cleanup, staging and production | Full journey on staging; A1–A7 on production |
 
-**If time is short, cut in this order:** POD-8 → TRK-4 → TRK-6 → POD-7 → the Grill kind in FLW-2.
+**If time is short, cut in this order:** POD-8 → TRK-4 → TRK-6 → POD-7 → the Grill kind in FLW-2 → TIC-2 → the Recreate digest check.
 
 ---
 
@@ -524,5 +524,5 @@ The full glossary is [CONTEXT.md](../../CONTEXT.md). Key terms:
 ## 12. Next steps
 
 1. Settle risks R1, R3 and R9 with IT, leads and Anthropic's terms.
-2. Write the spec as one GitHub issue labelled `ready-for-agent`, tested through the single seam of Q1, and review it.
-3. Split it into issues per milestone, then write the implementation plan.
+2. Review the [milestone specs](../specs/README.md): one per milestone, tested through the single seam of Q1. This refines Q2 and Q3: the spec is written per milestone in the repository, and each file is published as one GitHub issue labelled `ready-for-agent`.
+3. Split each milestone issue into its slices, following the [seven-day roadmap](../roadmap/v1-seven-day-plan.md).

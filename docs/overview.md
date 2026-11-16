@@ -82,15 +82,15 @@ Three choices worth knowing:
 
 ## Roadmap
 
-Each milestone ends when its check passes. The proposed schedule fits all five into seven days: see the [seven-day roadmap](roadmap/v1-seven-day-plan.md) or its [visual page](https://claude.ai/artifact/T4AJv1hxGDNFb9Ktea7GV9).
+Each milestone ends when its check passes. The proposed schedule fits all five into seven days: see the [seven-day roadmap](roadmap/v1-seven-day-plan.md) or its [visual page](https://claude.ai/artifact/T4AJv1hxGDNFb9Ktea7GV9). Each milestone has a [spec](specs/README.md).
 
 | Milestone | Delivers |
 | --- | --- |
-| **M0** Model and seed | Data model, storage, sample Flows, Google sign-in |
+| **M0** Foundations | Data model, sample Flows, Google sign-in, the link to the Pod Host |
 | **M1** Walking skeleton | First real issue → real pull request on a member's Pod |
-| **M2** Flows and scheduling | Flow editor, a Pod per member, queue, batches, dry-run |
-| **M3** People in the loop | Approve and Q&A steps, "Needs you" inbox, retry, cancel, audit |
-| **M4** Refinement | Usage, summaries, diff, Pod lifecycle and health |
+| **M2** Flows and scheduling | Flow editor, queue, batches, dry-run, a second member's Pod |
+| **M3** People in the loop | Approve and Q&A steps, "Needs you" inbox, retry, cancel, interrupted runs, audit |
+| **M4** Refinement and release | Usage, summaries, diff, Pod lifecycle and health, production |
 
 ## Top risks
 
