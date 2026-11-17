@@ -271,6 +271,14 @@ describe("Dry-run (spec M2 §7)", () => {
     const runs = await db.select().from(schema.run);
     expect(runs).toHaveLength(10);
     expect(runs.every((r) => r.state === "succeeded")).toBe(true);
+
+    // The other 8 started in `queued_at` order (ties by id, as the scheduler does).
+    const byQueue = [...runs].sort((a, b) => a.queuedAt.getTime() - b.queuedAt.getTime() || (a.id < b.id ? -1 : 1));
+    const starts = byQueue.map((r) => r.startedAt!.getTime());
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+    // At no moment did a later Run run before an earlier one had started: the first two start together, the rest one by one as Slots free up.
+    expect(new Set(starts.slice(0, 2)).size).toBe(1);
+    expect(starts[2]!).toBeGreaterThan(starts[0]!);
   });
 
   it("a Node fails with the configured rate, ending the Run", async () => {
