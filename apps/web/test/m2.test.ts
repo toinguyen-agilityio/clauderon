@@ -200,3 +200,38 @@ describe("Canvas editor save (spec M2 §3)", () => {
     expect((await loadFlowDetail(db, copyId))!.nodes).toHaveLength(mine.graph.nodes.length);
   });
 });
+
+describe("Node panel (spec M2 §3, FLW-6)", () => {
+  it("saves a label, extra instructions and optional Outputs for a placement", async () => {
+    const flowId = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const copy = await cloneMyFlow(deps, ann, flowId);
+    if (!copy.ok) throw new Error("clone failed");
+    const library = await loadLibrary(db);
+    const data = (await editorData(deps, copy.flowId))!;
+    const code = data.graph.nodes.find((n) => library.find((l) => l.id === n.nodeId)!.name === "Code a change")!;
+    const nodes = data.graph.nodes.map((n) => (n.id === code.id ? { ...n, label: "Write the fix", extraInstructions: "Keep the API.", enabledOptionalOutputs: ["summary"] } : n));
+    expect(await saveMyFlow(deps, ann, copy.flowId, { name: data.flow.name, nodes, edges: data.graph.edges })).toMatchObject({ ok: true });
+    const saved = (await loadFlowDetail(db, copy.flowId))!.nodes.find((n) => n.id === code.id)!;
+    expect(saved).toMatchObject({ label: "Write the fix", extraInstructions: "Keep the API.", enabledOptionalOutputs: ["summary"] });
+    // The placement's label reaches a Run's snapshot, and its extra instructions reach the Agent prompt (spec M1 §4.2).
+    const { buildFlowSnapshot } = await import("@clauderon/db");
+    const snapshotNode = (await buildFlowSnapshot(db, copy.flowId))!.nodes.find((n) => n.id === code.id)!;
+    expect(snapshotNode).toMatchObject({ name: "Write the fix", extraInstructions: "Keep the API." });
+  });
+
+  it("T2-10: turning off an optional Output that has an edge adds a problem, and saving still works", async () => {
+    // Plan and deliver already sends the optional `summary` of Code a change to Open a pull request.
+    const flowId = await sampleFlowId(db, "plan-and-deliver");
+    const ann = await memberRow(db, "ann@example.com");
+    const copy = await cloneMyFlow(deps, ann, flowId);
+    if (!copy.ok) throw new Error("clone failed");
+    const library = await loadLibrary(db);
+    const data = (await editorData(deps, copy.flowId))!;
+    const code = data.graph.nodes.find((n) => library.find((l) => l.id === n.nodeId)!.name === "Code a change")!;
+    expect(code.enabledOptionalOutputs).toEqual(["summary"]);
+    expect(await saveMyFlow(deps, ann, copy.flowId, { name: data.flow.name, nodes: data.graph.nodes, edges: data.graph.edges })).toEqual({ ok: true, problems: 0 });
+    const off = data.graph.nodes.map((n) => (n.id === code.id ? { ...n, enabledOptionalOutputs: [] } : n));
+    expect(await saveMyFlow(deps, ann, copy.flowId, { name: data.flow.name, nodes: off, edges: data.graph.edges })).toEqual({ ok: true, problems: 1 });
+  });
+});

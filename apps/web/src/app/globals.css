@@ -321,7 +321,6 @@ dialog.modal::backdrop { background: var(--scrim); }
 
 /* Flow canvas editor (M2) */
 .flow-editor { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; align-items: start; }
-.flow-editor:has(.flow-library:only-child) { grid-template-columns: 1fr; }
 .flow-library { max-height: 70vh; overflow-y: auto; }
 .flow-canvas { height: 70vh; min-height: 420px; overflow: hidden; }
 .lib-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: grab; }
