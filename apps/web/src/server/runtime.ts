@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { systemClock } from "@clauderon/core";
+import { parseLimitCeiling, systemClock } from "@clauderon/core";
 import { connect, notifyGatewayCommand, notifyMemberRevoked, parseOperatorEmails, type DbHandle } from "@clauderon/db";
 import { SESSION_COOKIES, memberFromCookies } from "./access";
 import type { AppDeps } from "./deps";
@@ -26,6 +26,7 @@ export function deps(): AppDeps {
     command: notifyGatewayCommand(db),
     github: gitHubApi(process.env.GITHUB_TOKEN ?? ""),
     podImage: process.env.POD_IMAGE ?? "",
+    limitCeiling: parseLimitCeiling(process.env.POD_LIMIT_CEILING),
   };
 }
 

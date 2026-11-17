@@ -1,13 +1,14 @@
-import { isPodReady, overCommitted } from "@clauderon/core";
-import { createPod, getPod, getPodHost, listPods, podRunCounts, recordAudit, type Pod, type PodRow } from "@clauderon/db";
+import { checkLimits, isPodReady, overCommitted, ticketKeys } from "@clauderon/core";
+import { createPod, getPod, getPodHost, listPods, listProjects, podRunCounts, queuedRuns, recordAudit, updatePodLimits, type Pod, type PodRow } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
 
 // Pods (spec M1 §2) as plain functions over the database, so tests drive
 // them directly and pages and actions stay thin.
 
-export type PodView = PodRow & { ready: boolean; mine: boolean; tokenRepos: string[] };
+export type QueueEntry = { runId: string; mode: "real" | "dry"; queuedAt: Date; ticketTitle: string; flowName: string; position: number; key: string };
+export type PodView = PodRow & { ready: boolean; mine: boolean; tokenRepos: string[]; queue: QueueEntry[] };
 
-const view = (pod: PodRow, viewer: Viewer): PodView => ({
+const view = (pod: PodRow, viewer: Viewer): Omit<PodView, "queue"> => ({
   ...pod,
   ready: isPodReady(pod),
   mine: pod.memberId === viewer.id,
@@ -16,10 +17,16 @@ const view = (pod: PodRow, viewer: Viewer): PodView => ({
 
 /** The Pods page (POD-4): the Pod Host card with every Pod and the over-commit warning. */
 export async function viewPods(deps: AppDeps, viewer: Viewer) {
-  const [host, rows] = await Promise.all([getPodHost(deps.db), listPods(deps.db)]);
-  const pods = rows.map((p) => view(p, viewer));
+  const [host, rows, projects] = await Promise.all([getPodHost(deps.db), listPods(deps.db), listProjects(deps.db)]);
+  const [queues, keyOf] = [await queuedRuns(deps.db, rows.map((p) => p.id)), ticketKeys(projects)];
+  const pods = rows.map((p) => ({
+    ...view(p, viewer),
+    // Queued Runs in start order, for the Pod row's queue (spec M2 §6).
+    queue: (queues.get(p.id) ?? []).map((q, i) => ({ ...q, position: i + 1, key: keyOf(q.projectId, q.ticketNumber) })),
+  }));
   return {
     host,
+    ceiling: deps.limitCeiling,
     pods,
     mine: pods.find((p) => p.mine) ?? null,
     limits: { cpus: rows.reduce((s, p) => s + p.cpus, 0), memoryMb: rows.reduce((s, p) => s + p.memoryMb, 0) },
@@ -67,4 +74,33 @@ export async function podAction(deps: AppDeps, viewer: Viewer, podId: string, ac
 export async function terminalAccess(deps: AppDeps, viewer: Viewer, podId: string): Promise<{ pod: Pod } | "not-found"> {
   const pod = await ownPod(deps, viewer, podId);
   return pod ? { pod } : "not-found";
+}
+
+export type SetLimitsResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Edit Slots, CPU and RAM on my Pod (POD-2, POD-6): the owner's only, each
+ * capped by `POD_LIMIT_CEILING`. Slots apply at once (the scheduler runs;
+ * lowering them stops nothing that is running); CPU and RAM wait for Recreate.
+ */
+export async function setMyPodLimits(
+  deps: AppDeps,
+  viewer: Viewer,
+  podId: string,
+  requested: { slots: unknown; cpus: unknown; memoryMb: unknown },
+): Promise<SetLimitsResult | "not-found"> {
+  const pod = await ownPod(deps, viewer, podId);
+  if (!pod) return "not-found";
+  const checked = checkLimits(requested, deps.limitCeiling);
+  if (!checked.ok) return checked;
+  await updatePodLimits(deps.db, podId, checked.limits);
+  await recordAudit(deps.db, {
+    actorEmail: viewer.email,
+    action: "pod.limits",
+    subjectType: "pod",
+    subjectId: podId,
+    detail: { from: { slots: pod.slots, cpus: pod.cpus, memoryMb: pod.memoryMb }, to: checked.limits },
+  });
+  await deps.command({ type: "schedule", podId });
+  return { ok: true };
 }
