@@ -15,6 +15,7 @@ import {
 import type { AppDeps } from "../src/server/deps";
 import { cloneMyFlow, deleteMyFlow, editorData, saveMyFlow, viewFlows } from "../src/server/flows";
 import { startDialog } from "../src/server/start";
+import { createMyNode, deleteMyNode, updateMyNode, viewLibrary } from "../src/server/library";
 
 let test: TestDatabase;
 let db: Db;
@@ -233,5 +234,96 @@ describe("Node panel (spec M2 §3, FLW-6)", () => {
     expect(await saveMyFlow(deps, ann, copy.flowId, { name: data.flow.name, nodes: data.graph.nodes, edges: data.graph.edges })).toEqual({ ok: true, problems: 0 });
     const off = data.graph.nodes.map((n) => (n.id === code.id ? { ...n, enabledOptionalOutputs: [] } : n));
     expect(await saveMyFlow(deps, ann, copy.flowId, { name: data.flow.name, nodes: off, edges: data.graph.edges })).toEqual({ ok: true, problems: 1 });
+  });
+});
+
+describe("Node library (spec M2 §4)", () => {
+  const lint = (extra: object = {}) => ({
+    name: "Lint",
+    kind: "command",
+    instructions: "",
+    command: "npm run lint",
+    inputs: [{ name: "branch", type: "branch", required: true }],
+    outputs: [{ name: "report", type: "summary", optional: false }],
+    ...extra,
+  });
+
+  /** A Flow of its own that uses the custom Lint Node, fed by the branch of Code a change. */
+  async function flowUsingLint() {
+    const ann = await memberRow(db, "ann@example.com", "Ann");
+    const sample = await sampleFlowId(db);
+    const copy = await cloneMyFlow(deps, ann, sample);
+    if (!copy.ok) throw new Error("clone failed");
+    expect(await createMyNode(deps, ann, lint())).toMatchObject({ ok: true });
+    const library = await loadLibrary(db);
+    const lintId = library.find((n) => n.name === "Lint")!.id;
+    const data = (await editorData(deps, copy.flowId))!;
+    const placed = (name: string) => data.graph.nodes.find((n) => library.find((l) => l.id === n.nodeId)!.name === name)!;
+    const placement = { id: crypto.randomUUID(), nodeId: lintId, label: null, extraInstructions: "", enabledOptionalOutputs: [], x: 0, y: 0 };
+    const edges = [
+      ...data.graph.edges,
+      { id: crypto.randomUUID(), fromFlowNodeId: placed("Code a change").id, fromOutput: "branch", toFlowNodeId: placement.id, toInput: "branch" },
+    ];
+    expect(await saveMyFlow(deps, ann, copy.flowId, { name: data.flow.name, nodes: [...data.graph.nodes, placement], edges })).toEqual({ ok: true, problems: 0 });
+    return { ann, lintId, flowId: copy.flowId };
+  }
+
+  it("any Member creates a Node; the Ticket kind and a bad definition are refused; audit node.create", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    expect(await createMyNode(deps, ann, lint())).toEqual({ ok: true, flows: 0, withProblems: 0 });
+    expect(await createMyNode(deps, ann, lint({ kind: "ticket" }))).toMatchObject({ ok: false });
+    expect(await createMyNode(deps, ann, lint({ command: "" }))).toEqual({ ok: false, error: "A Command Node needs a command." });
+    expect((await viewLibrary(deps)).find((n) => n.name === "Lint")).toMatchObject({ isSample: false, kind: "command", usedBy: [] });
+    expect(await actions()).toEqual(["node.create"]);
+  });
+
+  it("T2-6: editing an unlocked Node re-validates every Flow using it and says how many changed", async () => {
+    const { ann, lintId, flowId } = await flowUsingLint();
+    expect((await viewLibrary(deps)).find((n) => n.id === lintId)!.usedBy.map((u) => u.flowId)).toEqual([flowId]);
+    // Renaming keeps the Flow valid.
+    expect(await updateMyNode(deps, ann, lintId, lint({ name: "Lint code" }))).toEqual({ ok: true, flows: 1, withProblems: 0 });
+    // Dropping the input the Flow feeds gives that Flow a problem, and the change is saved.
+    expect(await updateMyNode(deps, ann, lintId, lint({ inputs: [] }))).toEqual({ ok: true, flows: 1, withProblems: 1 });
+    expect((await viewFlows(deps)).flows[0]!.problems).toBeGreaterThan(0);
+    expect(await actions()).toEqual(expect.arrayContaining(["node.create", "node.update"]));
+  });
+
+  it("T2-6: editing or deleting a Node used by a locked Flow is refused, naming the Flow and the Run", async () => {
+    const { ann, lintId, flowId } = await flowUsingLint();
+    const pod = await podRow(db, ann.id);
+    const ticket = await ticketRow(db, (await projectRow(db)).id, 9);
+    const { buildFlowSnapshot, startBatch } = await import("@clauderon/db");
+    const started = await startBatch(
+      db,
+      { flowId, flowSnapshot: (await buildFlowSnapshot(db, flowId))!, starter: ann, podId: pod.id, mode: "dry", extraInstructions: "", ticketIds: [ticket.id] },
+      new Date(),
+    );
+    if (!started.ok) throw new Error("start failed");
+    const edited = await updateMyNode(deps, ann, lintId, lint({ command: "npm run lint:fix" }));
+    expect(edited).toMatchObject({ ok: false, error: expect.stringContaining("Basic ticket delivery (copy)") });
+    expect(edited).toMatchObject({ error: expect.stringContaining(started.runIds[0]!) });
+    expect(await deleteMyNode(deps, ann, lintId)).toMatchObject({ ok: false, error: expect.stringContaining("locked") });
+    expect((await viewLibrary(deps)).find((n) => n.id === lintId)!.command).toBe("npm run lint");
+  });
+
+  it("a Node still used by a Flow cannot be deleted; an unused one can; samples are read-only", async () => {
+    const { ann, lintId } = await flowUsingLint();
+    expect(await deleteMyNode(deps, ann, lintId)).toMatchObject({ ok: false, error: expect.stringContaining("Used by Basic ticket delivery (copy)") });
+    const spare = await createMyNode(deps, ann, lint({ name: "Spare" }));
+    expect(spare.ok).toBe(true);
+    const spareId = (await viewLibrary(deps)).find((n) => n.name === "Spare")!.id;
+    expect(await deleteMyNode(deps, ann, spareId)).toEqual({ ok: true, flows: 0, withProblems: 0 });
+
+    const sampleNode = (await viewLibrary(deps)).find((n) => n.isSample)!;
+    expect(await updateMyNode(deps, ann, sampleNode.id, lint())).toEqual({ ok: false, error: "Sample Nodes are read-only." });
+    expect(await deleteMyNode(deps, ann, sampleNode.id)).toEqual({ ok: false, error: "Sample Nodes are read-only." });
+  });
+
+  it("T2-11: every Flow and Node change writes an audit entry with the Member's email", async () => {
+    const { ann, lintId } = await flowUsingLint();
+    await updateMyNode(deps, ann, lintId, lint({ name: "Lint 2" }));
+    const entries = await db.select().from(schema.auditEntry);
+    expect(entries.map((e) => e.action)).toEqual(expect.arrayContaining(["flow.create", "flow.update", "node.create", "node.update"]));
+    expect(entries.every((e) => e.actorEmail === "ann@example.com")).toBe(true);
   });
 });
