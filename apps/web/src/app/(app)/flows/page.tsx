@@ -20,6 +20,9 @@ export default async function FlowsPage() {
             Run uses it.
           </p>
         </div>
+        <Link className="btn sm" href="/flows/library">
+          Node library
+        </Link>
       </div>
 
       <FlowTable title="Samples" rows={samples} now={now} empty="No sample Flows yet. They arrive with the seed." />
