@@ -1,0 +1,288 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { duration, formatTime, tokens } from "../../../../components/format";
+import { openGatewaySocket } from "../../../../components/gateway-socket";
+import { Icon } from "../../../../components/icons";
+import { OType, StatePill } from "../../../../components/state-pill";
+import type { viewRun } from "../../../../server/runs";
+
+type Timeline = Exclude<Awaited<ReturnType<typeof viewRun>>, "not-found">["timeline"];
+type TimelineNode = Timeline[number];
+type Line = { seq: number; stream: string; text: string };
+
+const KIND: Record<string, [letter: string, label: string]> = {
+  ticket: ["T", "Ticket"],
+  agent: ["A", "Agent"],
+  command: ["$", "Command"],
+  approve: ["H", "Human · Approve"],
+  grill: ["H", "Human · Grill"],
+};
+
+/** The Gateway's `/browser` socket, reopened with backoff when it drops (NFR-3). */
+function useGatewaySocket(gatewayUrl: string): WebSocket | null {
+  const [socket, setSocket] = useState<WebSocket | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    let current: WebSocket | null = null;
+    let failures = 0;
+    const open = async () => {
+      const ws = await openGatewaySocket(gatewayUrl, "/browser");
+      if (!ws) return;
+      if (stopped) return ws.close();
+      current = ws;
+      ws.onopen = () => {
+        failures = 0;
+        setSocket(ws);
+      };
+      ws.onclose = (event) => {
+        setSocket((s) => (s === ws ? null : s));
+        if (stopped) return;
+        if (event.code === 4403 || event.code === 4401) {
+          window.location.href = "/session-ended";
+          return;
+        }
+        retry = setTimeout(() => void open(), Math.min(1000 * 2 ** failures++, 10_000));
+      };
+    };
+    void open();
+    return () => {
+      stopped = true;
+      if (retry) clearTimeout(retry);
+      current?.close();
+    };
+  }, [gatewayUrl]);
+  return socket;
+}
+
+function classify(line: Line): string {
+  if (line.stream !== "stdout") return line.stream;
+  if (line.text.startsWith("[claude]")) return "a";
+  if (line.text.startsWith("[tool]") || line.text.startsWith("[result]")) return "d";
+  if (/✓|passed|passing/.test(line.text)) return "k";
+  if (/✗|FAIL|Error|failing/.test(line.text)) return "f";
+  return "";
+}
+
+function OutputValue({ type, value }: { type: string; value: unknown }) {
+  const v = value as Record<string, unknown> | string;
+  if (typeof v === "string") return <div className="outv">{v}</div>;
+  if (type === "issue") return <div className="outv">#{String(v.number)} {String(v.title ?? "")}</div>;
+  if (type === "branch")
+    return (
+      <div className="outv mono">
+        {String(v.branch)}
+        {v.headCommit ? <span className="faint"> @ {String(v.headCommit).slice(0, 7)}</span> : null}
+      </div>
+    );
+  if (type === "test-result")
+    return (
+      <pre className="outv mono">
+        Exit code {String(v.exitCode)}
+        {"\n\n"}
+        {String(v.tail ?? "")}
+      </pre>
+    );
+  if (type === "pull-request")
+    return (
+      <div className="outv mono">
+        <a href={String(v.url)} target="_blank" rel="noreferrer">
+          {String(v.url)}
+        </a>
+      </div>
+    );
+  return <pre className="outv mono">{JSON.stringify(value, null, 2)}</pre>;
+}
+
+/**
+ * The Node list and the selected Node's live log, Inputs and Outputs (TRK-1,
+ * TRK-2, NFR-4). The page refreshes when the Run changes; log lines are
+ * backfilled from storage, then streamed.
+ */
+export function RunLive({ gatewayUrl, runId, timeline, runEnded }: { gatewayUrl: string; runId: string; timeline: Timeline; runEnded: boolean }) {
+  const router = useRouter();
+  const socket = useGatewaySocket(gatewayUrl);
+  const current =
+    timeline.find((n) => n.state === "running") ?? timeline.find((n) => n.state === "failed") ?? [...timeline].reverse().find((n) => n.attempts.length > 0) ?? timeline[0];
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const node = timeline.find((n) => n.id === selectedId) ?? current;
+  const [attemptPick, setAttemptPick] = useState<Record<string, string>>({});
+  const attempt = node?.attempts.find((a) => a.id === attemptPick[node.id]) ?? node?.attempts.at(-1);
+
+  const [lines, setLines] = useState<Line[]>([]);
+  const [follow, setFollow] = useState(true);
+  const logBox = useRef<HTMLPreElement>(null);
+
+  // Run changes refresh the server-rendered page.
+  useEffect(() => {
+    if (!socket) return;
+    const onMessage = (event: MessageEvent) => {
+      const message = JSON.parse(String(event.data)) as { type: string };
+      if (message.type === "run.changed") router.refresh();
+    };
+    socket.addEventListener("message", onMessage);
+    socket.send(JSON.stringify({ type: "subscribe.run", runId }));
+    return () => socket.removeEventListener("message", onMessage);
+  }, [socket, runId, router]);
+
+  // One log subscription per socket: the selected Attempt's lines.
+  const attemptId = attempt?.id;
+  useEffect(() => {
+    setLines([]);
+    if (!socket || !attemptId) return;
+    const onMessage = (event: MessageEvent) => {
+      const message = JSON.parse(String(event.data)) as Line & { type: string; attemptId: string };
+      if (message.type !== "log" || message.attemptId !== attemptId) return;
+      setLines((prev) => (prev.some((l) => l.seq === message.seq) ? prev : [...prev, message].sort((a, b) => a.seq - b.seq)));
+    };
+    socket.addEventListener("message", onMessage);
+    socket.send(JSON.stringify({ type: "subscribe.log", attemptId }));
+    return () => {
+      socket.removeEventListener("message", onMessage);
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "unsubscribe.log", attemptId }));
+    };
+  }, [socket, attemptId]);
+
+  useEffect(() => {
+    if (follow && logBox.current) logBox.current.scrollTop = logBox.current.scrollHeight;
+  }, [lines, follow]);
+
+  if (!node) return null;
+  const [letter, kindLabel] = KIND[node.kind] ?? ["?", node.kind];
+  const live = attempt?.state === "running";
+
+  return (
+    <div className="run-grid">
+      <div className="card nodes" role="list" aria-label="Nodes">
+        {timeline.map((n) => (
+          <NodeRow key={n.id} node={n} on={n.id === node.id} onSelect={() => setSelectedId(n.id)} />
+        ))}
+      </div>
+
+      <div className="stack" style={{ minWidth: 0, gap: 16 }}>
+        <div>
+          <div className="row" style={{ gap: 8 }}>
+            <span className={`kind ${node.kind}`} title={kindLabel}>
+              {letter}
+            </span>
+            <h2>{node.name}</h2>
+            <StatePill state={attempt ? attempt.state : node.state} />
+          </div>
+          {node.description && (
+            <p className={`faint small ${node.kind === "command" ? "mono" : ""}`} style={{ marginTop: 6, maxWidth: "75ch" }}>
+              {node.description}
+            </p>
+          )}
+        </div>
+
+        {node.attempts.length > 1 && (
+          <div className="att-tabs" role="tablist" aria-label="Attempts">
+            {node.attempts.map((a) => (
+              <button key={a.id} type="button" role="tab" aria-selected={a.id === attempt?.id} className={a.id === attempt?.id ? "on" : ""} onClick={() => setAttemptPick({ ...attemptPick, [node.id]: a.id })}>
+                #{a.number}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!attempt ? (
+          <div className="empty card">
+            <b>{node.state === "not reached" ? "Not reached" : "Not started"}</b>
+            {node.state === "not reached" ? (runEnded ? "The Run ended before this Node." : "An Output it needs was not produced.") : "It runs once the Nodes before it succeed."}
+          </div>
+        ) : (
+          <>
+            <dl className="kv small">
+              <dt>Started</dt>
+              <dd className="num">{formatTime(new Date(attempt.startedAt))}</dd>
+              <dt>Duration</dt>
+              <dd className="num">{attempt.endedAt ? duration(new Date(attempt.endedAt).getTime() - new Date(attempt.startedAt).getTime()) : "running…"}</dd>
+              {node.kind === "agent" && (
+                <>
+                  <dt>Tokens</dt>
+                  <dd className="num">{attempt.inputTokens !== null ? `${tokens(attempt.inputTokens)} in · ${tokens(attempt.outputTokens ?? 0)} out` : "counting…"}</dd>
+                </>
+              )}
+              {attempt.error && (
+                <>
+                  <dt>Failure</dt>
+                  <dd style={{ color: "var(--fail)" }}>{attempt.error}</dd>
+                </>
+              )}
+            </dl>
+
+            {node.kind !== "ticket" && (
+              <div className="stack" style={{ gap: 8 }}>
+                <div className="log-head">
+                  <span className="eyebrow">
+                    Log {live && <span style={{ color: "var(--run)" }}>· live</span>}
+                    {!socket && <span style={{ color: "var(--wait)" }}> · reconnecting</span>}
+                  </span>
+                  <label className="row small faint" style={{ gap: 6 }}>
+                    <input type="checkbox" className="cb" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+                    Follow
+                  </label>
+                </div>
+                <pre className="term" ref={logBox} aria-live="polite" aria-label={`Log of ${node.name}`}>
+                  {lines.length === 0 && <span className="d">{live ? "Waiting for output…" : "No log lines."}</span>}
+                  {lines.map((l) => (
+                    <span key={l.seq} className={classify(l)}>
+                      {l.text}
+                      {"\n"}
+                    </span>
+                  ))}
+                </pre>
+              </div>
+            )}
+
+            <div className="grid g2">
+              <div className="stack" style={{ gap: 8 }}>
+                <span className="eyebrow">Inputs</span>
+                {node.inputs.length === 0 && <span className="faint small">None</span>}
+                {node.inputs.map((i) => (
+                  <div key={i.name} className="stack" style={{ gap: 4 }}>
+                    <OType type={i.type} label={i.name} />
+                    <OutputValue type={i.type} value={i.value} />
+                  </div>
+                ))}
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <span className="eyebrow">Outputs</span>
+                {attempt.outputs.length === 0 && <span className="faint small">{attempt.state === "running" ? "Not produced yet" : "None"}</span>}
+                {attempt.outputs.map((o) => (
+                  <div key={o.name} className="stack" style={{ gap: 4 }}>
+                    <OType type={o.type} label={o.name} />
+                    <OutputValue type={o.type} value={o.value} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NodeRow({ node, on, onSelect }: { node: TimelineNode; on: boolean; onSelect: () => void }) {
+  const icon = node.state === "succeeded" ? Icon.check : node.state === "failed" ? Icon.x : node.state === "running" ? Icon.spin : null;
+  const [, kindLabel] = KIND[node.kind] ?? ["?", node.kind];
+  return (
+    <button type="button" role="listitem" className={`node-row ${on ? "on" : ""}`} aria-current={on} onClick={onSelect}>
+      <span className={`ndot ${node.state}`} aria-label={node.state}>
+        {icon}
+      </span>
+      <span style={{ minWidth: 0 }}>
+        <span className="nm">{node.name}</span>
+        <span className="meta">
+          {kindLabel}
+          {node.attempts.length > 1 && ` · ${node.attempts.length} Attempts`}
+          {node.state === "not reached" && " · not reached"}
+        </span>
+      </span>
+      <span className="meta num">{node.state === "running" ? "…" : node.durationMs !== null ? duration(node.durationMs) : ""}</span>
+    </button>
+  );
+}

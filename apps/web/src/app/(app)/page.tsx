@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// Tickets becomes the landing page in M1; until then the Pod Host is the only module.
+// Tickets is the landing page from M1 on.
 export default function Home() {
-  redirect("/pods");
+  redirect("/tickets");
 }

@@ -1,7 +1,6 @@
 import { systemClock } from "@clauderon/core";
-import { connect, listenMemberRevoked, parseOperatorEmails } from "@clauderon/db";
-import { BrowserHub } from "./browser-hub";
-import { HostLink } from "./host-link";
+import { connect, listenGatewayCommands, listenMemberRevoked, parseOperatorEmails } from "@clauderon/db";
+import { createGateway } from "./gateway";
 import { createGatewayServer } from "./server";
 
 function required(name: string): string {
@@ -12,22 +11,24 @@ function required(name: string): string {
 
 const databaseUrl = required("DATABASE_URL");
 const { db } = connect(databaseUrl);
+const hostAgentSecret = required("HOST_AGENT_SECRET");
+const sessionSecret = required("SESSION_SECRET");
 
-const link = new HostLink({
+const gateway = createGateway({
   db,
-  secret: required("HOST_AGENT_SECRET"),
+  clock: systemClock,
+  hostAgentSecret,
   podImage: process.env.POD_IMAGE ?? "",
-  clock: systemClock,
-});
-const hub = new BrowserHub({
-  db,
   operators: parseOperatorEmails(process.env.OPERATOR_EMAILS),
-  sessionSecret: required("SESSION_SECRET"),
-  clock: systemClock,
+  sessionSecret,
+  appSecrets: [hostAgentSecret, sessionSecret, process.env.GITHUB_TOKEN ?? ""].filter(Boolean),
 });
 
-await link.start();
-await listenMemberRevoked(databaseUrl, (email) => hub.revoke(email));
+await gateway.link.start();
+await listenMemberRevoked(databaseUrl, (email) => gateway.hub.revoke(email));
+await listenGatewayCommands(databaseUrl, (command) => {
+  gateway.pods.command(command).catch((error: unknown) => console.warn(`gateway command ${command.type} failed: ${String(error)}`));
+});
 
 const port = Number(process.env.GATEWAY_PORT ?? 4000);
-createGatewayServer(link, hub).listen(port, () => console.log(`gateway listening on ${port}`));
+createGatewayServer(gateway.link, gateway.hub, gateway.terminals).listen(port, () => console.log(`gateway listening on ${port}`));

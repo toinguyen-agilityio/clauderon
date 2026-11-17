@@ -3,12 +3,14 @@ import { WebSocketServer } from "ws";
 import { fromWebSocket } from "@clauderon/protocol";
 import type { BrowserHub } from "./browser-hub";
 import type { HostLink } from "./host-link";
+import type { TerminalHub } from "./terminals";
 
 /**
  * HTTP and WebSocket front of the Gateway: `/host-agent` for the Host Agent,
- * `/browser` for browser sockets, `/health` for the hosting's health check.
+ * `/browser` for browser sockets, `/terminal` for web terminals, `/health` for
+ * the hosting's health check.
  */
-export function createGatewayServer(link: HostLink, hub: BrowserHub): Server {
+export function createGatewayServer(link: HostLink, hub: BrowserHub, terminals?: TerminalHub): Server {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
 
   const server = createServer((req, res) => {
@@ -26,6 +28,11 @@ export function createGatewayServer(link: HostLink, hub: BrowserHub): Server {
       wss.handleUpgrade(req, socket, head, (ws) => link.attach(fromWebSocket(ws), req.headers.authorization));
     } else if (url.pathname === "/browser") {
       wss.handleUpgrade(req, socket, head, (ws) => void hub.attach(fromWebSocket(ws), url.searchParams.get("ticket")));
+    } else if (url.pathname === "/terminal" && terminals) {
+      const size = { cols: Number(url.searchParams.get("cols")) || undefined, rows: Number(url.searchParams.get("rows")) || undefined };
+      wss.handleUpgrade(req, socket, head, (ws) =>
+        void terminals.attach(fromWebSocket(ws), url.searchParams.get("ticket"), url.searchParams.get("podId"), size),
+      );
     } else {
       socket.destroy();
     }

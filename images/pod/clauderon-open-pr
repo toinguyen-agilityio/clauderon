@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# clauderon-open-pr: the "Open a pull request" Node (spec M1 §4.5, RUN-11).
+# Runs as `pod` in the Run's worktree with the Starter's own gh login, so the
+# push and the pull request are theirs (ADR 0001). Reads its inputs from the
+# environment the Host Agent sets; prints one JSON line with the pull request.
+set -euo pipefail
+
+: "${CLAUDERON_ISSUE_NUMBER:?not set}" "${CLAUDERON_BASE:?not set}" "${CLAUDERON_BRANCH:?not set}" "${CLAUDERON_TITLE:?not set}"
+
+git fetch --quiet origin "$CLAUDERON_BASE"
+ahead=$(git rev-list --count "origin/$CLAUDERON_BASE..HEAD")
+if [ "$ahead" -eq 0 ]; then
+  echo "no changes"
+  exit 0
+fi
+
+git push --quiet --set-upstream origin "HEAD:refs/heads/$CLAUDERON_BRANCH"
+
+existing=$(gh pr list --head "$CLAUDERON_BRANCH" --state open --json number,url --jq '.[0] // empty')
+if [ -n "$existing" ]; then
+  # Pushing is enough: the open pull request now shows the new commits.
+  number=$(jq -r .number <<<"$existing")
+  url=$(jq -r .url <<<"$existing")
+  echo "reusing pull request #$number"
+else
+  body=$(mktemp)
+  trap 'rm -f "$body"' EXIT
+  {
+    if [ -n "${CLAUDERON_SUMMARY_FILE:-}" ] && [ -s "$CLAUDERON_SUMMARY_FILE" ]; then
+      echo "## Summary"
+      echo
+      cat "$CLAUDERON_SUMMARY_FILE"
+      echo
+      echo
+    fi
+    if [ -n "${CLAUDERON_TEST_RESULT_FILE:-}" ] && [ -s "$CLAUDERON_TEST_RESULT_FILE" ]; then
+      echo "## Test result"
+      echo
+      echo '```'
+      cat "$CLAUDERON_TEST_RESULT_FILE"
+      echo
+      echo '```'
+      echo
+    fi
+    echo "Refs #$CLAUDERON_ISSUE_NUMBER"
+  } >"$body"
+  url=$(gh pr create --base "$CLAUDERON_BASE" --head "$CLAUDERON_BRANCH" --title "$CLAUDERON_TITLE (#$CLAUDERON_ISSUE_NUMBER)" --body-file "$body")
+  number=$(gh pr view "$url" --json number --jq .number)
+fi
+
+jq -cn --argjson number "$number" --arg url "$url" '{pullRequest: {number: $number, url: $url}}'

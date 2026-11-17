@@ -8,6 +8,13 @@
       "when": 1794816920463,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794821730018,
+      "tag": "0001_m1_sync_and_pr_checks",
+      "breakpoints": true
     }
   ]
 }

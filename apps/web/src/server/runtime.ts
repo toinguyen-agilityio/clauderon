@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { systemClock } from "@clauderon/core";
-import { connect, notifyMemberRevoked, parseOperatorEmails, type DbHandle } from "@clauderon/db";
-import { SESSION_COOKIES, memberFromCookies, type AccessDeps } from "./access";
+import { connect, notifyGatewayCommand, notifyMemberRevoked, parseOperatorEmails, type DbHandle } from "@clauderon/db";
+import { SESSION_COOKIES, memberFromCookies } from "./access";
+import type { AppDeps } from "./deps";
+import { gitHubApi } from "./github";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -13,10 +15,23 @@ function required(name: string): string {
 // One pool per server instance, kept across hot reloads in development.
 const globalForDb = globalThis as unknown as { clauderonDb?: DbHandle };
 
-export function deps(): AccessDeps {
+export function deps(): AppDeps {
   globalForDb.clauderonDb ??= connect(required("DATABASE_URL"));
   const { db } = globalForDb.clauderonDb;
-  return { db, operators: parseOperatorEmails(process.env.OPERATOR_EMAILS), clock: systemClock, publish: notifyMemberRevoked(db) };
+  return {
+    db,
+    operators: parseOperatorEmails(process.env.OPERATOR_EMAILS),
+    clock: systemClock,
+    publish: notifyMemberRevoked(db),
+    command: notifyGatewayCommand(db),
+    github: gitHubApi(process.env.GITHUB_TOKEN ?? ""),
+    podImage: process.env.POD_IMAGE ?? "",
+  };
+}
+
+/** The Gateway's public WebSocket origin, for browser sockets. */
+export function gatewayUrl(): string {
+  return (process.env.GATEWAY_URL ?? "ws://localhost:4000").replace(/\/$/, "");
 }
 
 export function sessionSecret(): string {

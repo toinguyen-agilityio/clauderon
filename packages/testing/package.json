@@ -14,6 +14,7 @@
   "dependencies": {
     "@clauderon/core": "workspace:*",
     "@clauderon/db": "workspace:*",
-    "@clauderon/protocol": "workspace:*"
+    "@clauderon/protocol": "workspace:*",
+    "drizzle-orm": "^0.45.4"
   }
 }

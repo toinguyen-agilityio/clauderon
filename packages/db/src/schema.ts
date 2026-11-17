@@ -133,7 +133,8 @@ export const pod = pgTable("pod", {
   claudeLoggedIn: boolean("claude_logged_in").notNull().default(false),
   ghLoggedIn: boolean("gh_logged_in").notNull().default(false),
   ghAccount: text("gh_account"),
-  ghTokenScope: jsonb("gh_token_scope"),
+  /** `{ tokenRepos }`: the Projects' repositories the gh login reaches (POD-4). */
+  ghTokenScope: jsonb("gh_token_scope").$type<{ tokenRepos: string[] }>(),
   loginsCheckedAt: ts("logins_checked_at"),
   metrics: jsonb("metrics"),
 });
@@ -147,6 +148,10 @@ export const project = pgTable(
     repo: text("repo").notNull(),
     baseBranch: text("base_branch").notNull(),
     enabledByEmail: text("enabled_by_email").notNull(),
+    // Last Sync (TIC-5): when, what it changed, and GitHub's error if it failed.
+    lastSyncedAt: ts("last_synced_at"),
+    syncSummary: jsonb("sync_summary").$type<{ added: number; updated: number; closed: number }>(),
+    syncError: text("sync_error"),
   },
   (t) => [uniqueIndex("project_owner_repo_idx").on(t.owner, t.repo)],
 );
@@ -278,6 +283,8 @@ export const run = pgTable(
     pullRequestNumber: integer("pull_request_number"),
     pullRequestUrl: text("pull_request_url"),
     pullRequestState: text("pull_request_state"),
+    /** Pull request state is refreshed at most once a minute (TIC-6). */
+    pullRequestCheckedAt: ts("pull_request_checked_at"),
     failureReason: text("failure_reason"),
   },
   (t) => [
