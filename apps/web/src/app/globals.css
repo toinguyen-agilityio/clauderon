@@ -210,6 +210,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .otype i { width: 7px; height: 7px; border-radius: 2px; background: var(--c, var(--fg3)); flex: none; }
 .pill.intr { background: var(--intr-bg); color: var(--intr); }
 .tag.real { background: var(--accent-weak); color: var(--accent); }
+.tag.dry { background: var(--wait-bg); color: var(--wait); }
 .grid { display: grid; gap: 16px; }
 .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }

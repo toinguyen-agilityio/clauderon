@@ -52,13 +52,14 @@ export async function startDialog(deps: AppDeps, viewer: Viewer, ticketIds: read
   };
 }
 
-export type StartInput = { flowId: string; ticketIds: readonly string[]; extraInstructions: string };
+export type StartInput = { flowId: string; ticketIds: readonly string[]; extraInstructions: string; mode?: "real" | "dry" };
 export type StartResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; error: string; terminal?: string };
 
 /**
  * Start (RUN-1, MEM-2): one Batch and one queued Run per Ticket on the
  * Starter's own Pod, then the Gateway schedules. Real mode needs both logins
  * (POD-5); a stopped Pod with both logins accepts the Batch and its Runs wait.
+ * Dry-run needs a Pod but no logins (RUN-13).
  */
 export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput): Promise<StartResult> {
   const ticketIds = [...new Set(input.ticketIds)];
@@ -67,8 +68,11 @@ export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput
   const pod = await getPodOfMember(deps.db, viewer.id);
   if (!pod) return { ok: false, error: "You have no Pod yet." };
   const terminal = `/pods/${pod.id}/terminal`;
-  if (!pod.claudeLoggedIn) return { ok: false, error: "Claude Code is not logged in on your Pod. Log in from its terminal.", terminal };
-  if (!pod.ghLoggedIn) return { ok: false, error: "gh is not logged in on your Pod. Log in from its terminal.", terminal };
+  const mode = input.mode ?? "real";
+  if (mode === "real") {
+    if (!pod.claudeLoggedIn) return { ok: false, error: "Claude Code is not logged in on your Pod. Log in from its terminal.", terminal };
+    if (!pod.ghLoggedIn) return { ok: false, error: "gh is not logged in on your Pod. Log in from its terminal.", terminal };
+  }
 
   const flow = (await startableFlows(deps)).find((f) => f.id === input.flowId);
   if (!flow) return { ok: false, error: "Pick a Flow without problems." };
@@ -80,7 +84,7 @@ export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput
 
   const result = await startBatch(
     deps.db,
-    { flowId: input.flowId, flowSnapshot, starter: viewer, podId: pod.id, mode: "real", extraInstructions: input.extraInstructions.trim(), ticketIds },
+    { flowId: input.flowId, flowSnapshot, starter: viewer, podId: pod.id, mode, extraInstructions: input.extraInstructions.trim(), ticketIds },
     deps.clock.now(),
   );
   if (!result.ok) {

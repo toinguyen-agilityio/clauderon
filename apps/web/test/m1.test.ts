@@ -235,6 +235,14 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     expect(await db.select().from(schema.run)).toEqual([]);
   });
 
+  it("a Dry-run Start needs no logins and queues a dry Run", async () => {
+    const { ann, pod, mine, flowId } = await ready({ ghLoggedIn: false, claudeLoggedIn: false });
+    const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "", mode: "dry" });
+    expect(result).toMatchObject({ ok: true });
+    expect(await db.select().from(schema.run)).toEqual([expect.objectContaining({ mode: "dry", state: "queued", podId: pod.id })]);
+    expect(commands).toEqual([{ type: "schedule", podId: pod.id }]);
+  });
+
   it("refuses a Member with no Pod", async () => {
     const bob = await memberRow(db, "bob@example.com");
     const { mine, flowId } = await ready();

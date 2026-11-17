@@ -157,6 +157,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [flowId, setFlowId] = useState("");
   const [extra, setExtra] = useState("");
+  const [mode, setMode] = useState<"real" | "dry">("real");
   const [error, setError] = useState<{ text: string; terminal?: string } | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -171,7 +172,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
   const start = async () => {
     setPending(true);
     setError(null);
-    const result = await startAction({ flowId, ticketIds, extraInstructions: extra });
+    const result = await startAction({ flowId, ticketIds, extraInstructions: extra, mode });
     setPending(false);
     if (!result.ok) {
       setError({ text: result.error, terminal: result.terminal });
@@ -232,7 +233,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
                     Create my Pod
                   </Link>
                 </div>
-              ) : !pod.ready && pod.status === "running" ? (
+              ) : mode === "real" && !pod.ready && pod.status === "running" ? (
                 <div className="banner fail">
                   <div className="grow small">
                     <b>Your Pod is not logged in to Claude Code and gh.</b> Open its terminal and log in with your own accounts.
@@ -259,14 +260,18 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
             <div className="field">
               <label>Mode</label>
               <div className="seg" style={{ width: "fit-content" }}>
-                <button type="button" className="on" aria-pressed="true">
+                <button type="button" className={mode === "real" ? "on" : undefined} aria-pressed={mode === "real"} onClick={() => setMode("real")}>
                   Real
                 </button>
-                <button type="button" disabled title="Arrives in M2">
+                <button type="button" className={mode === "dry" ? "on" : undefined} aria-pressed={mode === "dry"} onClick={() => setMode("dry")}>
                   Dry-run
                 </button>
               </div>
-              <span className="hint">Claude Code runs on your Pod and a real pull request is opened under your gh account.</span>
+              <span className="hint">
+                {mode === "real"
+                  ? "Claude Code runs on your Pod and a real pull request is opened under your gh account."
+                  : "Simulated Nodes with fake Outputs. It takes a Slot but never calls Claude or GitHub, and needs no logins."}
+              </span>
             </div>
 
             <div className="field">

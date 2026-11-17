@@ -1,12 +1,12 @@
 import type { Db } from "@clauderon/db";
 import { FakeClock, FakeHostAgent, memorySocketPair, settle } from "@clauderon/testing";
-import { createGateway, type Gateway } from "../src/gateway";
+import { createGateway, type Gateway, type GatewayOptions } from "../src/gateway";
 
 export const HOST_SECRET = "host-agent-secret";
 export const SESSION_SECRET = "session-secret";
 
 /** A Gateway on the test database with a fake Host Agent connected to it. */
-export async function startGateway(db: Db, operators: string[] = []) {
+export async function startGateway(db: Db, operators: string[] = [], extra: Partial<GatewayOptions> = {}) {
   const clock = new FakeClock();
   const gateway: Gateway = createGateway({
     db,
@@ -17,6 +17,7 @@ export async function startGateway(db: Db, operators: string[] = []) {
     sessionSecret: SESSION_SECRET,
     appSecrets: ["app-secret-value"],
     log: () => {},
+    ...extra,
   });
   await gateway.link.start();
   const agent = new FakeHostAgent();

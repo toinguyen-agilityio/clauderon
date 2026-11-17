@@ -16,6 +16,9 @@ export type GatewayOptions = {
   sessionSecret: string;
   /** Secret values masked out of every stored log line (NFR-1). */
   appSecrets: readonly string[];
+  /** Chance that a simulated Dry-run Node fails, 0 to 1 (DRY_RUN_FAILURE_RATE). */
+  dryRunFailureRate?: number;
+  random?: () => number;
   log?: (message: string) => void;
 };
 
@@ -25,7 +28,7 @@ export function createGateway(opts: GatewayOptions) {
   const live = new LiveHub(db);
   const link = new HostLink({ db, secret: opts.hostAgentSecret, podImage: opts.podImage, clock, log });
   const hub = new BrowserHub({ db, operators: opts.operators, sessionSecret: opts.sessionSecret, clock, live });
-  const engine = new RunEngine({ db, link, clock, live, secrets: opts.appSecrets, log });
+  const engine = new RunEngine({ db, link, clock, live, secrets: opts.appSecrets, dryRunFailureRate: opts.dryRunFailureRate, random: opts.random, log });
   const pods = new PodService({ db, link, engine, log });
   const terminals = new TerminalHub({ db, hub, link, clock });
 
