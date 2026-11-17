@@ -5,4 +5,5 @@ export * from "./mask";
 export * from "./run";
 export * from "./ticket-status";
 export * from "./runner";
+export * from "./simulate";
 export * from "./snapshot";

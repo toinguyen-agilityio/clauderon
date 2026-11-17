@@ -106,7 +106,7 @@ export async function getRunContext(db: Db, runId: string) {
 
 export async function runsOfPod(db: Db, podId: string, states: readonly RunState[]) {
   return db
-    .select({ id: run.id, state: run.state, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath })
+    .select({ id: run.id, state: run.state, mode: run.mode, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath })
     .from(run)
     .where(and(eq(run.podId, podId), inArray(run.state, [...states])));
 }
