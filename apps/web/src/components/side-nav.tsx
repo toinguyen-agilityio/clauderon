@@ -12,7 +12,7 @@ const MODULES: Item[] = [
   { href: "/tickets", label: "Tickets", icon: Icon.tickets },
   { href: "/runs", label: "Runs", icon: Icon.runs },
   { href: "/needs-you", label: "Needs you", icon: Icon.needs, arrives: "M3" },
-  { href: "/flows", label: "Flows", icon: Icon.flows, arrives: "M2" },
+  { href: "/flows", label: "Flows", icon: Icon.flows },
   { href: "/pods", label: "Pods", icon: Icon.pods },
   { href: "/projects", label: "Projects", icon: Icon.projects },
 ];
