@@ -1,6 +1,6 @@
 # Spike M0-02: Claude Code headless in the Pod image
 
-> **Status:** not run yet. The spike needs a person to log in to Claude Code by hand with their own subscription, so an agent cannot finish it. Fill in the **Findings** section when it is done; M1's runner (spec M1, Agent Nodes) depends on it.
+> **Status:** run on 2026-11-17 with Claude Code 2.1.325 in `images/pod` (user `pod`). Findings below; the expected flags in `apps/host-agent/src/claude.ts` were confirmed.
 
 ## Goal
 
@@ -35,14 +35,14 @@ Confirm, in a container from `images/pod`, the exact CLI flags, the shape of the
 
 ## Findings
 
-To be filled in by the person who runs the spike.
+Run once by a person logged in with their own subscription. Two details for M1: a bare (unfenced) `questions` JSON came back on resume, because my spike prompt did not ask for a fence. `extractResultBlock` only reads fenced blocks, so the Grill prompt must ask for one (or the extractor should fall back to bare JSON); `session_id` is stable across resume.
 
 | Question | Answer |
 | --- | --- |
-| Exact flags that worked | _pending_ |
-| Where the session id appears in `stream-json` | _pending_ |
-| Does the final message end with the fenced JSON block reliably? | _pending_ |
-| Shape of the last `result` event (fallback, §6) | _pending_ |
-| Token usage fields and where they appear | _pending_ |
-| Does `--resume` keep the conversation and the worktree context? | _pending_ |
-| Anything that needed a prompt despite `--dangerously-skip-permissions` | _pending_ |
+| Exact flags that worked | `claude -p --output-format stream-json --verbose --dangerously-skip-permissions` (as expected); resume adds `--resume <session_id>` |
+| Where the session id appears in `stream-json` | `session_id` on every event, including the first `system`/`init` and the last `result`; a resumed run keeps the same id |
+| Does the final message end with the fenced JSON block reliably? | Yes on the one try: the `result` text ends with a fenced ```json block `{"outputs": {...}}` after a short summary. One run only; reliability over many runs is untested |
+| Shape of the last `result` event (fallback, §6) | `{type: "result", subtype: "success", is_error: false, session_id, result: "<final text>", usage, total_cost_usd, duration_ms, ...}` |
+| Token usage fields and where they appear | `usage` on the last `result` event: `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`; also `total_cost_usd` |
+| Does `--resume` keep the conversation and the worktree context? | Yes: the follow-up answered about the earlier edit ("world") and returned the `{"questions": [...]}` shape as bare JSON, not fenced |
+| Anything that needed a prompt despite `--dangerously-skip-permissions` | None seen. Extra event types appear (`rate_limit_event`, `commands_changed`); the parser ignores unknown types |
