@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { NODE_KINDS, OUTPUT_TYPES, type Flow, type FlowSnapshot, type LibraryNode, type NodeInput, type NodeOutput } from "@clauderon/core";
 import type { Db } from "./client";
 import { flow, flowEdge, flowNode, node, run } from "./schema";
@@ -169,4 +169,94 @@ export async function deleteFlow(db: Db, flowId: string): Promise<DeleteFlowResu
   if (n > 0) return { ok: false, reason: "has-runs" };
   await db.delete(flow).where(eq(flow.id, flowId));
   return { ok: true, name: row.name };
+}
+
+export type PlacementInput = {
+  id: string;
+  nodeId: string;
+  label: string | null;
+  extraInstructions: string;
+  enabledOptionalOutputs: string[];
+  x: number;
+  y: number;
+};
+
+export type FlowGraphInput = {
+  name: string;
+  nodes: PlacementInput[];
+  edges: { id: string; fromFlowNodeId: string; fromOutput: string; toFlowNodeId: string; toInput: string }[];
+};
+
+/** A Flow with what the editor needs beyond the domain shape: labels and extra instructions. */
+export async function loadFlowDetail(db: Db, flowId: string) {
+  const [row] = await db.select().from(flow).where(eq(flow.id, flowId));
+  if (!row) return null;
+  const nodes = await db.select().from(flowNode).where(eq(flowNode.flowId, flowId));
+  const { edges } = await loadFlow(db, flowId);
+  return {
+    flow: { id: row.id, name: row.name, isSample: row.isSample, clonedFromId: row.clonedFromId, updatedByEmail: row.updatedByEmail, updatedAt: row.updatedAt },
+    nodes: nodes.map((n) => ({
+      id: n.id,
+      nodeId: n.nodeId,
+      label: n.label,
+      extraInstructions: n.extraInstructions,
+      enabledOptionalOutputs: n.enabledOptionalOutputs,
+      x: n.x,
+      y: n.y,
+    })),
+    edges,
+  };
+}
+
+export type SaveFlowResult =
+  | { ok: true }
+  | { ok: false; reason: "not-found" | "sample" | "bad-ids" }
+  | { ok: false; reason: "locked"; lock: FlowLock };
+
+/**
+ * Stores a Flow's graph (FLW-3, FLW-6): a sample or a Flow locked by an Active
+ * Run is refused here, on the server, not only in the editor (FLW-7). The graph
+ * is saved even with problems so work is not lost (FLW-5); Start refuses it.
+ */
+export async function saveFlow(db: Db, flowId: string, input: FlowGraphInput, actorEmail: string, now: Date): Promise<SaveFlowResult> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select().from(flow).where(eq(flow.id, flowId)).for("update");
+    if (!row) return { ok: false, reason: "not-found" };
+    if (row.isSample) return { ok: false, reason: "sample" };
+    const lock = (await flowLocks(tx as unknown as Db, [flowId])).get(flowId);
+    if (lock) return { ok: false, reason: "locked", lock };
+
+    // Placement ids come from the browser; one that belongs to another Flow would clash.
+    const ids = input.nodes.map((n) => n.id);
+    if (ids.length > 0) {
+      const taken = await tx.select({ id: flowNode.id }).from(flowNode).where(and(inArray(flowNode.id, ids), ne(flowNode.flowId, flowId)));
+      if (taken.length > 0) return { ok: false, reason: "bad-ids" };
+    }
+
+    await tx.delete(flowNode).where(eq(flowNode.flowId, flowId)); // edges go with them
+    for (const n of input.nodes) {
+      await tx.insert(flowNode).values({
+        id: n.id,
+        flowId,
+        nodeId: n.nodeId,
+        label: n.label,
+        extraInstructions: n.extraInstructions,
+        enabledOptionalOutputs: n.enabledOptionalOutputs,
+        x: n.x,
+        y: n.y,
+      });
+    }
+    for (const e of input.edges) {
+      await tx.insert(flowEdge).values({
+        id: e.id,
+        flowId,
+        fromFlowNodeId: e.fromFlowNodeId,
+        fromOutput: e.fromOutput,
+        toFlowNodeId: e.toFlowNodeId,
+        toInput: e.toInput,
+      });
+    }
+    await tx.update(flow).set({ name: input.name, updatedByEmail: actorEmail, updatedAt: now }).where(eq(flow.id, flowId));
+    return { ok: true };
+  });
 }
