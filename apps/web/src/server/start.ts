@@ -1,4 +1,4 @@
-import { isPodReady, ticketKeys, validateFlow } from "@clauderon/core";
+import { isPodReady, queuePositions, ticketKeys, validateFlow } from "@clauderon/core";
 import {
   buildFlowSnapshot,
   getPodOfMember,
@@ -44,6 +44,8 @@ export async function startDialog(deps: AppDeps, viewer: Viewer, ticketIds: read
   return {
     flows,
     pod: pod && counts ? { id: pod.id, status: pod.status, slots: pod.slots, ...counts, ready: isPodReady(pod) } : null,
+    // Where each new Run would land: 0 starts at once, n is the n-th waiting (spec M2 §6).
+    positions: pod && counts ? queuePositions({ slots: pod.slots, ...counts }, ticketIds.length) : [],
     tickets: tickets.map((t) => ({ id: t.id, key: keyOf(t.projectId, t.number), title: t.title })),
     // Not blocking (TIC-9): the Starter decides.
     warnings: tickets

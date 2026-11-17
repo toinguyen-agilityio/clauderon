@@ -254,7 +254,16 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
                 </div>
               )}
               {pod && pod.status !== "running" && <span className="hint">Your Pod is {pod.status}. Runs wait in its queue until it runs again.</span>}
-              {pod && pod.status === "running" && pod.inUse >= pod.slots && <span className="hint">All Slots are busy; new Runs queue first-in, first-out.</span>}
+              {pod && dialog && (
+                <span className="hint" data-testid="queue-hint">
+                  {(() => {
+                    const now = dialog.positions.filter((p) => p === 0).length;
+                    const waiting = dialog.positions.length - now;
+                    if (waiting === 0) return `${now} of these start${now === 1 ? "s" : ""} at once.`;
+                    return `${now === 0 ? "None start at once" : `${now} start at once`}; ${waiting} wait${waiting === 1 ? "s" : ""} for a Slot, first in, first out (queue position${waiting === 1 ? "" : "s"} 1${waiting > 1 ? `–${waiting}` : ""}).`;
+                  })()}
+                </span>
+              )}
             </div>
 
             <div className="field">

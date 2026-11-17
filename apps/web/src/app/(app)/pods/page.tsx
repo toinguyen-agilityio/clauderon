@@ -7,12 +7,13 @@ import { viewPods, type PodView } from "../../../server/pods";
 import { deps, requireMember } from "../../../server/runtime";
 import { createPodAction } from "./actions";
 import { PodActions } from "./pod-actions";
+import { PodLimits } from "./pod-limits";
 
 export const dynamic = "force-dynamic";
 
 export default async function PodsPage() {
   const member = await requireMember();
-  const { host, pods, mine, limits, overCommitted } = await viewPods(deps(), member);
+  const { host, pods, mine, limits, overCommitted, ceiling } = await viewPods(deps(), member);
   const now = new Date();
   const connected = host?.connected === true;
   const facts = host
@@ -107,7 +108,7 @@ export default async function PodsPage() {
 
         <div className="pod-grid">
           {pods.map((pod) => (
-            <PodTile key={pod.id} pod={pod} hostConnected={connected} now={now} />
+            <PodTile key={pod.id} pod={pod} hostConnected={connected} now={now} ceiling={ceiling} />
           ))}
           {!mine && (
             <form action={createPodAction} className="pod-tile new">
@@ -136,7 +137,7 @@ function LoginRow({ ok, label, account }: { ok: boolean; label: string; account:
   );
 }
 
-function PodTile({ pod, hostConnected, now }: { pod: PodView; hostConnected: boolean; now: Date }) {
+function PodTile({ pod, hostConnected, now, ceiling }: { pod: PodView; hostConnected: boolean; now: Date; ceiling: { slots: number; cpus: number; memoryMb: number } }) {
   const up = pod.status === "running";
   const owner = pod.owner.name ?? pod.owner.email;
   return (
@@ -180,6 +181,27 @@ function PodTile({ pod, hostConnected, now }: { pod: PodView; hostConnected: boo
         </div>
       </div>
 
+      <div className="small faint">
+        {pod.cpus} CPU · {Math.round(pod.memoryMb / 1024)} GB RAM
+      </div>
+      {pod.queue.length > 0 && (
+        <details className="pod-queue" data-testid="pod-queue">
+          <summary className="small">Queue ({pod.queue.length})</summary>
+          <ol className="stack small" style={{ gap: 4, marginTop: 6, paddingLeft: 18 }}>
+            {pod.queue.map((q) => (
+              <li key={q.runId}>
+                <Link href={`/runs/${q.runId}`}>
+                  <span className="mono">{q.key}</span> {q.ticketTitle}
+                </Link>{" "}
+                <span className="faint">
+                  · {q.flowName} · {q.mode === "dry" ? "Dry-run" : "Real"} · queued {ago(q.queuedAt, now)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+      {pod.mine && <PodLimits podId={pod.id} limits={{ slots: pod.slots, cpus: pod.cpus, memoryMb: pod.memoryMb }} ceiling={ceiling} />}
       {pod.mine && <PodActions podId={pod.id} status={pod.status} busy={pod.inUse > 0} />}
     </div>
   );
