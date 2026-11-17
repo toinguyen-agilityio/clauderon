@@ -25,6 +25,7 @@ import {
 import { validateFlow, type LibraryNode, type OutputType, type Problem } from "@clauderon/core";
 import type { EditorData } from "../../../../server/flows";
 import { saveFlowAction } from "./actions";
+import { NodePanel, type PlacementPatch } from "./node-panel";
 
 // The canvas editor (spec M2 §3, FLW-3 … FLW-5): place Nodes from the library,
 // connect Outputs to inputs of the same type, see problems live, save.
@@ -253,6 +254,17 @@ function Canvas({ data }: { data: EditorData }) {
     }
   };
 
+  const selectedPlacement = placements.find((p) => selected.nodes.has(p.id)) ?? null;
+  const selectedLib = selectedPlacement ? libById.get(selectedPlacement.nodeId) : undefined;
+  const usedOutputs = useMemo(
+    () => new Set(graphEdges.filter((e) => e.fromFlowNodeId === selectedPlacement?.id).map((e) => e.fromOutput)),
+    [graphEdges, selectedPlacement],
+  );
+  const patch = (id: string, change: PlacementPatch) => {
+    setPlacements((ps) => ps.map((p) => (p.id === id ? { ...p, ...change } : p)));
+    touch();
+  };
+
   const grouped = useMemo(() => {
     const groups = new Map<string, LibraryNode[]>();
     for (const n of library) groups.set(n.kind, [...(groups.get(n.kind) ?? []), n]);
@@ -303,7 +315,7 @@ function Canvas({ data }: { data: EditorData }) {
         </ul>
       )}
 
-      <div className="flow-editor">
+      <div className="flow-editor" style={{ gridTemplateColumns: `${readOnly ? "" : "220px "}minmax(0, 1fr)${selectedPlacement && selectedLib ? " 260px" : ""}` }}>
         {!readOnly && (
           <aside className="card card-pad flow-library" aria-label="Node library">
             <h2 className="small">Node library</h2>
@@ -355,6 +367,17 @@ function Canvas({ data }: { data: EditorData }) {
             </ReactFlow>
           </DragContext.Provider>
         </div>
+
+        {selectedPlacement && selectedLib && (
+          <NodePanel
+            key={selectedPlacement.id}
+            placement={selectedPlacement}
+            lib={selectedLib}
+            readOnly={readOnly}
+            usedOutputs={usedOutputs}
+            onChange={(change) => patch(selectedPlacement.id, change)}
+          />
+        )}
       </div>
     </div>
   );
