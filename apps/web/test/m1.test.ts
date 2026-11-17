@@ -13,7 +13,7 @@ import {
   type TestDatabase,
 } from "@clauderon/testing";
 import type { AppDeps } from "../src/server/deps";
-import { createMyPod, podAction, terminalAccess, viewPods } from "../src/server/pods";
+import { createMyPod, podAction, setMyPodLimits, terminalAccess, viewPods } from "../src/server/pods";
 import { enableRepository, enableableRepositories, syncProject } from "../src/server/projects";
 import { viewRun, viewRuns } from "../src/server/runs";
 import { startDialog, startRuns } from "../src/server/start";
@@ -42,6 +42,7 @@ beforeEach(async () => {
     command: async (c) => void commands.push(c),
     github,
     podImage: "ghcr.io/acme/clauderon-pod:2026-11-16",
+    limitCeiling: { slots: 4, cpus: 4, memoryMb: 8192 },
   };
 });
 
@@ -235,6 +236,14 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     expect(await db.select().from(schema.run)).toEqual([]);
   });
 
+  it("a Dry-run Start needs no logins and queues a dry Run", async () => {
+    const { ann, pod, mine, flowId } = await ready({ ghLoggedIn: false, claudeLoggedIn: false });
+    const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "", mode: "dry" });
+    expect(result).toMatchObject({ ok: true });
+    expect(await db.select().from(schema.run)).toEqual([expect.objectContaining({ mode: "dry", state: "queued", podId: pod.id })]);
+    expect(commands).toEqual([{ type: "schedule", podId: pod.id }]);
+  });
+
   it("refuses a Member with no Pod", async () => {
     const bob = await memberRow(db, "bob@example.com");
     const { mine, flowId } = await ready();
@@ -309,5 +318,51 @@ describe("Runs (TRK-1, TRK-2, TRK-7)", () => {
       ["Open a pull request", "not reached"],
     ]);
     expect(await viewRun(deps, "nope")).toBe("not-found");
+  });
+});
+
+describe("Slots, limits and the queue (spec M2 §6)", () => {
+  it("T2-9: setting Slots above the ceiling is refused and saves nothing", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const pod = await podRow(db, ann.id);
+    expect(await setMyPodLimits(deps, ann, pod.id, { slots: 5, cpus: 2, memoryMb: 4096 })).toEqual({ ok: false, error: "Slots are capped at 4." });
+    expect((await db.select().from(schema.pod))[0]!.slots).toBe(2);
+    expect(commands).toEqual([]);
+  });
+
+  it("the owner saves limits, an audit entry records them and the Gateway is asked to schedule", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const pod = await podRow(db, ann.id);
+    expect(await setMyPodLimits(deps, ann, pod.id, { slots: 3, cpus: 1, memoryMb: 2048 })).toEqual({ ok: true });
+    expect((await db.select().from(schema.pod))[0]).toMatchObject({ slots: 3, cpus: 1, memoryMb: 2048 });
+    expect(commands).toEqual([{ type: "schedule", podId: pod.id }]);
+    const [entry] = await db.select().from(schema.auditEntry);
+    expect(entry).toMatchObject({ action: "pod.limits", actorEmail: "ann@example.com" });
+  });
+
+  it("another Member gets not-found and changes nothing", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    const pod = await podRow(db, ann.id);
+    expect(await setMyPodLimits(deps, bob, pod.id, { slots: 3, cpus: 1, memoryMb: 2048 })).toBe("not-found");
+    expect((await db.select().from(schema.pod))[0]!.slots).toBe(2);
+  });
+
+  it("the Pods page lists Queued Runs in start order, and the Start dialog shows where new Runs land", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const pod = await podRow(db, ann.id, { slots: 1 });
+    const project = await projectRow(db);
+    const tickets = [await ticketRow(db, project.id, 1), await ticketRow(db, project.id, 2), await ticketRow(db, project.id, 3)];
+    const start = await startSampleBatch(db, ann, pod.id, tickets.map((t) => t.id), new Date("2026-11-16T09:00:00Z"));
+    expect(start.ok).toBe(true);
+    await db.update(schema.run).set({ state: "running" }).where(sql`${schema.run.ticketId} = ${tickets[0]!.id}`);
+
+    const view = await viewPods(deps, ann);
+    expect(view.pods[0]!.queue.map((q) => q.key)).toEqual(expect.arrayContaining([expect.stringMatching(/#[23]$/)]));
+    expect(view.pods[0]!.queue.map((q) => q.position)).toEqual([1, 2]);
+
+    const fresh = await ticketRow(db, project.id, 4);
+    const dialog = await startDialog(deps, ann, [fresh.id]);
+    expect(dialog.positions).toEqual([3]);
   });
 });

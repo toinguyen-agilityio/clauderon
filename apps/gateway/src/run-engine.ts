@@ -7,6 +7,8 @@ import {
   mask,
   nextNode,
   schedule,
+  simulatedDelayMs,
+  simulatedOutputs,
   snapshotFlow,
   type Clock,
   type FlowSnapshot,
@@ -41,6 +43,10 @@ export type RunEngineOptions = {
   live: LiveHub;
   /** The app's own secrets, masked again before a log line is stored (NFR-1). */
   secrets: readonly string[];
+  /** Chance that a simulated Dry-run Node fails, 0 to 1 (spec M2 §7); default 0. */
+  dryRunFailureRate?: number;
+  /** Source of randomness for the Dry-run runner; default `Math.random`. */
+  random?: () => number;
   log?: (message: string) => void;
 };
 
@@ -79,6 +85,8 @@ export class RunEngine {
       const moved = await moveRun(this.opts.db, runId, "queued", { state: "running", startedAt: this.now() });
       if (!moved) continue;
       this.opts.live.runChanged(runId);
+      // A Dry-run needs no logins and no Workspace (RUN-13): it starts its Nodes at once.
+      if (runs.find((r) => r.id === runId)?.mode === "dry") await this.advance(runId);
     }
     // A login check right before each Run's first Node (POD-5); its answer
     // prepares the Workspace of every Run still waiting for it.
@@ -86,7 +94,7 @@ export class RunEngine {
   }
 
   private async waitingForLogins(podId: string) {
-    return (await runsOfPod(this.opts.db, podId, ["running"])).filter((r) => r.branch === null);
+    return (await runsOfPod(this.opts.db, podId, ["running"])).filter((r) => r.mode === "real" && r.branch === null);
   }
 
   /** After a `pod.logins`: fail or prepare the Runs that waited for it. */
@@ -165,6 +173,8 @@ export class RunEngine {
       return this.fail(runId, error);
     }
 
+    if (ctx.run.mode === "dry") return this.simulate(runId, node, attempt.id);
+
     const inputs = this.inputsOf(ctx.snapshot, node, attempts);
     const base = { attemptId: attempt.id, runId, podId: ctx.run.podId, worktreePath: ctx.run.worktreePath ?? "" };
     if (node.kind === "agent") {
@@ -181,6 +191,36 @@ export class RunEngine {
     } else {
       this.opts.link.send("node.run", { ...base, kind: "command", command: node.command ?? "true", env: this.commandEnv(ctx, inputs) });
     }
+  }
+
+  /**
+   * The simulated runner (spec M2 §7): a Dry-run Node takes 2 to 8 seconds on
+   * the clock, writes a few log lines, then fails with `dryRunFailureRate` or
+   * produces fake Outputs. Only this executor differs from a Real Run.
+   */
+  private async simulate(runId: string, node: SnapshotNode, attemptId: string): Promise<void> {
+    const random = this.opts.random ?? Math.random;
+    for (const [seq, text] of [`[dry-run] ${node.name} started`, `[dry-run] simulating ${node.kind} Node`].entries()) {
+      await this.nodeLog({ attemptId, seq, stream: "stdout", text });
+    }
+    this.opts.clock.setTimeout(() => {
+      void this.serial(() => this.finishSimulated(runId, node, attemptId, random));
+    }, simulatedDelayMs(random));
+  }
+
+  private async finishSimulated(runId: string, node: SnapshotNode, attemptId: string, random: () => number): Promise<void> {
+    const attempt = await getAttempt(this.opts.db, attemptId);
+    const ctx = await getRunContext(this.opts.db, runId);
+    if (!attempt || attempt.state !== "running" || !ctx || ctx.run.state !== "running") return;
+    const end = { endedAt: this.now(), exitCode: 0, claudeSessionId: null };
+    await this.nodeLog({ attemptId, seq: 2, stream: "stdout", text: `[dry-run] ${node.name} finished` });
+
+    if (random() < (this.opts.dryRunFailureRate ?? 0)) {
+      return this.failAttempt(ctx, attemptId, `${node.name}: simulated failure`, { ...end, exitCode: 1 });
+    }
+    const outputs = simulatedOutputs(node.outputs, node.enabledOptionalOutputs, random, { branch: ctx.run.branch ?? "dry-run" });
+    await finishAttempt(this.opts.db, attemptId, { state: "succeeded", ...end, outputs });
+    await this.advance(runId);
   }
 
   /** Every input's value: the Output on its edge from the latest succeeded Attempt. */

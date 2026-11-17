@@ -21,6 +21,7 @@ const gateway = createGateway({
   podImage: process.env.POD_IMAGE ?? "",
   operators: parseOperatorEmails(process.env.OPERATOR_EMAILS),
   sessionSecret,
+  dryRunFailureRate: Number(process.env.DRY_RUN_FAILURE_RATE ?? 0),
   appSecrets: [hostAgentSecret, sessionSecret, process.env.GITHUB_TOKEN ?? ""].filter(Boolean),
 });
 

@@ -2,6 +2,7 @@ export * from "./access";
 export * from "./client";
 export * from "./flows";
 export * from "./gateway-commands";
+export * from "./nodes";
 export * from "./pod-host";
 export * from "./pods";
 export * from "./projects";

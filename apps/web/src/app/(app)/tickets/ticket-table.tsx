@@ -157,6 +157,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [flowId, setFlowId] = useState("");
   const [extra, setExtra] = useState("");
+  const [mode, setMode] = useState<"real" | "dry">("real");
   const [error, setError] = useState<{ text: string; terminal?: string } | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -171,7 +172,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
   const start = async () => {
     setPending(true);
     setError(null);
-    const result = await startAction({ flowId, ticketIds, extraInstructions: extra });
+    const result = await startAction({ flowId, ticketIds, extraInstructions: extra, mode });
     setPending(false);
     if (!result.ok) {
       setError({ text: result.error, terminal: result.terminal });
@@ -232,7 +233,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
                     Create my Pod
                   </Link>
                 </div>
-              ) : !pod.ready && pod.status === "running" ? (
+              ) : mode === "real" && !pod.ready && pod.status === "running" ? (
                 <div className="banner fail">
                   <div className="grow small">
                     <b>Your Pod is not logged in to Claude Code and gh.</b> Open its terminal and log in with your own accounts.
@@ -253,20 +254,33 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
                 </div>
               )}
               {pod && pod.status !== "running" && <span className="hint">Your Pod is {pod.status}. Runs wait in its queue until it runs again.</span>}
-              {pod && pod.status === "running" && pod.inUse >= pod.slots && <span className="hint">All Slots are busy; new Runs queue first-in, first-out.</span>}
+              {pod && dialog && (
+                <span className="hint" data-testid="queue-hint">
+                  {(() => {
+                    const now = dialog.positions.filter((p) => p === 0).length;
+                    const waiting = dialog.positions.length - now;
+                    if (waiting === 0) return `${now} of these start${now === 1 ? "s" : ""} at once.`;
+                    return `${now === 0 ? "None start at once" : `${now} start at once`}; ${waiting} wait${waiting === 1 ? "s" : ""} for a Slot, first in, first out (queue position${waiting === 1 ? "" : "s"} 1${waiting > 1 ? `–${waiting}` : ""}).`;
+                  })()}
+                </span>
+              )}
             </div>
 
             <div className="field">
               <label>Mode</label>
               <div className="seg" style={{ width: "fit-content" }}>
-                <button type="button" className="on" aria-pressed="true">
+                <button type="button" className={mode === "real" ? "on" : undefined} aria-pressed={mode === "real"} onClick={() => setMode("real")}>
                   Real
                 </button>
-                <button type="button" disabled title="Arrives in M2">
+                <button type="button" className={mode === "dry" ? "on" : undefined} aria-pressed={mode === "dry"} onClick={() => setMode("dry")}>
                   Dry-run
                 </button>
               </div>
-              <span className="hint">Claude Code runs on your Pod and a real pull request is opened under your gh account.</span>
+              <span className="hint">
+                {mode === "real"
+                  ? "Claude Code runs on your Pod and a real pull request is opened under your gh account."
+                  : "Simulated Nodes with fake Outputs. It takes a Slot but never calls Claude or GitHub, and needs no logins."}
+              </span>
             </div>
 
             <div className="field">

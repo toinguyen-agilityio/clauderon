@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
-import { member, pod, run } from "./schema";
+import { flow, member, pod, run, ticket } from "./schema";
 
 // Pods (spec M1 §2): one per Member, created with the default limits.
 
@@ -106,4 +106,43 @@ export async function applyPodLogins(db: Db, logins: PodLogins): Promise<Pod | n
 
 export async function setPodStatus(db: Db, podId: string, status: Pod["status"]): Promise<void> {
   await db.update(pod).set({ status }).where(eq(pod.id, podId));
+}
+
+/** Saves a Pod's limits (POD-2); CPU and RAM only take effect at the next Recreate. */
+export async function updatePodLimits(db: Db, podId: string, limits: { slots: number; cpus: number; memoryMb: number }): Promise<void> {
+  await db.update(pod).set(limits).where(eq(pod.id, podId));
+}
+
+export type QueuedRun = {
+  runId: string;
+  mode: "real" | "dry";
+  queuedAt: Date;
+  ticketNumber: number;
+  ticketTitle: string;
+  projectId: string;
+  flowName: string;
+};
+
+/** The Queued Runs of each Pod in the order they will start (POD-3, spec M2 §6). */
+export async function queuedRuns(db: Db, podIds: readonly string[]): Promise<Map<string, QueuedRun[]>> {
+  const queues = new Map<string, QueuedRun[]>(podIds.map((id) => [id, []]));
+  if (podIds.length === 0) return queues;
+  const rows = await db
+    .select({
+      podId: run.podId,
+      runId: run.id,
+      mode: run.mode,
+      queuedAt: run.queuedAt,
+      ticketNumber: ticket.number,
+      ticketTitle: ticket.title,
+      projectId: ticket.projectId,
+      flowName: flow.name,
+    })
+    .from(run)
+    .innerJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(flow, eq(flow.id, run.flowId))
+    .where(and(inArray(run.podId, [...podIds]), eq(run.state, "queued")))
+    .orderBy(asc(run.queuedAt), asc(run.id));
+  for (const { podId, ...entry } of rows) queues.get(podId)!.push(entry);
+  return queues;
 }

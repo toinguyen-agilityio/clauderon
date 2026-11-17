@@ -1,4 +1,4 @@
-import type { GitHubReader } from "@clauderon/core";
+import type { GitHubReader, PodLimits } from "@clauderon/core";
 import type { CommandPublish } from "@clauderon/db";
 import type { AccessDeps } from "./access";
 
@@ -9,6 +9,8 @@ export type AppDeps = AccessDeps & {
   github: GitHubReader;
   /** `POD_IMAGE`: the tag new Pods are created from. */
   podImage: string;
+  /** `POD_LIMIT_CEILING`: the most Slots, CPU and RAM a Pod may be given. */
+  limitCeiling: PodLimits;
 };
 
 export type Viewer = { id: string; email: string };
