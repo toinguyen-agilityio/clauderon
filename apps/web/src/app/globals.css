@@ -318,3 +318,19 @@ dialog.modal::backdrop { background: var(--scrim); }
   .pod-grid { grid-template-columns: minmax(0, 1fr); }
   .term { max-height: 320px; }
 }
+
+/* Flow canvas editor (M2) */
+.flow-editor { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; align-items: start; }
+.flow-editor:has(.flow-library:only-child) { grid-template-columns: 1fr; }
+.flow-library { max-height: 70vh; overflow-y: auto; }
+.flow-canvas { height: 70vh; min-height: 420px; overflow: hidden; }
+.lib-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: grab; }
+.fnode { min-width: 190px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.fnode.on { border-color: var(--accent); }
+.fnode-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.fnode-ports { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; }
+.fport { position: relative; padding: 0 12px; line-height: 18px; }
+.fport.off { opacity: 0.45; }
+.fport.lit { background: var(--accent-weak); border-radius: 4px; }
+.fnode .react-flow__handle { width: 9px; height: 9px; background: var(--fg3); border: 1px solid var(--panel); }
+.fnode .react-flow__handle.lit { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }

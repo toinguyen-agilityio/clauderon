@@ -57,7 +57,9 @@ function FlowTable({ title, rows, now, empty }: { title: string; rows: FlowView[
             {rows.map((f) => (
               <tr key={f.id}>
                 <td className="t-title">
-                  <b>{f.name}</b>
+                  <Link href={`/flows/${f.id}`}>
+                    <b>{f.name}</b>
+                  </Link>
                   {f.lock && (
                     <>
                       {" "}
