@@ -51,6 +51,59 @@ export const Icon = {
       <path d="M8 20h8M12 16v4" />
     </svg>
   ),
+  check: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+      <path d="M3.5 8.5l3 3 6-7" />
+    </svg>
+  ),
+  x: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  ),
+  spin: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" className="spin" aria-hidden="true">
+      <path d="M8 2a6 6 0 016 6" />
+    </svg>
+  ),
+  play: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M4 2.5l9 5.5-9 5.5z" />
+    </svg>
+  ),
+  stop: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
+    </svg>
+  ),
+  sync: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M13 5.5A5.5 5.5 0 003 6M3 10.5a5.5 5.5 0 0010-.5" />
+      <path d="M13 2.5v3h-3M3 13.5v-3h3" />
+    </svg>
+  ),
+  plus: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M8 3v10M3 8h10" />
+    </svg>
+  ),
+  terminal: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+      <path d="M4.5 6l2 2-2 2M8.5 10.5h3" />
+    </svg>
+  ),
+  cube: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" />
+      <path d="M4 7.5l8 4.5 8-4.5M12 12v9" />
+    </svg>
+  ),
+  external: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M9 2.5h4.5V7M13.5 2.5L7 9M11.5 9.5v4h-9v-9h4" />
+    </svg>
+  ),
 };
 
 export const GoogleLogo = () => (

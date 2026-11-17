@@ -256,6 +256,21 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     expect((await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "" })).ok).toBe(true);
   });
 
+  it("marks a Flow with Human Nodes and refuses to start it until M3", async () => {
+    const { ann, mine } = await ready();
+    const { flows } = await startDialog(deps, ann, [mine.id]);
+    expect(flows.map((f) => [f.name, f.needsHuman]).sort()).toEqual([
+      ["Basic ticket delivery", false],
+      ["Plan and deliver", true],
+    ]);
+    const plan = flows.find((f) => f.needsHuman)!;
+    expect(await startRuns(deps, ann, { flowId: plan.id, ticketIds: [mine.id], extraInstructions: "" })).toEqual({
+      ok: false,
+      error: "Plan and deliver has Human Nodes, which arrive in M3.",
+    });
+    expect(await db.select().from(schema.run)).toEqual([]);
+  });
+
   it("T1-9: Start with a Ticket that already has an Active Real Run fails with a message naming it", async () => {
     const { ann, mine, outside, flowId } = await ready();
     await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "" });

@@ -213,6 +213,9 @@ const runListColumns = {
   projectId: project.id,
   starterEmail: member.email,
   starterName: member.name,
+  starterPicture: member.pictureUrl,
+  pullRequestNumber: run.pullRequestNumber,
+  pullRequestState: run.pullRequestState,
 };
 
 /** The Runs list (TRK-7): filters combine; newest first; paginated. */
@@ -237,11 +240,17 @@ export async function listRuns(db: Db, filters: RunFilters, page = 1) {
   return { rows: rows.slice(0, RUNS_PAGE_SIZE), hasMore: rows.length > RUNS_PAGE_SIZE, total };
 }
 
+/** How many Runs are in each state, for the Runs page's summary. */
+export async function runStateCounts(db: Db): Promise<Partial<Record<RunState, number>>> {
+  const rows = await db.select({ state: run.state, n: sql<number>`count(*)::int` }).from(run).groupBy(run.state);
+  return Object.fromEntries(rows.map((r) => [r.state, r.n]));
+}
+
 /** Everything the Run page shows (TRK-1, TRK-2). */
 export async function getRunView(db: Db, runId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(runId)) return null;
   const [row] = await db
-    .select({ run, ticket, project, starter: { email: member.email, name: member.name }, podOwnerId: pod.memberId })
+    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, podOwnerId: pod.memberId })
     .from(run)
     .innerJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, ticket.projectId))

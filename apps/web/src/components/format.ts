@@ -12,7 +12,13 @@ export const formatTime = (date: Date | null) => (date ? date.toISOString().repl
 
 export function duration(ms: number | null): string {
   if (ms === null) return "";
-  const s = Math.round(ms / 1000);
+  const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}
+
+/** 18234 → "18.2k" tokens. */
+export function tokens(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }

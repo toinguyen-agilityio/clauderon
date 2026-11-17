@@ -20,8 +20,16 @@ const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 /** Flows without problems (RUN-1): only those can start Runs. */
 async function startableFlows(deps: AppDeps) {
   const [flows, library] = await Promise.all([listFlows(deps.db), loadLibrary(deps.db)]);
+  const kinds = new Map(library.map((n) => [n.id, n.kind]));
   const ok = [];
-  for (const flow of flows) if (validateFlow(await loadFlow(deps.db, flow.id), library).length === 0) ok.push({ id: flow.id, name: flow.name });
+  for (const flow of flows) {
+    const graph = await loadFlow(deps.db, flow.id);
+    if (validateFlow(graph, library).length > 0) continue;
+    const runnable = graph.nodes.filter((n) => kinds.get(n.nodeId) !== "ticket");
+    // Human Nodes arrive in M3: such a Flow would fail at its first one.
+    const needsHuman = runnable.some((n) => kinds.get(n.nodeId) === "approve" || kinds.get(n.nodeId) === "grill");
+    ok.push({ id: flow.id, name: flow.name, nodes: runnable.length, needsHuman });
+  }
   return ok;
 }
 
@@ -62,7 +70,9 @@ export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput
   if (!pod.claudeLoggedIn) return { ok: false, error: "Claude Code is not logged in on your Pod. Log in from its terminal.", terminal };
   if (!pod.ghLoggedIn) return { ok: false, error: "gh is not logged in on your Pod. Log in from its terminal.", terminal };
 
-  if (!(await startableFlows(deps)).some((f) => f.id === input.flowId)) return { ok: false, error: "Pick a Flow without problems." };
+  const flow = (await startableFlows(deps)).find((f) => f.id === input.flowId);
+  if (!flow) return { ok: false, error: "Pick a Flow without problems." };
+  if (flow.needsHuman) return { ok: false, error: `${flow.name} has Human Nodes, which arrive in M3.` };
   const tickets = await getTickets(deps.db, ticketIds);
   if (tickets.length !== ticketIds.length) return { ok: false, error: "A selected Ticket no longer exists." };
   const flowSnapshot = await buildFlowSnapshot(deps.db, input.flowId);

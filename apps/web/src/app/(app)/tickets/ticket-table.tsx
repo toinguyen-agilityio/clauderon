@@ -2,16 +2,28 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { StatePill } from "../../../components/state-pill";
+import { useEffect, useRef, useState } from "react";
+import { Icon } from "../../../components/icons";
+import { StatePill, TicketStatusPill } from "../../../components/state-pill";
 import type { TicketRow } from "../../../server/tickets";
 import { loadStartDialog, startAction } from "./actions";
 
 type Dialog = Awaited<ReturnType<typeof loadStartDialog>>;
 
-/** The Tickets table with multi-select and the Start dialog (TIC-3, RUN-1). */
+const selectable = (t: TicketRow) => t.activeRunId === null && t.status !== "Closed";
+
+/** The Tickets table with multi-select, the selection bar and the Start dialog (TIC-3, RUN-1). */
 export function TicketTable({ rows }: { rows: TicketRow[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const pickable = rows.filter(selectable);
+  const allSelected = pickable.length > 0 && pickable.every((t) => selected.has(t.id));
+
+  // Keep the selection to Tickets still on screen and still selectable.
+  useEffect(() => {
+    setSelected((s) => new Set([...s].filter((id) => rows.some((t) => t.id === id && selectable(t)))));
+  }, [rows]);
+
   const toggle = (id: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -22,67 +34,124 @@ export function TicketTable({ rows }: { rows: TicketRow[] }) {
 
   return (
     <>
-      <div className="row between" style={{ padding: "10px 16px", borderBottom: "1px solid var(--line)" }}>
-        <span className="faint small">{selected.size > 0 ? `${selected.size} selected` : "Select Tickets to start Runs"}</span>
-        <StartButton ticketIds={[...selected]} onStarted={() => setSelected(new Set())} />
-      </div>
-      <div className="tbl-wrap">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th aria-label="Select" />
-              <th>Key</th>
-              <th>Title</th>
-              <th>Labels</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
+      <div className="card">
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
               <tr>
-                <td colSpan={5} className="faint">
-                  No Tickets match. Enable a Project and press Sync to pull its issues.
-                </td>
-              </tr>
-            )}
-            {rows.map((t) => (
-              <tr key={t.id}>
-                <td>
+                <th style={{ width: 36 }}>
                   <input
                     type="checkbox"
-                    aria-label={`Select ${t.key}`}
-                    checked={selected.has(t.id)}
-                    disabled={t.activeRunId !== null || t.status === "Closed"}
-                    title={t.activeRunId ? `Has an Active Run (${t.activeRunState}): /runs/${t.activeRunId}` : undefined}
-                    onChange={() => toggle(t.id)}
+                    className="cb"
+                    aria-label="Select all"
+                    checked={allSelected}
+                    disabled={pickable.length === 0}
+                    onChange={() => setSelected(allSelected ? new Set() : new Set(pickable.map((t) => t.id)))}
                   />
-                </td>
-                <td className="mono">
-                  <a href={t.url} target="_blank" rel="noreferrer">
-                    {t.key}
-                  </a>
-                </td>
-                <td>{t.title}</td>
-                <td>
-                  <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                    {t.labels.map((l) => (
-                      <span key={l} className="tag">
-                        {l}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td>{t.activeRunId ? <Link href={`/runs/${t.activeRunId}`}><StatePill state={t.status} /></Link> : <StatePill state={t.status} />}</td>
+                </th>
+                <th>Key</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Latest Run</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={5}>
+                    <div className="empty">
+                      <b>No Tickets match</b>
+                      Clear the search or pick another status. New issues arrive when you Sync their Project.
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {rows.map((t) => (
+                <tr key={t.id} className={selected.has(t.id) ? "sel" : undefined}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      className="cb"
+                      aria-label={`Select ${t.key}`}
+                      checked={selected.has(t.id)}
+                      disabled={!selectable(t)}
+                      title={t.activeRunId ? `Has an Active Run (${t.activeRunState?.replaceAll("_", " ")})` : t.status === "Closed" ? "Closed on GitHub" : undefined}
+                      onChange={() => toggle(t.id)}
+                    />
+                  </td>
+                  <td className="mono faint" style={{ whiteSpace: "nowrap" }}>
+                    {t.key}
+                  </td>
+                  <td className="t-title">
+                    <a href={t.url} target="_blank" rel="noreferrer">
+                      {t.title}
+                    </a>
+                    {t.labels.length > 0 && (
+                      <div className="row" style={{ gap: 4, marginTop: 4 }}>
+                        {t.labels.map((l) => (
+                          <span key={l} className="label">
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <TicketStatusPill status={t.status} />
+                  </td>
+                  <td className="small">
+                    {t.latestRun ? (
+                      <Link href={`/runs/${t.latestRun.id}`} className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                        <StatePill state={t.latestRun.state} />
+                        <span className="mono">{t.latestRun.id.slice(0, 8)}</span>
+                      </Link>
+                    ) : (
+                      <span className="faint">No Runs yet</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {selected.size > 0 && (
+        <div className="selbar" role="region" aria-label="Selection">
+          <span>
+            <b>{selected.size}</b> Ticket{selected.size > 1 ? "s" : ""} selected
+          </span>
+          <div className="row">
+            <button type="button" className="btn ghost sm" onClick={() => setSelected(new Set())}>
+              Clear
+            </button>
+            <button type="button" className="btn primary" onClick={() => setDialogOpen(true)}>
+              {Icon.play}
+              Start Runs…
+            </button>
+          </div>
+        </div>
+      )}
+
+      {dialogOpen && (
+        <StartDialog
+          ticketIds={[...selected]}
+          onClose={() => setDialogOpen(false)}
+          onStarted={() => {
+            setDialogOpen(false);
+            setSelected(new Set());
+          }}
+        />
+      )}
     </>
   );
 }
 
-function StartButton({ ticketIds, onStarted }: { ticketIds: string[]; onStarted: () => void }) {
+const TRUST_HINT = "opened by someone outside the repository";
+
+function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: string[]; onClose: () => void; onStarted: () => void }) {
+  // The selection is fixed while the dialog is open.
+  const [ticketIds] = useState(initial);
   const ref = useRef<HTMLDialogElement>(null);
   const router = useRouter();
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -91,96 +160,172 @@ function StartButton({ ticketIds, onStarted }: { ticketIds: string[]; onStarted:
   const [error, setError] = useState<{ text: string; terminal?: string } | null>(null);
   const [pending, setPending] = useState(false);
 
-  const open = async () => {
-    setError(null);
-    const loaded = await loadStartDialog(ticketIds);
-    setDialog(loaded);
-    setFlowId(loaded.flows.find((f) => f.name === "Basic ticket delivery")?.id ?? loaded.flows[0]?.id ?? "");
-    ref.current?.showModal();
-  };
+  useEffect(() => {
+    if (!ref.current?.open) ref.current?.showModal();
+    void loadStartDialog(ticketIds).then((loaded) => {
+      setDialog(loaded);
+      setFlowId(loaded.flows.find((f) => !f.needsHuman)?.id ?? "");
+    });
+  }, [ticketIds]);
 
   const start = async () => {
     setPending(true);
+    setError(null);
     const result = await startAction({ flowId, ticketIds, extraInstructions: extra });
     setPending(false);
     if (!result.ok) {
       setError({ text: result.error, terminal: result.terminal });
       return;
     }
-    ref.current?.close();
     onStarted();
     router.push(result.runIds.length === 1 ? `/runs/${result.runIds[0]}` : "/runs");
   };
 
   const pod = dialog?.pod;
+  const warned = new Map(dialog?.warnings.map((w) => [w.ticketId, w.authorAssociation]));
   return (
-    <>
-      <button type="button" className="btn primary" disabled={ticketIds.length === 0} onClick={() => void open()}>
-        Start
-      </button>
-      <dialog ref={ref} className="dialog" aria-label="Start Runs">
-        {dialog && (
-          <>
-            <div className="dialog-body">
-              <h2>Start {dialog.tickets.length === 1 ? "a Run" : `${dialog.tickets.length} Runs`}</h2>
-              <label className="field">
-                <span className="small faint">Flow</span>
-                <select className="input" value={flowId} onChange={(e) => setFlowId(e.target.value)}>
-                  {dialog.flows.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="field">
-                <span className="small faint">Mode</span>
-                <span className="pill acc">Real</span>
+    <dialog ref={ref} className="modal wide" aria-labelledby="sd-title" onClose={onClose}>
+      <div className="modal-in">
+        <div className="modal-h">
+          <div>
+            <h2 id="sd-title">Start Runs</h2>
+            <p className="muted small" style={{ marginTop: 4 }}>
+              One Run per Ticket, grouped as a Batch on your Pod.
+            </p>
+          </div>
+          <button type="button" className="btn ghost sm" aria-label="Close" onClick={() => ref.current?.close()}>
+            {Icon.x}
+          </button>
+        </div>
+
+        {!dialog ? (
+          <div className="modal-b">
+            <span className="faint small">Loading…</span>
+          </div>
+        ) : (
+          <div className="modal-b">
+            <div className="field">
+              <label>Flow</label>
+              <div className="grid g2" role="radiogroup" aria-label="Flow">
+                {dialog.flows.map((f) => (
+                  <label key={f.id} className={`opt-card ${flowId === f.id ? "on" : ""} ${f.needsHuman ? "dis" : ""}`}>
+                    <input type="radio" name="flow" checked={flowId === f.id} disabled={f.needsHuman} onChange={() => setFlowId(f.id)} />
+                    <div className="grow">
+                      <b>{f.name}</b>
+                      <div className="faint small">
+                        {f.nodes} Nodes{f.needsHuman ? " · has Human Nodes, which arrive in M3" : ""}
+                      </div>
+                    </div>
+                  </label>
+                ))}
               </div>
-              <label className="field">
-                <span className="small faint">Extra instructions</span>
-                <textarea className="input" rows={3} value={extra} onChange={(e) => setExtra(e.target.value)} />
-              </label>
-              <div className="small">
-                <b>Tickets:</b> {dialog.tickets.map((t) => t.key).join(", ")}
-              </div>
-              {dialog.warnings.map((w) => (
-                <div key={w.ticketId} className="banner info small">
-                  {w.key} was opened by someone outside the repository ({w.authorAssociation}). Check it before you run it.
+            </div>
+
+            <div className="field">
+              <label>Pod</label>
+              {!pod ? (
+                <div className="banner fail">
+                  <div className="grow small">
+                    <b>You have no Pod yet.</b> Runs always run on the Starter&apos;s Pod.
+                  </div>
+                  <Link className="btn sm primary" href="/pods">
+                    Create my Pod
+                  </Link>
                 </div>
-              ))}
-              <div className="small">
-                {pod ? (
-                  <>
-                    Your Pod: <b>{pod.status}</b> · {pod.inUse} / {pod.slots} Slots in use · {pod.queued} queued ·{" "}
-                    {pod.ready ? <span className="pill ok">Pod Ready</span> : <span className="pill fail">Not Pod Ready</span>}
-                  </>
-                ) : (
-                  <span className="err-text">You have no Pod yet. Create it on the Pods page.</span>
-                )}
-              </div>
-              {error && (
-                <div className="err-text small">
-                  {error.text}{" "}
-                  {error.terminal && (
-                    <Link href={error.terminal} className="btn link">
-                      Open the terminal
-                    </Link>
-                  )}
+              ) : !pod.ready && pod.status === "running" ? (
+                <div className="banner fail">
+                  <div className="grow small">
+                    <b>Your Pod is not logged in to Claude Code and gh.</b> Open its terminal and log in with your own accounts.
+                  </div>
+                  <Link className="btn sm" href={`/pods/${pod.id}/terminal`}>
+                    Open terminal
+                  </Link>
+                </div>
+              ) : (
+                <div className="opt-card on" style={{ cursor: "default" }}>
+                  {Icon.cube}
+                  <div className="grow">
+                    <b>My Pod</b> <span className="faint small">· {pod.status}</span>
+                    <div className="faint small num">
+                      {pod.inUse}/{pod.slots} Slots busy · {pod.queued} queued
+                    </div>
+                  </div>
                 </div>
               )}
+              {pod && pod.status !== "running" && <span className="hint">Your Pod is {pod.status}. Runs wait in its queue until it runs again.</span>}
+              {pod && pod.status === "running" && pod.inUse >= pod.slots && <span className="hint">All Slots are busy; new Runs queue first-in, first-out.</span>}
             </div>
-            <div className="dialog-foot">
-              <button type="button" className="btn" onClick={() => ref.current?.close()}>
-                Cancel
-              </button>
-              <button type="button" className="btn primary" disabled={pending || !flowId} onClick={() => void start()}>
-                Start
-              </button>
+
+            <div className="field">
+              <label>Mode</label>
+              <div className="seg" style={{ width: "fit-content" }}>
+                <button type="button" className="on" aria-pressed="true">
+                  Real
+                </button>
+                <button type="button" disabled title="Arrives in M2">
+                  Dry-run
+                </button>
+              </div>
+              <span className="hint">Claude Code runs on your Pod and a real pull request is opened under your gh account.</span>
             </div>
-          </>
+
+            <div className="field">
+              <label htmlFor="sd-extra">
+                Extra instructions <span className="faint">(optional)</span>
+              </label>
+              <textarea
+                id="sd-extra"
+                className="textarea"
+                placeholder="e.g. Keep the public API unchanged."
+                value={extra}
+                onChange={(e) => setExtra(e.target.value)}
+              />
+              <span className="hint">Added to every Agent Node of these Runs.</span>
+            </div>
+
+            <div className="field">
+              <label>
+                Tickets <span className="faint num">{dialog.tickets.length}</span>
+              </label>
+              <div className="pick">
+                {dialog.tickets.map((t) => (
+                  <div key={t.id}>
+                    <span className="mono faint small">{t.key}</span>
+                    <span className="grow">{t.title}</span>
+                    {warned.has(t.id) && (
+                      <span className="pill wait plain" title={`${TRUST_HINT} (${warned.get(t.id)})`}>
+                        Outside author
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {warned.size > 0 && <span className="hint">Tickets marked Outside author were {TRUST_HINT}. Read them before you run them.</span>}
+            </div>
+
+            {error && (
+              <div className="banner fail" role="alert">
+                <div className="grow small">{error.text}</div>
+                {error.terminal && (
+                  <Link className="btn sm" href={error.terminal}>
+                    Open terminal
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
         )}
-      </dialog>
-    </>
+
+        <div className="modal-f">
+          <button type="button" className="btn" onClick={() => ref.current?.close()}>
+            Cancel
+          </button>
+          <button type="button" className="btn primary" disabled={!dialog || pending || !flowId || !pod} onClick={() => void start()}>
+            {Icon.play}
+            {pending ? "Starting…" : `Start ${ticketIds.length} Run${ticketIds.length === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      </div>
+    </dialog>
   );
 }

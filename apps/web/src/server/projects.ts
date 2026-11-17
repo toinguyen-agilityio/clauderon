@@ -1,8 +1,9 @@
-import type { Repository } from "@clauderon/core";
+import { isActive, type Repository } from "@clauderon/core";
 import {
   enableProject,
   getProject,
   getRunContext,
+  listTicketsWithRuns,
   listProjects,
   openTicketsMissingFrom,
   recordAudit,
@@ -19,6 +20,19 @@ import type { AppDeps, Viewer } from "./deps";
 // to GitHub (TIC-9).
 
 const PR_REFRESH_MS = 60_000;
+
+/** The Projects page: each Project with its open Tickets and Active Runs. */
+export async function viewProjects(deps: AppDeps) {
+  const [projects, tickets] = await Promise.all([listProjects(deps.db), listTicketsWithRuns(deps.db)]);
+  return projects.map((p) => {
+    const own = tickets.filter((t) => t.projectId === p.id);
+    return {
+      ...p,
+      openTickets: own.filter((t) => t.issueState === "open").length,
+      activeRuns: own.flatMap((t) => t.runs).filter((r) => r.mode === "real" && isActive(r.state)).length,
+    };
+  });
+}
 
 /** Repositories the token reads, minus enabled ones, of the Projects' owner once one exists (PRJ-2). */
 export async function enableableRepositories(deps: AppDeps): Promise<Repository[]> {

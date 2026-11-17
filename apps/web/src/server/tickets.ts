@@ -17,6 +17,8 @@ export type TicketRow = {
   /** The Active Run that keeps this Ticket from being selected (TIC-7). */
   activeRunId: string | null;
   activeRunState: string | null;
+  /** The newest Real Run, for the table's "Latest Run" column. */
+  latestRun: { id: string; state: string; pullRequestState: string | null } | null;
 };
 
 const asPrState = (state: string | null): PullRequestState | null => (state === "open" || state === "merged" || state === "closed" ? state : null);
@@ -32,7 +34,9 @@ export async function viewTickets(deps: AppDeps, filters: TicketFilters) {
 
   const rows: TicketRow[] = tickets.map((t) => {
     const runs = t.runs.map((r) => ({ ...r, pullRequestState: asPrState(r.pullRequestState) }));
-    const active = runs.filter((r) => r.mode === "real" && isActive(r.state)).sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime())[0];
+    const real = runs.filter((r) => r.mode === "real").sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime());
+    const active = real.find((r) => isActive(r.state));
+    const latest = real[0];
     return {
       id: t.id,
       projectId: t.projectId,
@@ -45,13 +49,14 @@ export async function viewTickets(deps: AppDeps, filters: TicketFilters) {
       status: ticketStatus({ issueState: t.issueState === "closed" ? "closed" : "open" }, runs),
       activeRunId: active?.id ?? null,
       activeRunState: active?.state ?? null,
+      latestRun: latest ? { id: latest.id, state: latest.state, pullRequestState: latest.pullRequestState } : null,
     };
   });
 
-  return {
-    projects,
-    rows: rows.filter(
-      (r) => (!q || r.title.toLowerCase().includes(q) || r.key.toLowerCase().includes(q)) && (!filters.status || r.status === filters.status),
-    ),
-  };
+  // Counts for the status chips: every Ticket the search matches, any status.
+  const matching = rows.filter((r) => !q || r.title.toLowerCase().includes(q) || r.key.toLowerCase().includes(q));
+  const counts: Record<string, number> = {};
+  for (const r of matching) counts[r.status] = (counts[r.status] ?? 0) + 1;
+
+  return { projects, counts, total: matching.length, rows: matching.filter((r) => !filters.status || r.status === filters.status) };
 }
