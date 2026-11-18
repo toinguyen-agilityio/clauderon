@@ -86,22 +86,35 @@ export function buildAgentPrompt(parts: PromptParts): string {
   return `${sections.join("\n\n")}\n`;
 }
 
-const FENCED_JSON = /```json\s*\n([\s\S]*?)```/g;
+const JSON_FENCE = /```json[ \t]*\r?\n/g;
+const FENCE = "```";
+
+function parseOrUndefined(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The last fenced JSON block of the agent's final message, or null. A message
  * that is nothing but a JSON object counts too: the M0 spike saw a resumed
  * session answer with bare JSON (docs/specs/notes/claude-headless.md).
+ *
+ * An Output often holds its own code fences (a plan's test commands), so the
+ * block does not end at the first ``` after its opening: each later fence is
+ * tried until the text between parses as JSON.
  */
 export function extractResultBlock(text: string): unknown {
-  const blocks = [...text.matchAll(FENCED_JSON)];
-  const last = blocks.at(-1)?.[1] ?? (/^\s*\{[\s\S]*\}\s*$/.test(text) ? text : undefined);
-  if (last === undefined) return null;
-  try {
-    return JSON.parse(last);
-  } catch {
-    return null;
+  const last = [...text.matchAll(JSON_FENCE)].at(-1);
+  if (!last) return /^\s*\{[\s\S]*\}\s*$/.test(text) ? (parseOrUndefined(text) ?? null) : null;
+  const start = last.index + last[0].length;
+  for (let end = text.indexOf(FENCE, start); end !== -1; end = text.indexOf(FENCE, end + FENCE.length)) {
+    const value = parseOrUndefined(text.slice(start, end));
+    if (value !== undefined) return value;
   }
+  return null;
 }
 
 export type OutputValue = { name: string; type: OutputType; value: unknown };

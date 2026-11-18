@@ -92,6 +92,12 @@ describe("extractResultBlock (M0 §6)", () => {
     expect(extractResultBlock(text)).toEqual({ outputs: { plan: "new" } });
   });
 
+  it("keeps Output text that holds its own code fences", () => {
+    const plan = "## Verification\n\n```bash\nnpm test\n```\n\nDone.";
+    const text = `Plan ready.\n\n\`\`\`json\n${JSON.stringify({ outputs: { plan } })}\n\`\`\`\n`;
+    expect(extractResultBlock(text)).toEqual({ outputs: { plan } });
+  });
+
   it("returns null when there is no block or it is not JSON", () => {
     expect(extractResultBlock("no block")).toBeNull();
     expect(extractResultBlock("```json\n{oops\n```")).toBeNull();
