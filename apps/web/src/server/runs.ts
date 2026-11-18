@@ -28,13 +28,13 @@ export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number)
     runStateCounts(deps.db),
   ]);
   const keyOf = ticketKeys(projects);
-  const podOwner = new Map(pods.map((p) => [p.id, p.owner.name ?? p.owner.email]));
+  const podLabel = new Map(pods.map((p) => [p.id, p.name ?? `${p.owner.name ?? p.owner.email}'s Pod`]));
   return {
     ...result,
-    rows: result.rows.map((r) => ({ ...r, key: keyOf(r.projectId, r.ticketNumber), podOwner: podOwner.get(r.podId) ?? "—" })),
+    rows: result.rows.map((r) => ({ ...r, key: keyOf(r.projectId, r.ticketNumber), pod: (r.podId && podLabel.get(r.podId)) ?? "Pod removed" })),
     counts,
     flows: flows.map((f) => ({ id: f.id, name: f.name })),
-    pods: pods.map((p) => ({ id: p.id, owner: p.owner.name ?? p.owner.email })),
+    pods: pods.map((p) => ({ id: p.id, label: p.name ?? `${p.owner.name ?? p.owner.email}'s Pod` })),
   };
 }
 

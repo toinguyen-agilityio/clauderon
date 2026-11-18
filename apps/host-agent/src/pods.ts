@@ -64,6 +64,17 @@ export function registerPodHandlers(link: AgentLink, docker: DockerClient, log: 
     }
   }));
 
+  // POD-7: the Pod row is already gone, so there is no status to report.
+  // The container goes first, since a volume in use cannot be removed.
+  link.on("pod.delete", detached(async ({ podId }) => {
+    try {
+      await docker.removeContainer(containerName(podId));
+      await docker.removeVolume(volumeName(podId));
+    } catch (error) {
+      log(`pod ${podId}: delete failed: ${message(error)}`);
+    }
+  }));
+
   link.on("pod.checkLogins", detached(async ({ podId }) => {
     // checkLogins never throws: each failed check reads as logged out.
     link.send("pod.logins", { podId, ...(await checkLogins(docker, podId)), checkedAt: new Date().toISOString() });

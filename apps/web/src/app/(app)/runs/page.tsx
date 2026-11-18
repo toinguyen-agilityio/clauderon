@@ -57,7 +57,7 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
         <Suspense>
           <FilterSelect name="state" label="All states" options={STATE_OPTIONS} />
           <FilterSelect name="flow" label="All Flows" options={flows.map((f) => ({ value: f.id, label: f.name }))} />
-          <FilterSelect name="pod" label="All Pods" options={pods.map((p) => ({ value: p.id, label: `${p.owner}'s Pod` }))} />
+          <FilterSelect name="pod" label="All Pods" options={pods.map((p) => ({ value: p.id, label: p.label }))} />
         </Suspense>
         {filtered && (
           <Link className="btn ghost sm" href="/runs">
@@ -112,7 +112,7 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
                   <td>
                     <StatePill state={r.state} />
                   </td>
-                  <td className="small nowrap">{r.podOwner}</td>
+                  <td className="small nowrap">{r.pod}</td>
                   <td>
                     <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
                       <Avatar name={r.starterName} email={r.starterEmail} picture={r.starterPicture} />

@@ -10,12 +10,14 @@ export const GATEWAY_COMMAND_CHANNEL = "gateway_command";
 
 export type GatewayCommand =
   | { type: "pod.create" | "pod.start" | "pod.stop" | "pod.checkLogins"; podId: string }
+  /** Remove a deleted Pod's container and Workspace volume; its row is already gone. */
+  | { type: "pod.delete"; podId: string }
   /** Run the Slot scheduler for a Pod after Runs were queued. */
   | { type: "schedule"; podId: string };
 
 export type CommandPublish = (command: GatewayCommand) => Promise<void>;
 
-const TYPES = new Set(["pod.create", "pod.start", "pod.stop", "pod.checkLogins", "schedule"]);
+const TYPES = new Set(["pod.create", "pod.start", "pod.stop", "pod.checkLogins", "pod.delete", "schedule"]);
 
 export function notifyGatewayCommand(db: Db): CommandPublish {
   return async (command) => {

@@ -26,10 +26,10 @@ export function checkLimits(requested: { slots: unknown; cpus: unknown; memoryMb
   const memoryMb = Number(requested.memoryMb);
   if (!Number.isInteger(slots) || slots < 1) return { ok: false, error: "Slots must be a whole number, at least 1." };
   if (!Number.isFinite(cpus) || cpus <= 0) return { ok: false, error: "CPU must be more than 0." };
-  if (!Number.isInteger(memoryMb) || memoryMb < 1) return { ok: false, error: "RAM must be a whole number of MB, at least 1." };
+  if (!Number.isInteger(memoryMb) || memoryMb < 1) return { ok: false, error: "RAM must be more than 0 GB." };
   if (slots > ceiling.slots) return { ok: false, error: `Slots are capped at ${ceiling.slots}.` };
   if (cpus > ceiling.cpus) return { ok: false, error: `CPU is capped at ${ceiling.cpus}.` };
-  if (memoryMb > ceiling.memoryMb) return { ok: false, error: `RAM is capped at ${ceiling.memoryMb} MB.` };
+  if (memoryMb > ceiling.memoryMb) return { ok: false, error: `RAM is capped at ${ceiling.memoryMb / 1024} GB.` };
   return { ok: true, limits: { slots, cpus, memoryMb } };
 }
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Clock } from "@clauderon/core";
 import { getPod, recordAudit, type Db } from "@clauderon/db";
-import { CloseCode, parseBrowserMessage, terminalRequest, type LinkSocket, type Payload, type TerminalEvent } from "@clauderon/protocol";
+import { CloseCode, parseBrowserMessage, podLogin, terminalRequest, type LinkSocket, type Payload, type TerminalEvent } from "@clauderon/protocol";
 import type { BrowserHub } from "./browser-hub";
 import type { Sender } from "./run-engine";
 
@@ -21,7 +21,17 @@ export class TerminalHub {
 
   constructor(private readonly opts: TerminalHubOptions) {}
 
-  async attach(socket: LinkSocket, ticket: string | null | undefined, podId: string | null, size: { cols?: number; rows?: number } = {}): Promise<string | null> {
+  /**
+   * `login` runs the Host Agent's login command for that tool instead of a
+   * shell (the Pod page's Connect buttons, POD-5); anything else is a shell.
+   */
+  async attach(
+    socket: LinkSocket,
+    ticket: string | null | undefined,
+    podId: string | null,
+    options: { cols?: number; rows?: number; login?: string | null } = {},
+  ): Promise<string | null> {
+    const login = podLogin.safeParse(options.login).data;
     const pending: string[] = [];
     let sessionId: string | null = null;
     socket.onMessage((text) => (sessionId ? this.input(sessionId, text) : pending.push(text)));
@@ -48,9 +58,9 @@ export class TerminalHub {
       action: "terminal.open",
       subjectType: "pod",
       subjectId: pod.id,
-      detail: { sessionId: id, at: session.startedAt.toISOString() },
+      detail: { sessionId: id, at: session.startedAt.toISOString(), ...(login ? { login } : {}) },
     });
-    this.opts.link.send("terminal.open", { sessionId: id, podId: pod.id, cols: size.cols ?? 80, rows: size.rows ?? 24 });
+    this.opts.link.send("terminal.open", { sessionId: id, podId: pod.id, cols: options.cols ?? 80, rows: options.rows ?? 24, ...(login ? { login } : {}) });
     sessionId = id;
     pending.splice(0).forEach((text) => this.input(id, text));
     return id;

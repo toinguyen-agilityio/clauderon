@@ -10,6 +10,7 @@ type Script = (call: ExecCall) => ExecReply | undefined;
 /** Docker in memory: containers, a set of existing paths and scripted execs. */
 export class FakeDocker implements DockerClient {
   containers = new Map<string, ContainerSpec & { running: boolean }>();
+  volumes = new Set<string>();
   paths = new Set<string>();
   execs: ExecCall[] = [];
   ttys: FakeTty[] = [];
@@ -23,6 +24,7 @@ export class FakeDocker implements DockerClient {
 
   async createContainer(spec: ContainerSpec) {
     if (!this.containers.has(spec.name)) this.containers.set(spec.name, { ...spec, running: false });
+    this.volumes.add(spec.volume);
     return `id-${spec.name}`;
   }
   async startContainer(name: string) {
@@ -30,6 +32,13 @@ export class FakeDocker implements DockerClient {
   }
   async stopContainer(name: string) {
     this.container(name).running = false;
+  }
+  async removeContainer(name: string) {
+    this.containers.delete(name);
+  }
+  async removeVolume(name: string) {
+    if ([...this.containers.values()].some((c) => c.volume === name)) throw new Error(`volume ${name} is in use`);
+    this.volumes.delete(name);
   }
   async imageDigest() {
     return "sha256:abc";

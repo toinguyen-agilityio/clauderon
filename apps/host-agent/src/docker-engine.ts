@@ -67,6 +67,24 @@ export function dockerEngine(docker = new Docker()): DockerClient {
         });
     },
 
+    async removeContainer(name) {
+      await docker
+        .getContainer(name)
+        .remove({ force: true })
+        .catch((error: unknown) => {
+          if (!isStatus(error, 404)) throw error;
+        });
+    },
+
+    async removeVolume(name) {
+      await docker
+        .getVolume(name)
+        .remove()
+        .catch((error: unknown) => {
+          if (!isStatus(error, 404)) throw error;
+        });
+    },
+
     async imageDigest(image) {
       const info = await docker.getImage(image).inspect();
       return info.RepoDigests?.[0]?.split("@")[1] ?? info.Id ?? null;
@@ -136,8 +154,10 @@ export function dockerEngine(docker = new Docker()): DockerClient {
           await exec.resize({ w: cols, h: rows });
         },
         close: () => {
-          // Hanging up ends `bash -l`, as closing a terminal window does.
-          stream.write("\x04");
+          // Ctrl-C stops what runs in the foreground (a Connect login waiting
+          // for its code ignores EOF), then Ctrl-D ends `bash -l`, as closing
+          // a terminal window does.
+          stream.write("\x03\x04");
           stream.end();
           setTimeout(() => {
             stream.destroy();

@@ -26,12 +26,12 @@ async function setup() {
     const s = await createSession(db, memberId, token, ctx.clock.now());
     return createGatewayTicket(s.id, ctx.clock.now(), SESSION_SECRET);
   };
-  const open = async (memberId: string, token: string) => {
+  const open = async (memberId: string, token: string, login?: string) => {
     const [browser, server] = memorySocketPair();
     const out: string[] = [];
     browser.onMessage((text) => out.push(text));
     const ticket = await ticketFor(memberId, token);
-    const attaching = ctx.gateway.terminals.attach(server, ticket, pod.id, { cols: 100, rows: 30 });
+    const attaching = ctx.gateway.terminals.attach(server, ticket, pod.id, { cols: 100, rows: 30, login });
     // The browser sends a resize as soon as the socket opens, before the session is checked.
     browser.send(JSON.stringify({ type: "resize", cols: 120, rows: 40 }));
     const sessionId = await attaching;
@@ -49,6 +49,23 @@ describe("Web terminal (POD-9)", () => {
     const { browser, sessionId } = await open(bob.id, "bob-cookie");
     expect(sessionId).toBeNull();
     expect((browser as MemorySocket).closeCode).toBe(CloseCode.NotFound);
+    expect(agent.of("terminal.open")).toEqual([]);
+  });
+
+  it("POD-5: a Connect login asks the Host Agent for that login only; an unknown one opens a plain shell", async () => {
+    const { ann, pod, open, agent } = await setup();
+    const gh = await open(ann.id, "ann-cookie", "gh");
+    const odd = await open(ann.id, "ann-cookie-2", "rm -rf /");
+    expect(agent.of("terminal.open")).toEqual([
+      { sessionId: gh.sessionId, podId: pod.id, cols: 100, rows: 30, login: "gh" },
+      { sessionId: odd.sessionId, podId: pod.id, cols: 100, rows: 30 },
+    ]);
+    expect((await audit()).find((a) => a.action === "terminal.open")?.detail).toMatchObject({ login: "gh" });
+  });
+
+  it("POD-5: another Member cannot run a login on someone else's Pod", async () => {
+    const { bob, open, agent } = await setup();
+    expect((await open(bob.id, "bob-cookie", "claude")).sessionId).toBeNull();
     expect(agent.of("terminal.open")).toEqual([]);
   });
 
@@ -102,6 +119,15 @@ describe("Pod commands (POD-2, POD-6)", () => {
     await gateway.pods.command({ type: "pod.create", podId: pod.id });
     await flush();
     expect(agent.of("pod.create")).toEqual([{ podId: pod.id, image: "ghcr.io/acme/clauderon-pod:test", cpus: 2, memoryMb: 4096 }]);
+  });
+
+  it("POD-7: pod.delete is sent for a Pod whose row the web app already deleted", async () => {
+    const { pod, gateway, agent, flush } = await setup();
+    await db.update(schema.run).set({ podId: null });
+    await db.delete(schema.pod);
+    await gateway.pods.command({ type: "pod.delete", podId: pod.id });
+    await flush();
+    expect(agent.of("pod.delete")).toEqual([{ podId: pod.id }]);
   });
 
   it("a Pod that starts running gets a login check and records the image digest", async () => {

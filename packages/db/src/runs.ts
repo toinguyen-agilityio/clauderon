@@ -250,14 +250,17 @@ export async function runStateCounts(db: Db): Promise<Partial<Record<RunState, n
 export async function getRunView(db: Db, runId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(runId)) return null;
   const [row] = await db
-    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, podOwnerId: pod.memberId })
+    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, podOwnerId: pod.memberId, podName: pod.name })
     .from(run)
     .innerJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, ticket.projectId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
-    .innerJoin(pod, eq(pod.id, run.podId))
+    .leftJoin(pod, eq(pod.id, run.podId))
     .where(eq(run.id, runId));
   if (!row) return null;
-  const [podOwner] = await db.select({ email: member.email, name: member.name }).from(member).where(eq(member.id, row.podOwnerId));
-  return { ...row, snapshot: row.run.flowSnapshot as FlowSnapshot, podOwner: podOwner!, attempts: await attemptsOfRun(db, runId) };
+  // Null once the Pod was removed (POD-7).
+  const [podOwner] = row.podOwnerId
+    ? await db.select({ email: member.email, name: member.name }).from(member).where(eq(member.id, row.podOwnerId))
+    : [];
+  return { ...row, snapshot: row.run.flowSnapshot as FlowSnapshot, podOwner: podOwner ?? null, attempts: await attemptsOfRun(db, runId) };
 }

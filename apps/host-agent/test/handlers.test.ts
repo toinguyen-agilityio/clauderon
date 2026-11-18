@@ -38,6 +38,15 @@ describe("Pods (T1-16)", () => {
     expect(link.of("pod.status")).toEqual([{ podId: POD, status: "running", containerId: `id-${CONTAINER}`, imageDigest: "sha256:abc" }]);
   });
 
+  it("POD-7: pod.delete removes the container and its Workspace volume, and a missing Pod is fine", async () => {
+    await link.deliver("pod.create", { podId: POD, image: "img", cpus: 2, memoryMb: 4096 });
+    await link.deliver("pod.delete", { podId: POD });
+    expect(docker.containers.has(CONTAINER)).toBe(false);
+    expect(docker.volumes.has(`clauderon-ws-${POD}`)).toBe(false);
+    await link.deliver("pod.delete", { podId: "missing" });
+    expect(link.of("pod.status").map((s) => s.status)).toEqual(["running"]);
+  });
+
   it("start and stop report the new status; a failure reports error", async () => {
     await link.deliver("pod.create", { podId: POD, image: "img", cpus: 2, memoryMb: 4096 });
     await link.deliver("pod.stop", { podId: POD, image: "img", cpus: 2, memoryMb: 4096 });
@@ -237,6 +246,18 @@ describe("Terminals (POD-9)", () => {
     expect(tty.closed).toBe(true);
     expect(link.of("terminal.output")).toEqual([{ sessionId: "t1", data: "Logged in" }]);
     expect(link.of("terminal.closed")).toEqual([{ sessionId: "t1", exitCode: 0 }]);
+  });
+
+  it("POD-5: a login session runs only the Host Agent's own login command, never a shell", async () => {
+    await link.deliver("terminal.open", { sessionId: "g1", podId: POD, cols: 1000, rows: 40, login: "gh" });
+    await link.deliver("terminal.open", { sessionId: "c1", podId: POD, cols: 1000, rows: 40, login: "claude" });
+    const [gh, claude] = docker.ttys;
+    expect(gh).toMatchObject({ argv: ["bash", "-lc", "timeout --foreground 900 gh auth login --web --hostname github.com --git-protocol https && gh auth setup-git"] });
+    expect(gh!.options).toMatchObject({ user: "pod", env: { GH_BROWSER: "true", GH_PROMPT_DISABLED: "1" } });
+    expect(claude).toMatchObject({ argv: ["bash", "-lc", "timeout --foreground 900 claude auth login"] });
+
+    await link.deliver("terminal.input", { sessionId: "c1", podId: POD, data: "pasted-code\r" });
+    expect(claude!.written).toEqual(["pasted-code\r"]);
   });
 
   it("answers terminal.close for a session it does not know", async () => {

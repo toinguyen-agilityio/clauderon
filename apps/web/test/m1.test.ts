@@ -13,7 +13,7 @@ import {
   type TestDatabase,
 } from "@clauderon/testing";
 import type { AppDeps } from "../src/server/deps";
-import { createMyPod, podAction, setMyPodLimits, terminalAccess, viewPods } from "../src/server/pods";
+import { createMyPod, gbToMb, podAction, removePod, setMyPodSettings, terminalAccess, viewPod, viewPods } from "../src/server/pods";
 import { enableRepository, enableableRepositories, syncProject } from "../src/server/projects";
 import { viewRun, viewRuns } from "../src/server/runs";
 import { startDialog, startRuns } from "../src/server/start";
@@ -60,6 +60,19 @@ describe("Pods (POD-2, POD-4, POD-6)", () => {
     expect(await actions()).toEqual(["pod.create"]);
   });
 
+  it("Create my Pod takes the limits from its dialog, capped by the ceiling", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    expect(await createMyPod(deps, ann, { slots: 9, cpus: 2, memoryMb: 4096 })).toEqual({ ok: false, reason: "limits", error: "Slots are capped at 4." });
+    expect(await db.select().from(schema.pod)).toEqual([]);
+    expect(commands).toEqual([]);
+
+    expect(await createMyPod(deps, ann, { slots: 2, cpus: 2, memoryMb: 4096, name: "x".repeat(61) })).toMatchObject({ ok: false, error: "The name is at most 60 characters." });
+    expect(await createMyPod(deps, ann, { slots: 2, cpus: 2, memoryMb: gbToMb("9") })).toMatchObject({ ok: false, error: "RAM is capped at 8 GB." });
+
+    expect(await createMyPod(deps, ann, { slots: "3", cpus: "1.5", memoryMb: gbToMb("2.5"), name: "  Ann's builder  " })).toEqual({ ok: true, podId: expect.any(String) });
+    expect((await db.select().from(schema.pod))[0]).toMatchObject({ name: "Ann's builder", slots: 3, cpus: 1.5, memoryMb: 2560 });
+  });
+
   it("T1-1: over-commit shows a warning but creates", async () => {
     await recordHostConnected(db, { agentVersion: "1", processId: "p", arch: "arm64", cpus: 4, memoryMb: 8192, diskGb: 100, dockerRunning: true }, new Date());
     for (const email of ["a@x.com", "b@x.com", "c@x.com"]) expect((await createMyPod(deps, await memberRow(db, email))).ok).toBe(true);
@@ -103,6 +116,63 @@ describe("Pods (POD-2, POD-4, POD-6)", () => {
 
     const view = await viewPods(deps, ann);
     expect(view.mine).toMatchObject({ id: pod.id, ready: true, inUse: 1, queued: 1, ghAccount: "ann-gh", tokenRepos: ["acme/web"], owner: { name: "Ann" } });
+  });
+
+  it("the Pod page shows the Runs holding Slots and the queue to every Member, actions only to the owner", async () => {
+    const ann = await memberRow(db, "ann@example.com", "Ann");
+    const bob = await memberRow(db, "bob@example.com");
+    const pod = await podRow(db, ann.id, { slots: 1 });
+    const project = await projectRow(db);
+    const t1 = await ticketRow(db, project.id, 1);
+    const t2 = await ticketRow(db, project.id, 2);
+    await startSampleBatch(db, ann, pod.id, [t1.id, t2.id], deps.clock.now());
+    await db.update(schema.run).set({ state: "waiting_for_human" }).where(sql`ticket_id = ${t1.id}`);
+
+    const mine = await viewPod(deps, ann, pod.id);
+    expect(mine).toMatchObject({ pod: { id: pod.id, mine: true, inUse: 1, queued: 1 } });
+    if (mine === "not-found") throw new Error("expected the Pod");
+    expect(mine.using).toEqual([expect.objectContaining({ state: "waiting_for_human", key: expect.stringMatching(/#1$/) })]);
+    expect(mine.pod.queue).toEqual([expect.objectContaining({ state: "queued", position: 1, key: expect.stringMatching(/#2$/) })]);
+
+    expect(await viewPod(deps, bob, pod.id)).toMatchObject({ pod: { id: pod.id, mine: false } });
+    expect(await viewPod(deps, ann, "not-a-uuid")).toBe("not-found");
+  });
+
+  it("POD-7: Remove Pod is refused while a Run is Active, then deletes the row and keeps the ended Runs", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    const pod = await podRow(db, ann.id);
+    const project = await projectRow(db);
+    const ticket = await ticketRow(db, project.id, 1);
+    await startSampleBatch(db, ann, pod.id, [ticket.id], deps.clock.now());
+
+    expect(await removePod(deps, bob, pod.id)).toBe("not-found");
+    for (const state of ["queued", "failed", "interrupted"] as const) {
+      await db.update(schema.run).set({ state });
+      expect(await removePod(deps, ann, pod.id)).toEqual({ ok: false, reason: "busy" });
+    }
+    expect(commands).toEqual([]);
+
+    await db.update(schema.run).set({ state: "succeeded" });
+    expect(await removePod(deps, ann, pod.id)).toEqual({ ok: true });
+    expect(await db.select().from(schema.pod)).toEqual([]);
+    expect((await db.select().from(schema.run))[0]).toMatchObject({ podId: null, state: "succeeded" });
+    expect(commands).toEqual([{ type: "pod.delete", podId: pod.id }]);
+    expect(await actions()).toContain("pod.delete");
+    expect(await viewRun(deps, (await db.select().from(schema.run))[0]!.id)).toMatchObject({ podOwner: null });
+
+    // The owner can create a new Pod afterwards.
+    expect((await createMyPod(deps, ann)).ok).toBe(true);
+  });
+
+  it("POD-7: an Operator can remove another Member's Pod", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const op = await memberRow(db, "op@example.com");
+    const pod = await podRow(db, ann.id);
+    deps.operators = ["op@example.com"];
+    expect(await viewPod(deps, op, pod.id)).toMatchObject({ canRemove: true, pod: { mine: false } });
+    expect(await removePod(deps, op, pod.id)).toEqual({ ok: true });
+    expect(await actions()).toEqual(["pod.delete"]);
   });
 
   it("T1-3: a Member who is not the owner gets 404 on the terminal page", async () => {
@@ -325,7 +395,7 @@ describe("Slots, limits and the queue (spec M2 §6)", () => {
   it("T2-9: setting Slots above the ceiling is refused and saves nothing", async () => {
     const ann = await memberRow(db, "ann@example.com");
     const pod = await podRow(db, ann.id);
-    expect(await setMyPodLimits(deps, ann, pod.id, { slots: 5, cpus: 2, memoryMb: 4096 })).toEqual({ ok: false, error: "Slots are capped at 4." });
+    expect(await setMyPodSettings(deps, ann, pod.id, { slots: 5, cpus: 2, memoryMb: 4096 })).toEqual({ ok: false, error: "Slots are capped at 4." });
     expect((await db.select().from(schema.pod))[0]!.slots).toBe(2);
     expect(commands).toEqual([]);
   });
@@ -333,9 +403,14 @@ describe("Slots, limits and the queue (spec M2 §6)", () => {
   it("the owner saves limits, an audit entry records them and the Gateway is asked to schedule", async () => {
     const ann = await memberRow(db, "ann@example.com");
     const pod = await podRow(db, ann.id);
-    expect(await setMyPodLimits(deps, ann, pod.id, { slots: 3, cpus: 1, memoryMb: 2048 })).toEqual({ ok: true });
-    expect((await db.select().from(schema.pod))[0]).toMatchObject({ slots: 3, cpus: 1, memoryMb: 2048 });
-    expect(commands).toEqual([{ type: "schedule", podId: pod.id }]);
+    expect(await setMyPodSettings(deps, ann, pod.id, { slots: 3, cpus: 1, memoryMb: 2048, name: "Build box" })).toEqual({ ok: true });
+    expect((await db.select().from(schema.pod))[0]).toMatchObject({ name: "Build box", slots: 3, cpus: 1, memoryMb: 2048 });
+    expect(await setMyPodSettings(deps, ann, pod.id, { slots: 3, cpus: 1, memoryMb: 2048, name: "   " })).toEqual({ ok: true });
+    expect((await db.select().from(schema.pod))[0]!.name).toBeNull();
+    expect(commands).toEqual([
+      { type: "schedule", podId: pod.id },
+      { type: "schedule", podId: pod.id },
+    ]);
     const [entry] = await db.select().from(schema.auditEntry);
     expect(entry).toMatchObject({ action: "pod.limits", actorEmail: "ann@example.com" });
   });
@@ -344,7 +419,7 @@ describe("Slots, limits and the queue (spec M2 §6)", () => {
     const ann = await memberRow(db, "ann@example.com");
     const bob = await memberRow(db, "bob@example.com");
     const pod = await podRow(db, ann.id);
-    expect(await setMyPodLimits(deps, bob, pod.id, { slots: 3, cpus: 1, memoryMb: 2048 })).toBe("not-found");
+    expect(await setMyPodSettings(deps, bob, pod.id, { slots: 3, cpus: 1, memoryMb: 2048 })).toBe("not-found");
     expect((await db.select().from(schema.pod))[0]!.slots).toBe(2);
   });
 

@@ -15,6 +15,20 @@
       "when": 1794821730018,
       "tag": "0001_m1_sync_and_pr_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794927900926,
+      "tag": "0002_pod_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794928555165,
+      "tag": "0003_pod_name",
+      "breakpoints": true
     }
   ]
 }

@@ -4,8 +4,11 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 import { openGatewaySocket } from "../../../../../components/gateway-socket";
 
-/** xterm.js over the Gateway's `/terminal` socket; resize follows the window. */
-export function Terminal({ gatewayUrl, podId }: { gatewayUrl: string; podId: string }) {
+/**
+ * xterm.js over the Gateway's `/terminal` socket; resize follows the window.
+ * `command`, when given, is typed once the shell first prints its prompt.
+ */
+export function Terminal({ gatewayUrl, podId, command }: { gatewayUrl: string; podId: string; command?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState("Connecting…");
 
@@ -27,6 +30,7 @@ export function Terminal({ gatewayUrl, podId }: { gatewayUrl: string; podId: str
         term.dispose();
         return;
       }
+      let pending = command;
       const send = (message: object) => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify(message));
       socket.onopen = () => {
         setStatus("Connected");
@@ -34,7 +38,12 @@ export function Terminal({ gatewayUrl, podId }: { gatewayUrl: string; podId: str
       };
       socket.onmessage = (event) => {
         const message = JSON.parse(String(event.data)) as { type: string; data?: string };
-        if (message.type === "output" && message.data) term.write(message.data);
+        if (message.type !== "output" || !message.data) return;
+        term.write(message.data);
+        if (pending) {
+          send({ type: "input", data: `${pending}\r` });
+          pending = undefined;
+        }
       };
       socket.onclose = (event) => {
         setStatus(event.code === 4403 ? "Your access was removed." : event.code === 4404 ? "Not found." : "Closed. Reload to open a new shell.");
@@ -57,7 +66,7 @@ export function Terminal({ gatewayUrl, podId }: { gatewayUrl: string; podId: str
       disposed = true;
       cleanup();
     };
-  }, [gatewayUrl, podId]);
+  }, [gatewayUrl, podId, command]);
 
   return (
     <div className="stack" style={{ gap: 8 }}>

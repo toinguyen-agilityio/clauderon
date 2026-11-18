@@ -29,9 +29,13 @@ export function createGatewayServer(link: HostLink, hub: BrowserHub, terminals?:
     } else if (url.pathname === "/browser") {
       wss.handleUpgrade(req, socket, head, (ws) => void hub.attach(fromWebSocket(ws), url.searchParams.get("ticket")));
     } else if (url.pathname === "/terminal" && terminals) {
-      const size = { cols: Number(url.searchParams.get("cols")) || undefined, rows: Number(url.searchParams.get("rows")) || undefined };
+      const options = {
+        cols: Number(url.searchParams.get("cols")) || undefined,
+        rows: Number(url.searchParams.get("rows")) || undefined,
+        login: url.searchParams.get("login"),
+      };
       wss.handleUpgrade(req, socket, head, (ws) =>
-        void terminals.attach(fromWebSocket(ws), url.searchParams.get("ticket"), url.searchParams.get("podId"), size),
+        void terminals.attach(fromWebSocket(ws), url.searchParams.get("ticket"), url.searchParams.get("podId"), options),
       );
     } else {
       socket.destroy();

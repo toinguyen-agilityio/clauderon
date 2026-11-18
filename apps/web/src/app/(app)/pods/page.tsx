@@ -1,19 +1,18 @@
+import { POD_DEFAULTS } from "@clauderon/db";
 import Link from "next/link";
-import { Avatar } from "../../../components/brand";
 import { ago } from "../../../components/format";
 import { Icon } from "../../../components/icons";
-import { PodPill } from "../../../components/state-pill";
 import { viewPods, type PodView } from "../../../server/pods";
 import { deps, requireMember } from "../../../server/runtime";
-import { createPodAction } from "./actions";
-import { PodActions } from "./pod-actions";
-import { PodLimits } from "./pod-limits";
+import { CreatePod } from "./create-pod";
+import { defaultPodName, formatGb, LoginChip, podName, PodStatusChip, ReadyChip, SlotBar, SlotChips } from "./pod-parts";
 
 export const dynamic = "force-dynamic";
 
 export default async function PodsPage() {
   const member = await requireMember();
   const { host, pods, mine, limits, overCommitted, ceiling } = await viewPods(deps(), member);
+  const others = pods.filter((p) => !p.mine);
   const now = new Date();
   const connected = host?.connected === true;
   const facts = host
@@ -37,26 +36,17 @@ export default async function PodsPage() {
             start always run on your Pod.
           </p>
         </div>
-        {!mine && (
-          <form action={createPodAction}>
-            <button type="submit" className="btn primary">
-              {Icon.plus}
-              Create my Pod
-            </button>
-          </form>
-        )}
+        {!mine && <CreatePod defaults={POD_DEFAULTS} ceiling={ceiling} defaultName={defaultPodName(member)} />}
       </div>
 
-      {mine && mine.status === "running" && !(mine.claudeLoggedIn && mine.ghLoggedIn) && (
+      {mine && !mine.ready && (
         <div className="banner wait">
           <div className="grow small">
-            <b>Log in before you start Runs.</b> Open the terminal and run{" "}
-            {!mine.claudeLoggedIn && <span className="mono">claude</span>}
-            {!mine.claudeLoggedIn && !mine.ghLoggedIn && " and "}
-            {!mine.ghLoggedIn && <span className="mono">gh auth login</span>} with your own accounts. Logins stay in your Workspace.
+            <b>Your Pod is not Ready yet.</b> Runs start once it is running and logged in to Claude Code and GitHub. Its page does the
+            logins with one button in the web terminal.
           </div>
-          <Link className="btn sm primary" href={`/pods/${mine.id}/terminal`}>
-            Open terminal
+          <Link className="btn sm primary" href={`/pods/${mine.id}`}>
+            Set up my Pod
           </Link>
         </div>
       )}
@@ -105,104 +95,97 @@ export default async function PodsPage() {
             </div>
           </div>
         )}
-
-        <div className="pod-grid">
-          {pods.map((pod) => (
-            <PodTile key={pod.id} pod={pod} hostConnected={connected} now={now} ceiling={ceiling} />
-          ))}
-          {!mine && (
-            <form action={createPodAction} className="pod-tile new">
-              <span style={{ color: "var(--fg2)" }}>{Icon.cube}</span>
-              <b>Create my Pod</b>
-              <span className="small faint">One container for you: 2 Slots, 2 CPU, 4 GB, with its own Workspace.</span>
-              <button type="submit" className="btn primary sm" style={{ marginTop: 6 }}>
-                {Icon.plus}
-                Create my Pod
-              </button>
-            </form>
-          )}
-        </div>
       </div>
+
+      <h2>Your Pod</h2>
+      <div className="pod-grid">
+        {mine ? (
+          <PodTile pod={mine} hostConnected={connected} now={now} />
+        ) : (
+          <div className="pod-tile new" data-testid="no-pod">
+            <span style={{ color: "var(--fg2)" }}>{Icon.cube}</span>
+            <b>You have no Pod yet</b>
+            <span className="small faint">
+              One container for you with its own Workspace. Its page then walks you through logging in to Claude Code and GitHub.
+            </span>
+            <CreatePod defaults={POD_DEFAULTS} ceiling={ceiling} defaultName={defaultPodName(member)} className="btn primary sm" />
+          </div>
+        )}
+      </div>
+
+      {others.length > 0 && (
+        <>
+          <h2>
+            Team Pods <span className="faint num small">{others.length}</span>
+          </h2>
+          <div className="pod-grid compact" data-testid="team-pods">
+            {others.map((pod) => (
+              <TeamPodTile key={pod.id} pod={pod} hostConnected={connected} />
+            ))}
+          </div>
+        </>
+      )}
     </>
   );
 }
 
-function LoginRow({ ok, label, account }: { ok: boolean; label: string; account: string | null }) {
+/** One Pod on the Pods page; the whole tile opens its Pod page. */
+function PodTile({ pod, hostConnected, now }: { pod: PodView; hostConnected: boolean; now: Date }) {
+  const up = pod.status === "running";
   return (
-    <div className="login-row">
-      <span className={`ndot sm ${ok ? "succeeded" : ""}`}>{ok && Icon.check}</span>
-      <span>{label}</span>
-      <span className={`acct ${ok && account ? "mono" : "faint"}`}>{ok ? (account ?? "logged in") : "not logged in"}</span>
-    </div>
+    <Link
+      href={`/pods/${pod.id}`}
+      className={`pod-tile ${pod.mine ? "mine" : ""} ${up && hostConnected ? "" : "off"}`}
+      data-testid={pod.mine ? "my-pod" : undefined}
+    >
+      <div className="row between">
+        <span style={{ color: "var(--fg2)" }}>{Icon.cube}</span>
+        <PodStatusChip status={pod.status} hostConnected={hostConnected} />
+      </div>
+
+      <div className="stack" style={{ gap: 6 }}>
+        <h3>{podName(pod)}</h3>
+        <div className="chips-row">
+          <ReadyChip ready={pod.ready} />
+          <span className="pill plain">{pod.mine ? `${pod.owner.name ?? pod.owner.email} · you` : pod.owner.email}</span>
+        </div>
+      </div>
+
+      <div className="stack" style={{ gap: 6 }}>
+        <div className="chips-row">
+          <LoginChip ok={pod.claudeLoggedIn} label="Claude Code" />
+          <LoginChip ok={pod.ghLoggedIn} label="gh" account={pod.ghAccount} />
+        </div>
+        <div className="small faint">
+          <span className="mono">{pod.imageTag.split("/").at(-1)}</span> · {pod.cpus} CPU · {formatGb(pod.memoryMb)} RAM · checked{" "}
+          {ago(pod.loginsCheckedAt, now)}
+        </div>
+      </div>
+
+      <div className="stack" style={{ gap: 6 }}>
+        <div className="chips-row">
+          <SlotChips inUse={pod.inUse} slots={pod.slots} queued={pod.queued} />
+        </div>
+        <SlotBar slots={pod.slots} inUse={pod.inUse} />
+      </div>
+    </Link>
   );
 }
 
-function PodTile({ pod, hostConnected, now, ceiling }: { pod: PodView; hostConnected: boolean; now: Date; ceiling: { slots: number; cpus: number; memoryMb: number } }) {
-  const up = pod.status === "running";
-  const owner = pod.owner.name ?? pod.owner.email;
+/** Another Member's Pod: a smaller tile with status, Ready and Slots only. */
+function TeamPodTile({ pod, hostConnected }: { pod: PodView; hostConnected: boolean }) {
+  const up = pod.status === "running" && hostConnected;
   return (
-    <div className={`pod-tile ${pod.mine ? "mine" : ""} ${up && hostConnected ? "" : "off"}`} data-testid={pod.mine ? "my-pod" : undefined}>
-      <div className="row between" style={{ alignItems: "flex-start" }}>
-        <div className="row" style={{ gap: 8 }}>
-          <Avatar name={pod.owner.name} email={pod.owner.email} picture={pod.owner.pictureUrl} />
-          <div>
-            <h3>{owner}&apos;s Pod</h3>
-            <span className="faint small">{pod.mine ? "you" : pod.owner.email}</span>
-          </div>
-        </div>
-        <div className="row" style={{ gap: 4, justifyContent: "flex-end" }}>
-          {hostConnected ? <PodPill status={pod.status} /> : <span className="pill intr">Unknown · agent offline</span>}
-          {pod.ready && <span className="pill acc plain">Ready</span>}
-        </div>
+    <Link href={`/pods/${pod.id}`} className={`pod-tile compact ${up ? "" : "off"}`}>
+      <div className="row between" style={{ flexWrap: "nowrap" }}>
+        <h3 className="clip">{podName(pod)}</h3>
+        <PodStatusChip status={pod.status} hostConnected={hostConnected} />
       </div>
-
-      <div className="stack" style={{ gap: 6 }}>
-        <div className="small">
-          Image <span className="mono faint">{pod.imageTag.split("/").at(-1)}</span>
-        </div>
-        <LoginRow ok={pod.claudeLoggedIn} label="Claude Code" account={null} />
-        <LoginRow ok={pod.ghLoggedIn} label="gh" account={pod.ghAccount} />
-        <div className="small faint">
-          {pod.tokenRepos.length > 0 ? `Reaches ${pod.tokenRepos.join(", ")}` : "Reaches no Project yet"} · checked {ago(pod.loginsCheckedAt, now)}
-        </div>
+      <span className="small faint clip">{pod.owner.email}</span>
+      <div className="chips-row">
+        <ReadyChip ready={pod.ready} />
+        <SlotChips inUse={pod.inUse} slots={pod.slots} queued={pod.queued} />
       </div>
-
-      <div className="stack" style={{ gap: 6 }}>
-        <div className="row between small">
-          <span>Slots</span>
-          <span className="num faint">
-            {pod.inUse}/{pod.slots} busy · {pod.queued} queued
-          </span>
-        </div>
-        <div className="slots" aria-label={`${pod.inUse} of ${pod.slots} Slots busy`}>
-          {Array.from({ length: pod.slots }, (_, i) => (
-            <span key={i} className={`slot ${i < pod.inUse ? "run" : ""}`} />
-          ))}
-        </div>
-      </div>
-
-      <div className="small faint">
-        {pod.cpus} CPU · {Math.round(pod.memoryMb / 1024)} GB RAM
-      </div>
-      {pod.queue.length > 0 && (
-        <details className="pod-queue" data-testid="pod-queue">
-          <summary className="small">Queue ({pod.queue.length})</summary>
-          <ol className="stack small" style={{ gap: 4, marginTop: 6, paddingLeft: 18 }}>
-            {pod.queue.map((q) => (
-              <li key={q.runId}>
-                <Link href={`/runs/${q.runId}`}>
-                  <span className="mono">{q.key}</span> {q.ticketTitle}
-                </Link>{" "}
-                <span className="faint">
-                  · {q.flowName} · {q.mode === "dry" ? "Dry-run" : "Real"} · queued {ago(q.queuedAt, now)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </details>
-      )}
-      {pod.mine && <PodLimits podId={pod.id} limits={{ slots: pod.slots, cpus: pod.cpus, memoryMb: pod.memoryMb }} ceiling={ceiling} />}
-      {pod.mine && <PodActions podId={pod.id} status={pod.status} busy={pod.inUse > 0} />}
-    </div>
+    </Link>
   );
 }

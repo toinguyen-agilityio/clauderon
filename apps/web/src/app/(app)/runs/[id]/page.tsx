@@ -17,7 +17,8 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   if (run === "not-found") notFound();
   const r = run.run;
   const now = new Date();
-  const podOwner = run.podOwner.name ?? run.podOwner.email;
+  const podOwner = run.podOwner ? (run.podOwner.name ?? run.podOwner.email) : null;
+  const podLabel = run.podName ?? `${podOwner}'s Pod`;
   const failedAt = run.timeline.find((n) => n.state === "failed");
   const runningAt = run.timeline.find((n) => n.state === "running");
 
@@ -39,9 +40,13 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               <span className="faint">·</span>
               <span className="small">{run.snapshot.name}</span>
               <span className="faint">·</span>
-              <Link className="small" href="/pods">
-                {podOwner}&apos;s Pod
-              </Link>
+              {r.podId && podOwner ? (
+                <Link className="small" href={`/pods/${r.podId}`}>
+                  {podLabel}
+                </Link>
+              ) : (
+                <span className="small faint">Pod removed</span>
+              )}
               <span className="faint">·</span>
               <span className="row" style={{ gap: 6 }}>
                 <Avatar name={run.starter.name} email={run.starter.email} picture={run.starter.pictureUrl} />
@@ -68,7 +73,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
         <div className="banner" role="status">
           <div className="grow">
             <p>
-              <b>Queued on {podOwner}&apos;s Pod</b>
+              <b>Queued on {podLabel}</b>
             </p>
             <p className="small muted">Starts first-in, first-out when a Slot frees up and the Pod is running.</p>
           </div>
