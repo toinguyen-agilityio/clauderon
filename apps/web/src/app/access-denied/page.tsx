@@ -11,9 +11,9 @@ export default async function AccessDeniedPage() {
     <div className="signin">
       <div className="card signin-card">
         <Brand />
-        <div className="stack" style={{ gap: 6 }}>
+        <div className="signin-copy">
           <h1>Access denied</h1>
-          <p className="muted">
+          <p>
             {email ? (
               <>
                 <b>{email}</b> is not on this app&apos;s allowlist, or Google has not verified it.
@@ -24,7 +24,7 @@ export default async function AccessDeniedPage() {
             Ask whoever runs Clauderon to add your email, then sign in again.
           </p>
         </div>
-        <Link className="btn primary" href="/sign-in" style={{ justifyContent: "center" }}>
+        <Link className="btn primary lg block" href="/sign-in">
           Use another Google account
         </Link>
       </div>

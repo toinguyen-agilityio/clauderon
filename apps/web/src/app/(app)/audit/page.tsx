@@ -65,7 +65,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                 <th>Member</th>
                 <th>Action</th>
                 <th>Subject</th>
-                <th>Detail</th>
+                <th className="col-wide">Detail</th>
               </tr>
             </thead>
             <tbody>
@@ -85,7 +85,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                     <td className="small nowrap num">{formatTime(r.at)}</td>
                     <td className="small nowrap">{r.actorEmail}</td>
                     <td className="mono small nowrap">{r.action}</td>
-                    <td className="small nowrap">
+                    <td className="small wrap-any">
                       {r.subjectType}{" "}
                       {link ? (
                         <Link className="mono" href={link}>
@@ -95,7 +95,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                         <span className="mono">{r.subjectId}</span>
                       )}
                     </td>
-                    <td className="small faint" style={{ overflowWrap: "anywhere" }}>
+                    <td className="small faint wrap-any">
                       {detailText(r.detail)}
                     </td>
                   </tr>

@@ -231,7 +231,7 @@ export function RunLive({
 
             {attempt.retryContext && (
               <details className="stack" style={{ gap: 6 }}>
-                <summary className="eyebrow" style={{ cursor: "pointer" }}>
+                <summary className="eyebrow">
                   Retry context
                 </summary>
                 <pre className="outv mono" style={{ whiteSpace: "pre-wrap" }}>

@@ -27,14 +27,14 @@ export default async function LibraryPage() {
         <summary>
           <b>New Node</b>
         </summary>
-        <div style={{ marginTop: 12 }}>
+        <div className="details-body">
           <NodeForm initial={EMPTY_NODE} />
         </div>
       </details>
 
       <div className="card" data-testid="library-list">
         <div className="tbl-wrap">
-          <table className="tbl">
+          <table className="tbl top">
             <thead>
               <tr>
                 <th>Name</th>
@@ -50,26 +50,26 @@ export default async function LibraryPage() {
                 const locked = n.usedBy.find((u) => u.lock);
                 return (
                   <tr key={n.id}>
-                    <td className="t-title" colSpan={1} style={{ verticalAlign: "top" }}>
+                    <td className="t-title" colSpan={1}>
                       <details>
                         <summary>
                           <b>{n.name}</b> {n.isSample && <span className="tag">sample</span>}
                         </summary>
-                        <div style={{ marginTop: 10, minWidth: 420 }}>
+                        <div className="details-body node-form-wrap">
                           <NodeForm initial={value} readOnly={n.isSample} usedBy={n.usedBy.length} />
                         </div>
                       </details>
                     </td>
-                    <td className="small" style={{ verticalAlign: "top" }}>
+                    <td className="small">
                       {n.kind}
                     </td>
-                    <td className="small mono" style={{ verticalAlign: "top" }}>
+                    <td className="small mono">
                       {n.inputs.map((i) => `${i.name}:${i.type}${i.required ? "*" : ""}`).join(", ") || <span className="faint">none</span>}
                     </td>
-                    <td className="small mono" style={{ verticalAlign: "top" }}>
+                    <td className="small mono">
                       {n.outputs.map((o) => `${o.name}:${o.type}${o.optional ? "?" : ""}`).join(", ") || <span className="faint">none</span>}
                     </td>
-                    <td className="small" style={{ verticalAlign: "top" }}>
+                    <td className="small">
                       {n.usedBy.length === 0 ? (
                         <span className="faint">no Flow</span>
                       ) : (

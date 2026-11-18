@@ -450,3 +450,47 @@ fieldset.choices legend { font-weight: 600; font-size: 12.5px; margin-bottom: 6p
 .choice { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .choice input[type="radio"], .choice input[type="checkbox"] { flex: none; accent-color: var(--accent); }
 .choice .input { height: 30px; }
+
+/* Token alignment with DESIGN.md: buttons pad 16px, cards pad 24px. */
+.btn { padding: 0 16px; }
+.btn.sm { padding: 0 12px; }
+.card-pad { padding: 24px; }
+
+/* Layout and legibility fixes on top of the Mesh Gradient system. */
+.me-name { font-weight: 600; }
+.me-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.signin-copy { display: flex; flex-direction: column; gap: 6px; }
+.signin-copy p { color: var(--fg2); }
+.btn.lg { height: 44px; gap: 10px; }
+.btn.block { width: 100%; justify-content: center; }
+.banner.inset { margin: 0 16px; }
+.host-title { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.host-icon, .pod-icon { color: var(--fg2); display: inline-flex; }
+.section-title { margin-top: 4px; }
+/* Light theme: the dark amber badge needs light text for AA contrast. */
+:root[data-theme="light"] .badge { color: #fff; }
+
+/* Disclosure: one chevron style instead of the browser's triangle. */
+summary { display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; cursor: pointer; list-style: none; user-select: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: ""; flex: none; width: 5px; height: 5px; margin: 0 2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); opacity: 0.7; transition: transform 200ms var(--ease); }
+details[open] > summary::before { transform: rotate(45deg); }
+details[open] > summary.small { margin-bottom: 12px; }
+.details-body { margin-top: 12px; }
+.node-form-wrap { min-width: 420px; }
+
+/* Tables */
+.tbl.top td { vertical-align: top; }
+.tbl .col-wide { width: 40%; }
+.tbl .grow-cell { width: 100%; min-width: 200px; }
+.wrap-any { overflow-wrap: anywhere; }
+.plain-link { color: var(--fg); font-weight: 500; }
+
+/* Responsive: the canvas editor stacks below 1080px; Pod tiles auto-fit on tablets. */
+@media (max-width: 1080px) {
+  .flow-editor { grid-template-columns: minmax(0, 1fr); }
+  .flow-library { max-height: none; }
+}
+@media (max-width: 860px) {
+  .pod-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+}

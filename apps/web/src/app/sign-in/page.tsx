@@ -9,9 +9,9 @@ export default function SignInPage() {
     <div className="signin">
       <div className="card signin-card">
         <Brand />
-        <div className="stack" style={{ gap: 6 }}>
+        <div className="signin-copy">
           <h1>Sign in</h1>
-          <p className="muted">
+          <p>
             Use your Google account. Only emails on the team&apos;s allowlist can sign in, and your email is recorded on every Run you
             start and every approval you give.
           </p>
@@ -22,7 +22,7 @@ export default function SignInPage() {
             await signIn("google", { redirectTo: "/" });
           }}
         >
-          <button className="btn" type="submit" style={{ justifyContent: "center", gap: 10, height: 44, width: "100%" }}>
+          <button className="btn lg block" type="submit">
             <GoogleLogo /> Sign in with Google
           </button>
         </form>

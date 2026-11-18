@@ -236,17 +236,19 @@ export default async function PodPage({ params }: { params: Promise<{ id: string
                 <tbody>
                   {using.map((r) => (
                     <tr key={r.runId}>
-                      <td className="nowrap">
-                        <Link className="mono" href={`/runs/${r.runId}`}>
-                          {r.key}
-                        </Link>
+                      <td className="grow-cell">
+                        <span className="mono faint small">{r.key}</span>
+                        <div>
+                          <Link className="plain-link" href={`/runs/${r.runId}`}>
+                            {r.ticketTitle}
+                          </Link>
+                        </div>
+                        <div className="small faint">
+                          {r.flowName} · {ago(r.startedAt ?? r.queuedAt, now)}
+                        </div>
                       </td>
-                      <td className="small">{r.ticketTitle}</td>
-                      <td>
+                      <td className="actions">
                         <StatePill state={r.state} />
-                      </td>
-                      <td className="small faint nowrap">
-                        {r.flowName} · {ago(r.startedAt ?? r.queuedAt, now)}
                       </td>
                     </tr>
                   ))}
@@ -272,15 +274,17 @@ export default async function PodPage({ params }: { params: Promise<{ id: string
                   {pod.queue.map((q) => (
                     <tr key={q.runId}>
                       <td className="num faint">{q.position}</td>
-                      <td className="nowrap">
-                        <Link className="mono" href={`/runs/${q.runId}`}>
-                          {q.key}
-                        </Link>{" "}
+                      <td className="grow-cell">
+                        <span className="mono faint small">{q.key}</span>{" "}
                         {q.mode === "dry" && <span className="tag dry">Dry-run</span>}
-                      </td>
-                      <td className="small">{q.ticketTitle}</td>
-                      <td className="small faint nowrap">
-                        {q.flowName} · {ago(q.queuedAt, now)}
+                        <div>
+                          <Link className="plain-link" href={`/runs/${q.runId}`}>
+                            {q.ticketTitle}
+                          </Link>
+                        </div>
+                        <div className="small faint">
+                          {q.flowName} · {ago(q.queuedAt, now)}
+                        </div>
                       </td>
                     </tr>
                   ))}

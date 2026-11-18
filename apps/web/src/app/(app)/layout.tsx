@@ -22,8 +22,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <div className="me">
             <Avatar name={member.name} email={member.email} picture={member.pictureUrl} />
             <div className="me-text grow">
-              <div style={{ fontWeight: 600 }}>{member.name ?? member.email}</div>
-              <div className="small faint" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div className="me-name clip">{member.name ?? member.email}</div>
+              <div className="small faint me-email">
                 {member.email}
               </div>
               <form
