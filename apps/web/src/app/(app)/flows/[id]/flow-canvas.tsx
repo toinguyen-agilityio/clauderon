@@ -11,6 +11,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
@@ -24,7 +25,7 @@ import { MAX_ZOOM, MIN_ZOOM, boundsOf, centerOn, clampZoom, edgePath, fitBounds,
 
 export type HandleType = "source" | "target";
 export type CanvasNode = { id: string; x: number; y: number; selected: boolean; content: ReactNode };
-export type CanvasEdge = { id: string; fromNodeId: string; fromOutput: string; toNodeId: string; toInput: string; selected: boolean; reason: string | null };
+export type CanvasEdge = { id: string; color?: string; fromNodeId: string; fromOutput: string; toNodeId: string; toInput: string; selected: boolean; reason: string | null };
 export type Selection = { nodes: ReadonlySet<string>; edges: ReadonlySet<string> };
 export type CanvasConnection = { source: string; sourceHandle: string; target: string; targetHandle: string };
 export type FlowCanvasHandle = {
@@ -56,11 +57,12 @@ const EMPTY: Selection = { nodes: new Set(), edges: new Set() };
 const HandleContext = createContext<(nodeId: string, type: HandleType, name: string, event: ReactPointerEvent<HTMLElement>) => void>(() => {});
 
 /** A connection point on a Node. The canvas measures where it is to draw edges to it. */
-export function CanvasHandle({ nodeId, type, name, lit }: { nodeId: string; type: HandleType; name: string; lit?: boolean }) {
+export function CanvasHandle({ nodeId, type, name, lit, color }: { nodeId: string; type: HandleType; name: string; lit?: boolean; color?: string }) {
   const start = useContext(HandleContext);
   return (
     <span
       className={`fhandle ${type} ${lit ? "lit" : ""}`}
+      style={color ? ({ "--c": color } as CSSProperties) : undefined}
       data-node-id={nodeId}
       data-handle-type={type}
       data-handle-name={name}
@@ -365,7 +367,6 @@ export function FlowCanvas(props: Props) {
   };
   const fit = () => animateTo(fitBounds(boundsOf(nodeRects()), size), 200);
 
-  const grid = 24 * vp.k;
   const temp = connecting && handleAt(connecting.from.nodeId, connecting.from.type, connecting.from.name);
 
   return (
@@ -374,7 +375,6 @@ export function FlowCanvas(props: Props) {
         ref={rootRef}
         className="fc"
         data-testid="flow-canvas-surface"
-        style={{ backgroundSize: `${grid}px ${grid}px`, backgroundPosition: `${vp.x}px ${vp.y}px` }}
         onPointerDown={onBackgroundDown}
         onPointerMove={onBackgroundMove}
         onPointerUp={onBackgroundUp}
@@ -398,7 +398,7 @@ export function FlowCanvas(props: Props) {
               return (
                 <g key={edge.id} data-testid={edge.reason ? "edge-error" : "edge"} data-edge={edge.id}>
                   {edge.reason && <title>{edge.reason}</title>}
-                  <path d={d} className={`fc-edge ${kind}`} markerEnd={`url(#${uid}-arrow-${kind || "base"})`} />
+                  <path d={d} className={`fc-edge ${kind}`} style={edge.color ? ({ "--c": edge.color } as CSSProperties) : undefined} markerEnd={`url(#${uid}-arrow-${kind || "base"})`} />
                   <path d={d} className="fc-edge-hit" onPointerDown={(event) => onEdgeDown(event, edge)} />
                 </g>
               );
