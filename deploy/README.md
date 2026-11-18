@@ -11,6 +11,19 @@ web, gateway ──▶ postgres (container only, never published)
 
 All commands run from the repository root on the Pod Host.
 
+## Quick deploy
+
+Once the machine is prepared (sections 1 and 2), one command does sections 3 to 5 and checks the result:
+
+```sh
+deploy/deploy.sh           # first run creates deploy/.env.production with secrets and URLs, then lists what to fill in
+deploy/deploy.sh           # build, migrate, start, publish over Tailscale Serve, check the Host Agent
+deploy/deploy.sh status    # what runs, the URL, the Host Agent link
+deploy/deploy.sh down      # stop the stack and the Serve routes; the database is kept
+```
+
+It is safe to run again after `git pull`. It stops with a clear message when Docker or Tailscale is not running, when this machine is in another tailnet than `PUBLIC_URL`, or when a setting is missing. The Host Agent (section 6) and backups (section 7) are installed once by hand; the script prints the command when they are missing.
+
 ## 1. Prepare the machine (once)
 
 - A dedicated, always-on Mac (16 GB RAM is enough for six Members) with its own macOS account for Clauderon, so the stack does not share a session with anyone's personal data.
@@ -38,7 +51,7 @@ chmod 600 deploy/.env.production
 openssl rand -base64 32   # once each for POSTGRES_PASSWORD, SESSION_SECRET, HOST_AGENT_SECRET
 ```
 
-Fill in every value. `deploy/.env.production` is git-ignored and must never be committed.
+`deploy/deploy.sh` does this on its first run. Fill in every value. `deploy/.env.production` is git-ignored and must never be committed.
 
 | Variable | Used by | Value |
 | --- | --- | --- |
