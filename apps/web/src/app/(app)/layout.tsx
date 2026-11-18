@@ -1,9 +1,9 @@
+import { ThemeToggle } from "../../components/theme-toggle";
 import type { ReactNode } from "react";
 import { isOperator } from "@clauderon/db";
 import { signOut } from "../../auth";
 import { Avatar, Brand } from "../../components/brand";
 import { SideNav } from "../../components/side-nav";
-import { ThemeToggle } from "../../components/theme-toggle";
 import { deps, requireMember } from "../../server/runtime";
 
 /** The signed-in shell of the prototype: left rail, work area on the right. */
