@@ -55,6 +55,9 @@ const OUTPUT_COLOR: Record<string, string> = {
   screenshot: "--t-shot",
 };
 
+/** The CSS colour of an Output Type, for ports and edges on the Flow canvas. */
+export const outputColor = (type: string) => `var(${OUTPUT_COLOR[type] ?? "--fg3"})`;
+
 /** An Output Type with its colour, as on the Flow canvas. */
 export function OType({ type, label }: { type: string; label?: string }) {
   return (

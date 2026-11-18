@@ -335,37 +335,45 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 /* Flow canvas editor (M2) */
 .flow-editor { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; align-items: start; }
 .flow-library { max-height: 70vh; overflow-y: auto; }
-.flow-canvas { height: 70vh; min-height: 420px; overflow: hidden; }
-.lib-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: grab; }
-.fnode { min-width: 190px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
-.fnode.on { border-color: var(--accent-text); }
-.fnode-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.flow-canvas { position: relative; height: calc(100vh - 190px); min-height: 420px; overflow: hidden; }
+.lib-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 8px; border: 1px solid var(--line); border-left: 3px solid var(--nk, var(--fg3)); border-radius: 6px; background: var(--panel); cursor: grab; }
+.lib-kind { display: inline-flex; align-items: center; gap: 6px; }
+.lib-kind::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--nk, var(--fg3)); }
+.k-agent { --nk: var(--accent-text); }
+.k-command { --nk: var(--run); }
+.k-approve { --nk: var(--wait); }
+.k-grill { --nk: var(--intr); }
+.k-ticket { --nk: var(--t-shot); }
+.fnode { min-width: 190px; background: var(--panel-solid); border: 1px solid color-mix(in srgb, var(--nk, var(--fg3)) 45%, var(--line)); border-radius: 10px; font-size: 12px; overflow: visible; box-shadow: 0 2px 10px rgb(0 0 0 / 0.25); }
+.fnode.on { border-color: var(--nk, var(--accent-text)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--nk, var(--accent-text)) 45%, transparent), 0 6px 18px rgb(0 0 0 / 0.3); }
+.fnode-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border-bottom: 1px solid color-mix(in srgb, var(--nk, var(--fg3)) 35%, var(--line)); border-radius: 9px 9px 0 0; background: color-mix(in srgb, var(--nk, var(--fg3)) 20%, transparent); }
 .fnode-ports { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; }
+.ptype { font-family: var(--font-mono); font-size: 10.5px; color: var(--c, var(--fg3)); }
 .fport { position: relative; padding: 0 12px; line-height: 18px; }
 .fport.off { opacity: 0.45; }
 .fport.lit { background: var(--accent-weak); border-radius: 4px; }
 .fnode { position: relative; }
-.fhandle { position: absolute; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--fg3); border: 1px solid var(--panel-solid, var(--panel)); cursor: crosshair; touch-action: none; z-index: 2; }
+.fhandle { position: absolute; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--c, var(--fg3)); border: 2px solid var(--panel-solid, var(--panel)); cursor: crosshair; touch-action: none; z-index: 2; }
 .fhandle.target { left: -5px; }
 .fhandle.source { right: -5px; }
-.fhandle:hover { background: var(--accent-text); }
-.fhandle.lit { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.fhandle:hover { transform: scale(1.3); }
+.fhandle.lit { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent); }
 
-/* The hand-made canvas (flow-canvas.tsx): a pannable, zoomable surface with a dot grid */
-.fc { position: relative; width: 100%; height: 100%; overflow: hidden; cursor: grab; touch-action: none; user-select: none; background-image: radial-gradient(circle, var(--line-strong) 1px, transparent 1.2px); }
+/* The hand-made canvas (flow-canvas.tsx): a pannable, zoomable surface on a plain solid background */
+.fc { position: relative; width: 100%; height: 100%; overflow: hidden; cursor: grab; touch-action: none; user-select: none; background: color-mix(in srgb, var(--panel-solid) 60%, var(--bg)); }
 .fc:active { cursor: grabbing; }
 .fc-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 .fc-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .fc-node { position: absolute; left: 0; top: 0; cursor: default; }
 .fc-node.on { z-index: 5; }
-.fc-edge { fill: none; stroke: var(--fg3); stroke-width: 2; pointer-events: none; }
+.fc-edge { fill: none; stroke: var(--c, var(--fg3)); stroke-width: 2; pointer-events: none; }
 .fc-edge.sel { stroke: var(--accent-text); }
 .fc-edge.err { stroke: var(--fail); stroke-width: 2.5; stroke-dasharray: 6 4; }
 .fc-edge.temp { stroke: var(--accent-text); stroke-dasharray: 5 4; }
 .fc-edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
-.fc-arrow { fill: var(--fg3); }
-.fc-arrow.sel { fill: var(--accent-text); }
-.fc-arrow.err { fill: var(--fail); }
+.fc-arrow { fill: var(--fg3); fill: context-stroke; }
+.fc-arrow.sel { fill: var(--accent-text); fill: context-stroke; }
+.fc-arrow.err { fill: var(--fail); fill: context-stroke; }
 .fc-controls { position: absolute; left: 12px; bottom: 12px; display: flex; flex-direction: column; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; background: var(--panel-solid, var(--panel)); cursor: default; }
 .fc-controls button { width: 28px; height: 28px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--fg); font-size: 16px; line-height: 1; cursor: pointer; }
 .fc-controls button:last-child { border-bottom: 0; }
@@ -566,6 +574,15 @@ details[open] > summary.small { margin-bottom: 12px; }
   .nf-delete { margin-left: 0; }
   .nf-dl-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The Flow editor runs edge to edge: the canvas takes all the room the shell leaves */
+.main:has(.flow-fill) { padding: 12px; }
+.main:has(.flow-fill) .view { max-width: none; }
+.flow-canvas { height: calc(100vh - 150px); }
+.fc-toggle { position: absolute; top: 10px; z-index: 6; background: var(--panel-solid); }
+.fc-toggle.left { left: 10px; }
+.fc-toggle.right { right: 10px; }
+.fc-controls { bottom: 12px; }
 
 /* Flows list: one card per Flow, with its Nodes in order */
 .flow-list { display: flex; flex-direction: column; gap: 28px; }
