@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
 import { flow, member, pod, run, ticket } from "./schema";
@@ -11,11 +11,17 @@ export const POD_DEFAULTS = { slots: 2, cpus: 2, memoryMb: 4096 } as const;
 export type CreatePodResult = { ok: true; pod: Pod } | { ok: false; reason: "exists" };
 
 /** Creates the Member's Pod row; a second one is refused by the unique `member_id` (POD-2). */
-export async function createPod(db: Db, owner: { id: string; email: string }, imageTag: string): Promise<CreatePodResult> {
+export async function createPod(
+  db: Db,
+  owner: { id: string; email: string },
+  imageTag: string,
+  limits: { slots: number; cpus: number; memoryMb: number } = POD_DEFAULTS,
+  name: string | null = null,
+): Promise<CreatePodResult> {
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(pod)
-      .values({ memberId: owner.id, status: "creating", imageTag, ...POD_DEFAULTS })
+      .values({ memberId: owner.id, name, status: "creating", imageTag, ...limits })
       .onConflictDoNothing({ target: pod.memberId })
       .returning();
     if (!row) return { ok: false, reason: "exists" } as const;
@@ -47,7 +53,7 @@ export async function podRunCounts(db: Db, podIds: readonly string[]): Promise<M
     .where(and(inArray(run.podId, [...podIds]), inArray(run.state, ["queued", "running", "waiting_for_human"])))
     .groupBy(run.podId, run.state);
   for (const r of rows) {
-    const c = counts.get(r.podId)!;
+    const c = counts.get(r.podId!)!;
     if (r.state === "queued") c.queued += r.n;
     else c.inUse += r.n;
   }
@@ -104,35 +110,66 @@ export async function applyPodLogins(db: Db, logins: PodLogins): Promise<Pod | n
   return row ?? null;
 }
 
+export type DeletePodResult = { ok: true } | { ok: false; reason: "missing" | "busy" };
+
+/**
+ * Removes a Pod's row (POD-7), refused while it has an Active Run: anything
+ * not Succeeded or Cancelled, Dry-runs included. Ended Runs keep their history
+ * with no Pod. The row lock serializes this with a Start queuing on the Pod.
+ */
+export async function deletePod(db: Db, podId: string, actorEmail: string): Promise<DeletePodResult> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select({ id: pod.id }).from(pod).where(eq(pod.id, podId)).for("update");
+    if (!row) return { ok: false, reason: "missing" } as const;
+    const [active] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(run)
+      .where(and(eq(run.podId, podId), notInArray(run.state, ["succeeded", "cancelled"])));
+    if (active!.n > 0) return { ok: false, reason: "busy" } as const;
+    await tx.delete(pod).where(eq(pod.id, podId));
+    await recordAudit(tx, { actorEmail, action: "pod.delete", subjectType: "pod", subjectId: podId });
+    return { ok: true } as const;
+  });
+}
+
 export async function setPodStatus(db: Db, podId: string, status: Pod["status"]): Promise<void> {
   await db.update(pod).set({ status }).where(eq(pod.id, podId));
 }
 
-/** Saves a Pod's limits (POD-2); CPU and RAM only take effect at the next Recreate. */
-export async function updatePodLimits(db: Db, podId: string, limits: { slots: number; cpus: number; memoryMb: number }): Promise<void> {
-  await db.update(pod).set(limits).where(eq(pod.id, podId));
+/** Saves a Pod's name and limits (POD-2); CPU and RAM only take effect at the next Recreate. */
+export async function updatePodSettings(
+  db: Db,
+  podId: string,
+  settings: { name: string | null; slots: number; cpus: number; memoryMb: number },
+): Promise<void> {
+  await db.update(pod).set(settings).where(eq(pod.id, podId));
 }
 
-export type QueuedRun = {
+export type PodRun = {
   runId: string;
+  state: (typeof run.$inferSelect)["state"];
   mode: "real" | "dry";
   queuedAt: Date;
+  startedAt: Date | null;
   ticketNumber: number;
   ticketTitle: string;
   projectId: string;
   flowName: string;
 };
+export type QueuedRun = PodRun;
 
-/** The Queued Runs of each Pod in the order they will start (POD-3, spec M2 §6). */
-export async function queuedRuns(db: Db, podIds: readonly string[]): Promise<Map<string, QueuedRun[]>> {
-  const queues = new Map<string, QueuedRun[]>(podIds.map((id) => [id, []]));
-  if (podIds.length === 0) return queues;
+/** Each Pod's Runs in the given states, oldest first. */
+async function podRunsIn(db: Db, podIds: readonly string[], states: PodRun["state"][]): Promise<Map<string, PodRun[]>> {
+  const byPod = new Map<string, PodRun[]>(podIds.map((id) => [id, []]));
+  if (podIds.length === 0) return byPod;
   const rows = await db
     .select({
       podId: run.podId,
       runId: run.id,
+      state: run.state,
       mode: run.mode,
       queuedAt: run.queuedAt,
+      startedAt: run.startedAt,
       ticketNumber: ticket.number,
       ticketTitle: ticket.title,
       projectId: ticket.projectId,
@@ -141,8 +178,18 @@ export async function queuedRuns(db: Db, podIds: readonly string[]): Promise<Map
     .from(run)
     .innerJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(flow, eq(flow.id, run.flowId))
-    .where(and(inArray(run.podId, [...podIds]), eq(run.state, "queued")))
+    .where(and(inArray(run.podId, [...podIds]), inArray(run.state, states)))
     .orderBy(asc(run.queuedAt), asc(run.id));
-  for (const { podId, ...entry } of rows) queues.get(podId)!.push(entry);
-  return queues;
+  for (const { podId, ...entry } of rows) byPod.get(podId!)!.push(entry);
+  return byPod;
+}
+
+/** The Queued Runs of each Pod in the order they will start (POD-3, spec M2 §6). */
+export function queuedRuns(db: Db, podIds: readonly string[]): Promise<Map<string, QueuedRun[]>> {
+  return podRunsIn(db, podIds, ["queued"]);
+}
+
+/** The Runs holding each Pod's Slots: Running or Waiting for a human. */
+export function slotRuns(db: Db, podIds: readonly string[]): Promise<Map<string, PodRun[]>> {
+  return podRunsIn(db, podIds, ["running", "waiting_for_human"]);
 }

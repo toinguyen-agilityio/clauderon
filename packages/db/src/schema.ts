@@ -123,6 +123,8 @@ export const pod = pgTable("pod", {
     .notNull()
     .unique()
     .references(() => member.id),
+  /** Shown instead of "<owner>'s Pod" when set. */
+  name: text("name"),
   containerId: text("container_id"),
   status: podStatus("status").notNull().default("creating"),
   imageTag: text("image_tag").notNull(),
@@ -267,9 +269,8 @@ export const run = pgTable(
       .notNull()
       .references(() => flow.id),
     flowSnapshot: jsonb("flow_snapshot").notNull(),
-    podId: uuid("pod_id")
-      .notNull()
-      .references(() => pod.id),
+    /** Null once its Pod was removed (POD-7); only ended Runs can lose their Pod. */
+    podId: uuid("pod_id").references(() => pod.id, { onDelete: "set null" }),
     starterMemberId: uuid("starter_member_id")
       .notNull()
       .references(() => member.id),

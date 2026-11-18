@@ -5,12 +5,17 @@ import { z } from "zod";
 
 const podStatus = z.enum(["creating", "running", "stopped", "error", "deleting"]);
 const podCommand = z.object({ podId: z.string(), image: z.string(), cpus: z.number(), memoryMb: z.number() });
+/** A login the Pod page runs for its owner instead of a shell (POD-5): the Host Agent owns the command. */
+export const podLogin = z.enum(["gh", "claude"]);
+export type PodLogin = z.infer<typeof podLogin>;
+
 const terminalCommand = z.object({
   sessionId: z.string(),
   podId: z.string(),
   data: z.string().optional(),
   cols: z.number().int().optional(),
   rows: z.number().int().optional(),
+  login: podLogin.optional(),
 });
 
 export const messageSchemas = {
@@ -38,7 +43,8 @@ export const messageSchemas = {
   "pod.start": podCommand,
   "pod.stop": podCommand,
   "pod.recreate": podCommand,
-  "pod.delete": podCommand,
+  /** Removes the container and its Workspace volume; the Pod row is already gone (POD-7). */
+  "pod.delete": z.object({ podId: z.string() }),
   "pod.status": z.object({
     podId: z.string(),
     status: podStatus,

@@ -33,6 +33,10 @@ export interface DockerClient {
   createContainer(spec: ContainerSpec): Promise<string>;
   startContainer(name: string): Promise<void>;
   stopContainer(name: string): Promise<void>;
+  /** Removes a container, stopping it first; a missing one is fine. */
+  removeContainer(name: string): Promise<void>;
+  /** Removes a named volume; a missing one is fine. */
+  removeVolume(name: string): Promise<void>;
   /** The digest of the image a container runs, or null when unknown. */
   imageDigest(image: string): Promise<string | null>;
   /** Runs a command in a container, streaming its output; resolves with the exit code. */

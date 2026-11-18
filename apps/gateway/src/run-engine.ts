@@ -110,7 +110,8 @@ export class RunEngine {
 
   private async prepare(runId: string): Promise<void> {
     const ctx = await getRunContext(this.opts.db, runId);
-    if (!ctx) return;
+    // Only an ended Run can have lost its Pod (POD-7); nothing drives it any more.
+    if (!ctx?.run.podId) return;
     const branch = branchName(ctx.ticket.number, ctx.ticket.title, runId);
     await updateRun(this.opts.db, runId, { branch });
     this.opts.link.send("workspace.prepare", {
@@ -137,7 +138,7 @@ export class RunEngine {
   /** Starts the next Node, or ends the Run when none is left (RUN-2, RUN-16). */
   private async advance(runId: string): Promise<void> {
     const ctx = await getRunContext(this.opts.db, runId);
-    if (!ctx || ctx.run.state !== "running") return;
+    if (!ctx?.run.podId || ctx.run.state !== "running") return;
     const attempts = await attemptsOfRun(this.opts.db, runId);
     const views = attempts.map((a) => ({ flowNodeId: a.flowNodeId, state: a.state, outputs: a.outputs.map((o) => o.name) }));
     const next = nextNode(snapshotFlow(ctx.snapshot), views);
@@ -310,7 +311,7 @@ export class RunEngine {
 
   private async fail(runId: string, reason: string): Promise<void> {
     const ctx = await getRunContext(this.opts.db, runId);
-    if (!ctx) return;
+    if (!ctx?.run.podId) return;
     if (await moveRun(this.opts.db, runId, "running", { state: "failed", endedAt: this.now(), failureReason: reason })) {
       await this.ended(runId, ctx.run.podId);
     }

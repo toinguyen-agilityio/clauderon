@@ -1,4 +1,5 @@
 import { POD_USER, containerName, type DockerClient, type TtySession } from "./docker";
+import type { PodLogin } from "@clauderon/protocol";
 import type { AgentLink, Log } from "./pods";
 
 /**
@@ -6,16 +7,39 @@ import type { AgentLink, Log } from "./pods";
  * under a TTY per session. Keystrokes and output are relayed, never stored or
  * logged.
  */
+/**
+ * The Connect buttons (POD-5): one login command instead of a shell. The
+ * container has no browser, so gh must not prompt or try to open one; it
+ * prints its one-time code and waits. After it, `gh auth setup-git` lets git
+ * push with the same login. `claude auth login` prints its sign-in URL and
+ * reads the code the Member pastes back. Both give up after 15 minutes, as
+ * GitHub's device code does, so a login left open never lingers in the Pod.
+ */
+export const LOGIN_COMMANDS: Record<PodLogin, { argv: string[]; env?: Record<string, string> }> = {
+  gh: {
+    argv: ["bash", "-lc", "timeout --foreground 900 gh auth login --web --hostname github.com --git-protocol https && gh auth setup-git"],
+    env: { GH_BROWSER: "true", GH_PROMPT_DISABLED: "1" },
+  },
+  claude: { argv: ["bash", "-lc", "timeout --foreground 900 claude auth login"] },
+};
+
 export function registerTerminalHandlers(link: AgentLink, docker: DockerClient, log: Log): void {
   const sessions = new Map<string, TtySession>();
   const opening = new Set<string>();
   const closing = new Set<string>();
 
-  link.on("terminal.open", ({ sessionId, podId, cols, rows }) => {
+  link.on("terminal.open", ({ sessionId, podId, cols, rows, login }) => {
     opening.add(sessionId);
+    const command = login ? LOGIN_COMMANDS[login] : { argv: ["bash", "-l"] };
     void (async () => {
       try {
-        const tty = await docker.openTty(containerName(podId), ["bash", "-l"], { user: POD_USER, workdir: "/workspace", cols: cols ?? 80, rows: rows ?? 24 });
+        const tty = await docker.openTty(containerName(podId), command.argv, {
+          user: POD_USER,
+          workdir: "/workspace",
+          env: command.env,
+          cols: cols ?? 80,
+          rows: rows ?? 24,
+        });
         opening.delete(sessionId);
         sessions.set(sessionId, tty);
         tty.onData((data) => link.send("terminal.output", { sessionId, data }));

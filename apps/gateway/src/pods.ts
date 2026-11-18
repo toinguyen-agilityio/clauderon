@@ -14,6 +14,11 @@ export class PodService {
 
   async command(command: GatewayCommand): Promise<void> {
     if (command.type === "schedule") return this.opts.engine.schedule(command.podId);
+    // The web app deleted the row first, so there is nothing to look up.
+    if (command.type === "pod.delete") {
+      this.opts.link.send("pod.delete", { podId: command.podId });
+      return;
+    }
     const pod = await getPod(this.opts.db, command.podId);
     if (!pod) return;
     if (command.type === "pod.checkLogins") {
