@@ -167,7 +167,7 @@ export function RunLive({
             )}
           </div>
           {node.description && (
-            <p className={`faint small ${node.kind === "command" ? "mono" : ""}`} style={{ marginTop: 6, maxWidth: "75ch" }}>
+            <p className={`faint small ${node.kind === "command" ? "mono" : ""}`} style={{ marginTop: 6, maxWidth: "75ch", whiteSpace: "pre-wrap" }}>
               {node.description}
             </p>
           )}

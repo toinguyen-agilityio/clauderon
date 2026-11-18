@@ -132,9 +132,11 @@ export function NodeForm({
           {value.kind === "command" ? (
             <div className="field">
               <label htmlFor={`cmd-${value.id ?? "new"}`}>Shell command</label>
-              <input
+              {/* A textarea, so a multi-line script keeps its newlines. */}
+              <textarea
                 id={`cmd-${value.id ?? "new"}`}
-                className="input mono"
+                className="textarea mono nf-command"
+                rows={Math.min(Math.max((value.command ?? "").split("\n").length, 2), 20)}
                 aria-label="Command"
                 placeholder="e.g. npm test"
                 spellCheck={false}
