@@ -13,7 +13,14 @@ export function claudeCommand(resumeSessionId?: string): string {
   return `claude ${CLAUDE_ARGS.join(" ")}${resume} < "$CLAUDERON_PROMPT_FILE"`;
 }
 
-export type ClaudeEvent = { log?: string; usage?: { inputTokens: number; outputTokens: number }; sessionId?: string; finalText?: string };
+export type ClaudeEvent = {
+  log?: string;
+  usage?: { inputTokens: number; outputTokens: number };
+  sessionId?: string;
+  finalText?: string;
+  /** Claude Code's own error message, from a `result` event marked as an error. */
+  error?: string;
+};
 
 type Usage = { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
 type Content = { type: string; text?: string; name?: string; input?: unknown; content?: unknown };
@@ -25,13 +32,24 @@ function short(value: unknown, max = 200): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+const firstLine = (text: string | undefined) => (text ?? "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+
 /**
  * Turns one `stream-json` line into what the Host Agent reports: a readable
  * log line, the session id, usage (from the final `result` event) and the
  * final message text. A line that is not JSON is logged as it is.
  */
 export function parseClaudeLine(line: string): ClaudeEvent {
-  let event: { type?: string; subtype?: string; session_id?: string; message?: { content?: Content[] }; result?: string; usage?: Usage };
+  let event: {
+    type?: string;
+    subtype?: string;
+    is_error?: boolean;
+    session_id?: string;
+    message?: { content?: Content[] };
+    result?: string;
+    errors?: unknown;
+    usage?: Usage;
+  };
   try {
     event = JSON.parse(line);
   } catch {
@@ -53,7 +71,15 @@ export function parseClaudeLine(line: string): ClaudeEvent {
     }
     case "result": {
       const usage = event.usage ? { usage: { inputTokens: inputTokens(event.usage), outputTokens: event.usage.output_tokens ?? 0 } } : {};
-      return { ...sessionId, ...usage, finalText: event.result ?? "", log: `[claude] ${event.subtype ?? "result"}` };
+      const failed = event.is_error === true || event.subtype?.startsWith("error") === true;
+      const message = failed ? firstLine(event.result) || firstLine(Array.isArray(event.errors) ? event.errors.filter((e) => typeof e === "string").join("\n") : undefined) : "";
+      return {
+        ...sessionId,
+        ...usage,
+        finalText: event.result ?? "",
+        ...(failed ? { error: message || event.subtype || "error" } : {}),
+        log: `[claude] ${event.subtype ?? "result"}`,
+      };
     }
     default:
       return { ...sessionId };
@@ -63,4 +89,37 @@ export function parseClaudeLine(line: string): ClaudeEvent {
 /** The §6 result of a finished Claude Code run: the last fenced JSON block of its final message. */
 export function claudeResult(finalText: string | undefined): unknown {
   return finalText === undefined ? undefined : (extractResultBlock(finalText) ?? undefined);
+}
+
+/** Lines that read like a Claude Code or API error, for when no `result` event says so. */
+const CLAUDE_ERROR = /\b(limit|rate.?limit|usage|quota|credit|overloaded|api error|authenticat|unauthori[sz]ed|forbidden|log ?in|logged out|invalid api key|error)\b/i;
+const MAX_REASON = 300;
+
+/**
+ * Collects the clearest error message of a Claude Code run, so a failed Node
+ * says why ("You've hit your 5-hour limit…") and not just its exit code.
+ * Preference: the `result` event's error, then the last stderr line, then the
+ * last stdout line that reads like an error.
+ */
+export class ClaudeErrorWatch {
+  private fromResult: string | undefined;
+  private lastStderr: string | undefined;
+  private lastErrorLike: string | undefined;
+
+  event(event: ClaudeEvent): void {
+    if (event.error) this.fromResult = event.error;
+    for (const line of (event.log ?? "").split("\n")) if (!line.startsWith("[") && CLAUDE_ERROR.test(line)) this.lastErrorLike = line.trim();
+  }
+
+  stderr(line: string): void {
+    if (line.trim()) this.lastStderr = line.trim();
+  }
+
+  /** The failure reason for a non-zero exit: `Claude Code exited <code>`, plus the message when there is one. */
+  reason(exitCode: number): string {
+    const base = `Claude Code exited ${exitCode}`;
+    const message = this.fromResult ?? this.lastStderr ?? this.lastErrorLike;
+    if (!message) return base;
+    return `${base}: ${message.length > MAX_REASON ? `${message.slice(0, MAX_REASON)}…` : message}`;
+  }
 }

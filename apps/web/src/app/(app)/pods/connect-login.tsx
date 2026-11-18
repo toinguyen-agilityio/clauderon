@@ -5,7 +5,7 @@ import { openGatewaySocket } from "../../../components/gateway-socket";
 import { Icon } from "../../../components/icons";
 import { readLoginOutput, stripAnsi, type LoginTool } from "../../../components/pod-login-output";
 
-type Phase = "idle" | "starting" | "waiting" | "sent" | "checking" | "failed";
+type Phase = "idle" | "starting" | "waiting" | "sent" | "checking" | "done" | "failed";
 
 const TIMEOUT_MS = 30_000;
 const LABEL: Record<LoginTool, string> = { gh: "Connect GitHub", claude: "Connect Claude Code" };
@@ -16,8 +16,23 @@ const LABEL: Record<LoginTool, string> = { gh: "Connect GitHub", claude: "Connec
  * code to copy and a link to GitHub's device page; Claude gets a sign-in link
  * and a box for the code it shows. When the command exits, the Gateway checks
  * the logins and the page (which refreshes itself) ticks the step.
+ *
+ * On a page that does not refresh itself (the Run page's "Switch Claude
+ * account"), `doneText` is shown once the command ends after the code was sent.
  */
-export function ConnectLogin({ gatewayUrl, podId, tool }: { gatewayUrl: string; podId: string; tool: LoginTool }) {
+export function ConnectLogin({
+  gatewayUrl,
+  podId,
+  tool,
+  label,
+  doneText,
+}: {
+  gatewayUrl: string;
+  podId: string;
+  tool: LoginTool;
+  label?: string;
+  doneText?: string;
+}) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [output, setOutput] = useState("");
   const [pasted, setPasted] = useState("");
@@ -56,7 +71,7 @@ export function ConnectLogin({ gatewayUrl, podId, tool }: { gatewayUrl: string; 
       }
     };
     // The command ended: the Gateway checks the logins; the page refreshes itself.
-    ws.onclose = () => setPhase((p) => (p === "idle" || p === "failed" ? p : "checking"));
+    ws.onclose = () => setPhase((p) => (p === "idle" || p === "failed" ? p : doneText && p === "sent" ? "done" : "checking"));
   };
 
   const cancel = () => {
@@ -82,7 +97,7 @@ export function ConnectLogin({ gatewayUrl, podId, tool }: { gatewayUrl: string; 
     return (
       <div className="row">
         <button type="button" className="btn primary sm" onClick={() => void start()}>
-          {LABEL[tool]}
+          {label ?? LABEL[tool]}
         </button>
       </div>
     );
@@ -163,6 +178,8 @@ export function ConnectLogin({ gatewayUrl, podId, tool }: { gatewayUrl: string; 
         </span>
       ) : null}
 
+      {phase === "done" && <span className="row small">{Icon.check} {doneText}</span>}
+
       {phase === "failed" && (
         <div className="banner fail">
           <div className="grow small">
@@ -173,7 +190,9 @@ export function ConnectLogin({ gatewayUrl, podId, tool }: { gatewayUrl: string; 
       )}
 
       <div className="row between">
-        {phase === "failed" || phase === "checking" ? (
+        {phase === "done" ? (
+          <span />
+        ) : phase === "failed" || phase === "checking" ? (
           <button type="button" className="btn sm" onClick={() => void start()}>
             Try again
           </button>

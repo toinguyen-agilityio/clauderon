@@ -156,6 +156,8 @@ describe("Grill answers (spec M3 §2.2)", () => {
     // The Run page shows the round, its answers and who answered.
     const view = await viewRun(deps, runId);
     if (view === "not-found") throw new Error("no run");
+    // Who owns the Pod and its status: the Run page offers "Switch Claude account" to its owner.
+    expect(view).toMatchObject({ podOwnerId: f.ann.id, podStatus: f.pod.status });
     const grill = view.timeline.find((n) => n.name === "Grill a plan")!;
     expect(grill.attempts[0]!.rounds).toEqual([
       expect.objectContaining({ round: 1, respondedBy: "ann@example.com", response: { decision: "answer", answers: { q1: "/totals", q2: "Yes" } } }),

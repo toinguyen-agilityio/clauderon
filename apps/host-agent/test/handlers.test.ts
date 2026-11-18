@@ -252,6 +252,36 @@ describe("Agent Nodes (RUN-10, POD-12)", () => {
     expect(link.of("node.result")[0]).toMatchObject({ error: "no commit on the branch" });
   });
 
+  it("a usage limit fails with Claude's own message, not just the exit code", async () => {
+    scriptGit(["h1", "h1"]);
+    const limit = [
+      { type: "system", subtype: "init", session_id: "sess-1" },
+      { type: "assistant", session_id: "sess-1", message: { content: [{ type: "text", text: "You've hit your 5-hour limit · resets 5:40am (UTC)" }] } },
+      { type: "result", subtype: "success", is_error: true, session_id: "sess-1", result: "You've hit your 5-hour limit · resets 5:40am (UTC)" },
+    ]
+      .map((e) => JSON.stringify(e))
+      .join("\n");
+    docker.script(({ argv }) => (argv[2]?.startsWith("claude ") ? { exitCode: 1, stdout: `${limit}\n` } : undefined));
+    await link.deliver("node.run", nodeRun({ kind: "agent", prompt: "p" }));
+    expect(link.of("node.result")[0]).toMatchObject({ exitCode: 1, error: "Claude Code exited 1: You've hit your 5-hour limit · resets 5:40am (UTC)" });
+  });
+
+  it("without a result event, a failed Claude Code run uses its last stderr line, masked", async () => {
+    scriptGit(["h1", "h1"]);
+    docker.script(({ argv }) =>
+      argv[2]?.startsWith("claude ") ? { exitCode: 1, stderr: "starting\nAPI Error: 401 invalid key host-secret-value\n\n" } : undefined,
+    );
+    await link.deliver("node.run", nodeRun({ kind: "agent", prompt: "p" }));
+    expect(link.of("node.result")[0]!.error).toBe("Claude Code exited 1: API Error: 401 invalid key •••");
+  });
+
+  it("a failed Claude Code run with nothing to say falls back to the exit code", async () => {
+    scriptGit(["h1", "h1"]);
+    docker.script(({ argv }) => (argv[2]?.startsWith("claude ") ? { exitCode: 2, stdout: '{"type":"system","subtype":"init"}\nWorking on it\n' } : undefined));
+    await link.deliver("node.run", nodeRun({ kind: "agent", prompt: "p" }));
+    expect(link.of("node.result")[0]!.error).toBe("Claude Code exited 2");
+  });
+
   it("parses a line that is not JSON as a plain log line", () => {
     expect(parseClaudeLine("plain")).toEqual({ log: "plain" });
   });

@@ -7,6 +7,7 @@ import { Icon } from "../../../../components/icons";
 import { StatePill } from "../../../../components/state-pill";
 import { viewRun } from "../../../../server/runs";
 import { deps, gatewayUrl, requireMember } from "../../../../server/runtime";
+import { ConnectLogin } from "../../pods/connect-login";
 import { CancelRun } from "./cancel-run";
 import { RunLive } from "./run-live";
 
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function RunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await requireMember();
+  const member = await requireMember();
   const run = await viewRun(deps(), id);
   if (run === "not-found") notFound();
   const r = run.run;
@@ -25,6 +26,9 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const waitingAt = run.timeline.find((n) => n.openRequest);
   const runningAt = run.timeline.find((n) => n.state === "running");
   const active = isActive(r.state);
+  // A failed Agent Node may be out of Claude usage or logged out: its Pod's owner
+  // can sign in to another Claude account here, then Retry (the Pod page's login, POD-5).
+  const canSwitchClaude = r.state === "failed" && failedAt?.kind === "agent" && run.podOwnerId === member.id && run.podStatus === "running";
 
   return (
     <>
@@ -71,6 +75,18 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               <b>Failed{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
             </p>
             <p className="small">The Run stays Active and keeps its worktree, but frees its Slot. Pick a Node and use Retry from here, or Cancel it to end it for good.</p>
+            {canSwitchClaude && r.podId && (
+              <div className="stack" style={{ gap: 8, marginTop: 10 }} data-testid="switch-claude">
+                <span className="small muted">Out of Claude usage, or signed in to the wrong account? Sign in to another Claude account in your Pod, then Retry.</span>
+                <ConnectLogin
+                  gatewayUrl={gatewayUrl()}
+                  podId={r.podId}
+                  tool="claude"
+                  label="Switch Claude account"
+                  doneText="Signed in. Retry the Run from a Node below."
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
