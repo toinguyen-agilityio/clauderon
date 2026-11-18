@@ -1,131 +1,104 @@
 ---
 version: "alpha"
-name: "Mesh Gradient"
-description: "Mesh Gradient visual system (designmd.app/library/mesh-gradient) applied to the Clauderon app shell: multi-point smooth gradients that blend many hues, organic cloud-like color transitions, frosted-glass surfaces."
+name: "Arctic Forsythia Premium"
+description: "Arctic Forsythia Premium visual system (designmd.app/library/arctic-forsythia-premium) applied to the Clauderon app shell: Scandinavian, airy and luminous, with cool neutrals, crisp borders and yellow used only as punctuation."
 colors:
-  primary: "#7c6bff"
-  background: "#0b0b16"
-  surface: "#0b0b16"
-  text: "#f5f4fb"
-  accent: "#ff8fd6"
-  on-primary: "#000000"
-  on-surface: "#FFFFFF"
-  on-accent: "#000000"
+  arctic: "#F1F6F4"
+  forsythia: "#FFC801"
+  nocturnal: "#114C5A"
+  mint: "#D9E8E2"
+  saffron: "#FF9932"
+  oceanic: "#172B36"
+  on-primary: "#FFFFFF"
 typography:
   h1:
-    fontFamily: "'Cabinet Grotesk', 'Inter', sans-serif"
-    fontSize: "4rem"
+    fontFamily: "'Outfit', 'Inter', sans-serif"
+    fontSize: "2.25rem"
     fontWeight: "700"
-    lineHeight: "1.05"
   body-md:
     fontFamily: "'Inter', system-ui, -apple-system, sans-serif"
     fontSize: "1rem"
     fontWeight: "400"
     lineHeight: "1.6"
-  label-caps:
-    fontFamily: "'Inter', system-ui, -apple-system, sans-serif"
-    fontSize: "0.75rem"
-    fontWeight: "600"
-    letterSpacing: "0.06em"
+  mono:
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace"
 rounded:
-  sm: "10px"
-  md: "16px"
-  lg: "26px"
-spacing:
   sm: "8px"
   md: "16px"
-  lg: "32px"
+  lg: "24px"
+spacing:
+  base: "8px"
 components:
   button-primary:
-    backgroundColor: "{colors.primary}"
+    backgroundColor: "{colors.nocturnal}"
     textColor: "{colors.on-primary}"
-    rounded: "{rounded.md}"
-    padding: "16px"
-  button-secondary:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-    rounded: "{rounded.md}"
-    padding: "16px"
+    rounded: "{rounded.sm}"
+    padding: "12px"
   card:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.on-surface}"
-    rounded: "{rounded.lg}"
+    backgroundColor: "#FFFFFF"
+    rounded: "{rounded.sm}"
     padding: "24px"
   page:
-    backgroundColor: "{colors.background}"
-    textColor: "{colors.text}"
-    padding: "16px"
+    backgroundColor: "{colors.arctic}"
+    textColor: "{colors.oceanic}"
 ---
 
 ## Overview
 
-Mesh Gradient visual system, translated from the Claude Artisan catalog (MIT, imported via designmd.app). Multi-point smooth gradients that blend many hues; organic, cloud-like color transitions.
+Arctic Forsythia Premium, imported from designmd.app and adapted to an application shell instead of a landing page. Cool, luminous surfaces with generous space; one sharp yellow accent marks what needs attention.
 
-- **Category:** morphism
-- **Era:** 2021–present
-- **Origin:** Popularized by design tools (mesh gradient generators, Figma plugins).
-- **Reference:** Stripe backgrounds; Apple event key art.
-- **Structural base:** application shell with navigation and cards
-
-**Defining traits:**
-- Multi-point smooth gradients that blend many hues
-- Organic, cloud-like color transitions
-- Used as the page backdrop
-- Slowly animated / shifting
+- **Density:** airy; **Variance:** restrained; **Motion:** subtle.
+- **Structural base:** Oceanic Noir sidebar with grouped navigation, a light work area of white cards.
 
 ## Colors
 
-- **bg** — #0b0b16
-- **surface** — rgba(255, 255, 255, 0.06)
-- **surface-strong** — rgba(255, 255, 255, 0.11)
-- **border** — rgba(255, 255, 255, 0.14)
-- **text** — #f5f4fb
-- **text-muted** — rgba(245, 244, 251, 0.70)
-- **primary** — #7c6bff
-- **accent** — #ff8fd6
-- **mesh-a** — #4f46e5
-- **mesh-b** — #06b6d4
-- **mesh-c** — #f472b6
-- **mesh-d** — #fbbf24
+- **Arctic Powder** #F1F6F4: page background.
+- **White** #FFFFFF: cards and dialogs (luminous against the powder page).
+- **Mystic Mint** #D9E8E2: secondary surfaces, row hover, the dark theme's primary button.
+- **Nocturnal Teal** #114C5A: headings, links, focus ring, primary button.
+- **Oceanic Noir** #172B36: body text, the sidebar, the terminal, the selection bar, the dark theme base.
+- **Forsythia Yellow** #FFC801: punctuation only, as the active nav mark, the Needs-you badge and the waiting state tint.
+- **Deep Saffron** #FF9932: interrupted state.
 
-Status colors (running, waiting, OK, failed, interrupted) use a light tint of the hue on a translucent tinted background of the same hue.
+Status pills use the hue as text on a light tint of the same hue; every hue encodes a state or output type.
 
 ## Typography
 
-- Display: 'Cabinet Grotesk', 'Inter', sans-serif (the app falls back to Inter 700)
-- Body: 'Inter', system-ui, -apple-system, sans-serif
-- Mono: 'JetBrains Mono', ui-monospace, monospace — for anything that comes from git, GitHub or a Pod
+- **Headings:** Outfit, 600–700, slightly tight tracking, Nocturnal Teal.
+- **Body and labels:** Inter, 14.5px / 1.6.
+- **Data from git, GitHub or a Pod** (keys, branches, SHAs, commands): JetBrains Mono.
 
 ## Layout
 
-- Application shell: fixed glass sidebar with navigation, work area of glass cards.
-- Use a responsive grid and preserve content hierarchy.
-- Collapse columns below 768px without horizontal overflow.
+- Application shell: sticky sidebar (228px) with navigation grouped as Work, Setup and Insight; content area max 1240px, 28px gaps between page sections.
+- Pages with several views (Flows / Node library, pull request states) use underlined tabs with counts; each tab is a link. Flows are a searchable list with the samples pinned on top.
+- The Node library is a grid of cards (Kind mark, name, description, Input → Output chips coloured by Output Type, Kind and Flow count); a card opens its editor in a dialog.
+- Below 860px the sidebar becomes a top bar and multi-column grids stack, with no horizontal page overflow.
 
 ## Elevation & Depth
 
-- The mesh gradient is a fixed backdrop (4 radial blobs, blurred, drifting over ~28s); it never scrolls with content.
-- Surfaces are frosted glass: translucent fill, 1px light border, `backdrop-filter: blur(18px)`. Modals use a solid surface for legibility.
-- Entry animations: fade + translate-Y (14px → 0) over 480ms ease-out, staggered 80ms.
-- Hover: color/border/shadow shift over 200ms; tiles lift 2px. Only transform and opacity animate for entrances.
+- Cards: 1px border `rgba(17,76,90,0.1)` plus a minimal shadow `0 2px 8px rgba(0,0,0,0.04)`; never heavier than `0 2px 8px rgba(0,0,0,0.08)`.
+- No gradients; flat color only.
+- Entry: fade + translate-Y (16px → 0) over 420ms ease-out, staggered 80ms.
+- Hover: color, border and shadow shifts over 250ms; hovered tiles lift 2px. `prefers-reduced-motion` turns entries off.
 
 ## Shapes
 
-- Radius scale: 10px (controls), 16px (cards), 26px (modals, sign-in).
+- 8px for controls and cards, 16px for dialogs and the sign-in card, 24px reserved.
 
 ## Components
 
-- Buttons keep visible focus and predictable hover/pressed states. Primary: `#7c6bff` fill, black text.
-- Cards use the surface and radius scale from the tokens.
-- Forms expose persistent labels, textual errors, and keyboard focus.
-- Active nav item: tinted primary background with an inset primary ring.
+- **Primary button:** Nocturnal Teal fill, white text, 8px radius, 12px horizontal padding; hover darkens; pressed moves down 1px. No glows.
+- **Secondary button:** 1.5px muted outline, subtle fill on hover.
+- **Inputs:** label above, 1px border, 2px teal focus ring offset 2px, error text below.
+- **Navigation:** Oceanic Noir surface in both themes; the active item gets a light fill, a 3px yellow mark, a yellow icon and weight 500. The footer holds the Member, a Light / System / Dark switch and a Sign out icon.
 
 ## Theme
 
-Dark is the default. A Light / Dark toggle sits at the bottom of the sidebar; light uses a pale `#f3f2ff` base, translucent white glass, and primary `#5b49e8` with white text.
+Light is the default. A Light / System / Dark switch sits at the bottom of the sidebar (System follows the OS); dark uses an Oceanic Noir base (#12222B page, #172B36 cards), mint headings and a mint primary button with teal text.
 
 ## Do's and Don'ts
 
-- Do: follow the tokens and the structural composition.
-- Do: maintain WCAG AA contrast and honor `prefers-reduced-motion` (the mesh stops drifting).
-- Avoid: using the style as decoration without functional hierarchy.
+- Do: keep yellow as punctuation, never as a large background.
+- Do: maintain WCAG AA contrast and honor `prefers-reduced-motion`.
+- Don't: use emojis as icons, pure black, decorative gradients or heavy shadows.

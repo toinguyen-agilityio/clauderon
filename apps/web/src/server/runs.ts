@@ -21,14 +21,17 @@ import {
   listFlows,
   listPods,
   listProjects,
+  listPullRequests,
   listRuns,
   nodesFrom,
   openHumanRequests,
+  pullRequestCounts,
   respondToHuman,
   retryRun,
   runStateCounts,
   type AuditFilters,
   type HumanAction,
+  type PullRequestFilter,
   type RunFilters,
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
@@ -66,6 +69,36 @@ export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number)
     counts,
     flows: flows.map((f) => ({ id: f.id, name: f.name })),
     pods: pods.map((p) => ({ id: p.id, label: p.name ?? `${p.owner.name ?? p.owner.email}'s Pod` })),
+  };
+}
+
+export const PULL_REQUEST_TABS = ["open", "merged", "closed"] as const satisfies readonly PullRequestFilter[];
+
+/** The `state` tab from a URL; anything else means every pull request. */
+export function parsePullRequestTab(state: string | undefined): PullRequestFilter | undefined {
+  return (PULL_REQUEST_TABS as readonly string[]).includes(state ?? "") ? (state as PullRequestFilter) : undefined;
+}
+
+/**
+ * The Pull requests page: Runs that opened one, by PR state. Open ones on the page are
+ * refreshed from GitHub first (each at most once a minute, TIC-6), so a merge shows up.
+ */
+export async function viewPullRequests(deps: AppDeps, state: PullRequestFilter | undefined, page: number) {
+  const first = await listPullRequests(deps.db, state, page);
+  const open = first.rows.filter((r) => r.pullRequestState === "open");
+  await Promise.all(open.map((r) => refreshPullRequest(deps, r.id)));
+  const [result, counts, projects, pods] = await Promise.all([
+    open.length > 0 ? listPullRequests(deps.db, state, page) : first,
+    pullRequestCounts(deps.db),
+    listProjects(deps.db),
+    listPods(deps.db),
+  ]);
+  const keyOf = ticketKeys(projects);
+  const podLabel = new Map(pods.map((p) => [p.id, p.name ?? `${p.owner.name ?? p.owner.email}'s Pod`]));
+  return {
+    ...result,
+    rows: result.rows.map((r) => ({ ...r, key: keyOf(r.projectId, r.ticketNumber), pod: (r.podId && podLabel.get(r.podId)) ?? "Pod removed" })),
+    counts,
   };
 }
 

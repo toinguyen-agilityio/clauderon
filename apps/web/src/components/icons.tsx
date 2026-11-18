@@ -45,6 +45,53 @@ export const Icon = {
       <path d="M5.5 5h5M5.5 8h5M5.5 11h3" />
     </svg>
   ),
+  pullRequests: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <circle cx="4" cy="3.5" r="1.5" />
+      <circle cx="4" cy="12.5" r="1.5" />
+      <circle cx="12" cy="12.5" r="1.5" />
+      <path d="M4 5v6M12 11V6.5A2 2 0 0010 4.5H7.5M9 3l-1.5 1.5L9 6" />
+    </svg>
+  ),
+  sun: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <circle cx="8" cy="8" r="2.75" />
+      <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" />
+    </svg>
+  ),
+  monitor: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <rect x="1.75" y="2.5" width="12.5" height="8.5" rx="1.25" />
+      <path d="M5.5 14h5M8 11v3" />
+    </svg>
+  ),
+  moon: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <path d="M13.5 9.5A5.5 5.5 0 016.5 2.5a5.5 5.5 0 107 7z" />
+    </svg>
+  ),
+  signOut: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <path d="M6.5 2.5h-3a1 1 0 00-1 1v9a1 1 0 001 1h3M10.5 11l3-3-3-3M13.5 8H6" />
+    </svg>
+  ),
+  trash: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.75 9.5h6.5L12 4M6.75 6.5v4.5M9.25 6.5v4.5" />
+    </svg>
+  ),
+  copy: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <rect x="5" y="5" width="8.5" height="8.5" rx="1.25" />
+      <path d="M11 5V3.25A.75.75 0 0010.25 2.5h-7a.75.75 0 00-.75.75v7c0 .41.34.75.75.75H5" />
+    </svg>
+  ),
+  search: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5L14 14" />
+    </svg>
+  ),
   allowlist: (
     <svg viewBox="0 0 16 16" {...stroke}>
       <rect x="3" y="7" width="10" height="7" rx="1.5" />

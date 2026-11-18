@@ -15,7 +15,7 @@ import {
 import type { AppDeps } from "../src/server/deps";
 import { createMyPod, gbToMb, podAction, removePod, setMyPodSettings, terminalAccess, viewPod, viewPods } from "../src/server/pods";
 import { enableRepository, enableableRepositories, syncProject } from "../src/server/projects";
-import { cancelRunAs, viewRun, viewRuns } from "../src/server/runs";
+import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
 import { startDialog, startRuns } from "../src/server/start";
 import { viewTickets } from "../src/server/tickets";
 
@@ -245,6 +245,38 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     expect(result).toEqual({ ok: false, error: expect.stringContaining("acme/gone") });
     const [stored] = await db.select().from(schema.project).where(sql`repo = 'gone'`);
     expect(stored!.syncError).toContain("acme/gone");
+  });
+});
+
+describe("Pull requests page", () => {
+  it("lists Runs that opened a pull request by state, refreshing open ones from GitHub", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    const ann = await memberRow(db, "ann@example.com");
+    const pod = await podRow(db, ann.id);
+    const project = await projectRow(db);
+    const tickets = [await ticketRow(db, project.id, 5), await ticketRow(db, project.id, 6), await ticketRow(db, project.id, 7)];
+    await startSampleBatch(db, ann, pod.id, tickets.map((t) => t.id), deps.clock.now());
+    const runs = await db.select().from(schema.run);
+    const byTicket = new Map(runs.map((r) => [r.ticketId, r.id]));
+    await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/5-a", pullRequestNumber: 15, pullRequestState: "open" }).where(sql`id = ${byTicket.get(tickets[0]!.id)}`);
+    await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/6-b", pullRequestNumber: 16, pullRequestState: "closed" }).where(sql`id = ${byTicket.get(tickets[1]!.id)}`);
+    // Ticket 7's Run opened no pull request, so it is not listed.
+    github.addPullRequest("acme", "web", { number: 15, branch: "clauderon/5-a", state: "merged", url: "u15" });
+
+    const all = await viewPullRequests(deps, undefined, 1);
+    expect(all.rows.map((r) => [r.pullRequestNumber, r.pullRequestState]).sort()).toEqual([
+      [15, "merged"],
+      [16, "closed"],
+    ]);
+    expect(all.counts).toEqual({ merged: 1, closed: 1 });
+    expect((await viewPullRequests(deps, "closed", 1)).rows.map((r) => r.pullRequestNumber)).toEqual([16]);
+    expect((await viewPullRequests(deps, "open", 1)).rows).toEqual([]);
+  });
+
+  it("keeps only known states from the URL", () => {
+    expect(parsePullRequestTab("merged")).toBe("merged");
+    expect(parsePullRequestTab("draft")).toBeUndefined();
+    expect(parsePullRequestTab(undefined)).toBeUndefined();
   });
 });
 

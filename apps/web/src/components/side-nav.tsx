@@ -4,50 +4,54 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "./icons";
 
-type Item = { href: string; label: string; icon: React.ReactNode; arrives?: string; badge?: number };
-
-// The prototype's six modules. Those not built yet stay visible but inert, so
-// the shell does not shift as milestones land.
-const MODULES: Item[] = [
-  { href: "/tickets", label: "Tickets", icon: Icon.tickets },
-  { href: "/runs", label: "Runs", icon: Icon.runs },
-  { href: "/needs-you", label: "Needs you", icon: Icon.needs },
-  { href: "/flows", label: "Flows", icon: Icon.flows },
-  { href: "/pods", label: "Pods", icon: Icon.pods },
-  { href: "/projects", label: "Projects", icon: Icon.projects },
-  { href: "/audit", label: "Audit log", icon: Icon.audit },
-];
+type Item = { href: string; label: string; icon: React.ReactNode; badge?: number };
+type Group = { title: string; items: Item[] };
 
 /** `needsYou`: open requests across all Runs, shown beside Needs you (spec M3 §3). */
 export function SideNav({ operator, needsYou }: { operator: boolean; needsYou: number }) {
   const path = usePathname();
-  const link = (item: Item) =>
-    item.arrives ? (
-      <span key={item.href} className="soon" title={`Arrives in ${item.arrives}`} aria-disabled="true">
-        {item.icon}
-        <span className="lbl">{item.label}</span>
-      </span>
-    ) : (
-      <Link key={item.href} href={item.href} className={path.startsWith(item.href) ? "on" : ""}>
-        {item.icon}
-        <span className="lbl">{item.label}</span>
-        {item.badge ? (
-          <span className="badge" aria-label={`${item.badge} waiting`}>
-            {item.badge}
-          </span>
-        ) : null}
-      </Link>
-    );
+  const groups: Group[] = [
+    {
+      title: "Work",
+      items: [
+        { href: "/tickets", label: "Tickets", icon: Icon.tickets },
+        { href: "/runs", label: "Runs", icon: Icon.runs },
+        { href: "/pull-requests", label: "Pull requests", icon: Icon.pullRequests },
+        { href: "/needs-you", label: "Needs you", icon: Icon.needs, badge: needsYou },
+      ],
+    },
+    {
+      title: "Setup",
+      items: [
+        { href: "/flows", label: "Flows", icon: Icon.flows },
+        { href: "/pods", label: "Pods", icon: Icon.pods },
+        { href: "/projects", label: "Projects", icon: Icon.projects },
+        ...(operator ? [{ href: "/allowlist", label: "Allowlist", icon: Icon.allowlist }] : []),
+      ],
+    },
+    { title: "Insight", items: [{ href: "/audit", label: "Audit log", icon: Icon.audit }] },
+  ];
 
   return (
     <nav className="nav" aria-label="Main">
-      {MODULES.map((item) => link(item.href === "/needs-you" ? { ...item, badge: needsYou } : item))}
-      {operator && (
-        <>
-          <div className="nav-sep" />
-          {link({ href: "/allowlist", label: "Allowlist", icon: Icon.allowlist })}
-        </>
-      )}
+      {groups.map((group) => (
+        <div key={group.title} className="nav-group" role="group" aria-label={group.title}>
+          <div className="nav-group-title" aria-hidden="true">
+            {group.title}
+          </div>
+          {group.items.map((item) => (
+            <Link key={item.href} href={item.href} className={path.startsWith(item.href) ? "on" : ""} aria-current={path.startsWith(item.href) ? "page" : undefined}>
+              {item.icon}
+              <span className="lbl">{item.label}</span>
+              {item.badge ? (
+                <span className="badge" aria-label={`${item.badge} waiting`}>
+                  {item.badge}
+                </span>
+              ) : null}
+            </Link>
+          ))}
+        </div>
+      ))}
     </nav>
   );
 }

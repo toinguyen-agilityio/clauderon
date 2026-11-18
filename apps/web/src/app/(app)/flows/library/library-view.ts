@@ -49,17 +49,44 @@ export const TYPE_HELP: Record<OutputType, string> = {
 
 export const INSTRUCTIONS_MAX = 20_000;
 
-/** Nodes whose name, instructions or command contain the query, of the chosen Kind ("all" for every Kind). */
-export function filterNodes<T extends Pick<LibraryNodeView, "name" | "kind" | "instructions" | "command">>(nodes: readonly T[], query: string, kind: NodeKind | "all"): T[] {
-  const q = query.trim().toLowerCase();
-  return nodes.filter((n) => (kind === "all" || n.kind === kind) && (!q || `${n.name}\n${n.instructions}\n${n.command ?? ""}`.toLowerCase().includes(q)));
+/** The filter groups of the library: approve and grill both wait on a person. */
+export type KindGroup = "agent" | "command" | "human" | "ticket";
+export const KIND_GROUPS: readonly KindGroup[] = ["agent", "command", "human", "ticket"];
+export const KIND_GROUP_LABEL: Record<KindGroup, string> = { agent: "Agent", command: "Command", human: "Human", ticket: "Ticket" };
+
+export function kindGroupOf(kind: NodeKind): KindGroup {
+  return kind === "approve" || kind === "grill" ? "human" : kind;
 }
 
-/** How many Nodes each Kind has, for the filter chips; only Kinds that have any. */
-export function kindCounts(nodes: readonly Pick<LibraryNodeView, "kind">[]): { kind: NodeKind; count: number }[] {
-  const counts = new Map<NodeKind, number>();
-  for (const n of nodes) counts.set(n.kind, (counts.get(n.kind) ?? 0) + 1);
-  return [...counts].map(([kind, count]) => ({ kind, count }));
+type Searchable = Pick<LibraryNodeView, "name" | "kind" | "instructions" | "command"> & { inputs?: readonly NodeInput[]; outputs?: readonly NodeOutput[] };
+
+/**
+ * Nodes whose name, instructions, command or port names and Output Types contain the
+ * query, in the chosen Kind group ("all" for every group).
+ */
+export function filterNodes<T extends Searchable>(nodes: readonly T[], query: string, group: KindGroup | "all"): T[] {
+  const q = query.trim().toLowerCase();
+  return nodes.filter((n) => {
+    if (group !== "all" && kindGroupOf(n.kind) !== group) return false;
+    if (!q) return true;
+    const ports = [...(n.inputs ?? []), ...(n.outputs ?? [])].map((p) => `${p.name} ${p.type}`).join("\n");
+    return `${n.name}\n${n.instructions}\n${n.command ?? ""}\n${ports}`.toLowerCase().includes(q);
+  });
+}
+
+/** How many Nodes each Kind group has, for the filter; only groups that have any, in a fixed order. */
+export function groupCounts(nodes: readonly Pick<LibraryNodeView, "kind">[]): { group: KindGroup; count: number }[] {
+  const counts = new Map<KindGroup, number>();
+  for (const n of nodes) counts.set(kindGroupOf(n.kind), (counts.get(kindGroupOf(n.kind)) ?? 0) + 1);
+  return KIND_GROUPS.filter((g) => counts.has(g)).map((group) => ({ group, count: counts.get(group)! }));
+}
+
+/** The footer of a library card, e.g. "Human · Grill · in 2 Flows" or "Agent · in no Flow". */
+export function cardMeta(node: Pick<LibraryNodeView, "kind" | "usedBy">): string {
+  const group = kindGroupOf(node.kind);
+  const kind = group === "human" ? `${KIND_GROUP_LABEL.human} · ${node.kind[0]!.toUpperCase()}${node.kind.slice(1)}` : KIND_GROUP_LABEL[group];
+  const n = node.usedBy.length;
+  return `${kind} · ${n === 0 ? "in no Flow" : `in ${n} Flow${n === 1 ? "" : "s"}`}`;
 }
 
 /** Why Save is not available yet (the same rules the server applies), or null when the form can be saved. */
