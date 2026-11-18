@@ -40,6 +40,9 @@ export class FakeDocker implements DockerClient {
     if ([...this.containers.values()].some((c) => c.volume === name)) throw new Error(`volume ${name} is in use`);
     this.volumes.delete(name);
   }
+  async listContainers(prefix: string) {
+    return [...this.containers.values()].filter((c) => c.name.startsWith(prefix)).map((c) => ({ name: c.name, running: c.running }));
+  }
   async imageDigest() {
     return "sha256:abc";
   }

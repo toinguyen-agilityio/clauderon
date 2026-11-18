@@ -165,7 +165,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
     if (!ref.current?.open) ref.current?.showModal();
     void loadStartDialog(ticketIds).then((loaded) => {
       setDialog(loaded);
-      setFlowId(loaded.flows.find((f) => !f.needsHuman)?.id ?? "");
+      setFlowId(loaded.flows[0]?.id ?? "");
     });
   }, [ticketIds]);
 
@@ -209,12 +209,12 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
               <label>Flow</label>
               <div className="grid g2" role="radiogroup" aria-label="Flow">
                 {dialog.flows.map((f) => (
-                  <label key={f.id} className={`opt-card ${flowId === f.id ? "on" : ""} ${f.needsHuman ? "dis" : ""}`}>
-                    <input type="radio" name="flow" checked={flowId === f.id} disabled={f.needsHuman} onChange={() => setFlowId(f.id)} />
+                  <label key={f.id} className={`opt-card ${flowId === f.id ? "on" : ""}`}>
+                    <input type="radio" name="flow" checked={flowId === f.id} onChange={() => setFlowId(f.id)} />
                     <div className="grow">
                       <b>{f.name}</b>
                       <div className="faint small">
-                        {f.nodes} Nodes{f.needsHuman ? " · has Human Nodes, which arrive in M3" : ""}
+                        {f.nodes} Nodes{f.needsHuman ? " · waits for people at its Human Nodes" : ""}
                       </div>
                     </div>
                   </label>

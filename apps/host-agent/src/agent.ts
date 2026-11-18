@@ -39,6 +39,12 @@ export type HostAgentOptions = {
   processId: string;
   version: string;
   log?: (message: string) => void;
+  /** Attempts whose Node process is running here (spec M3 §6). */
+  runningAttempts?: () => readonly string[];
+  /** Each Pod container's state, sent with every heartbeat (spec M3 §6). */
+  podStatuses?: () => Promise<Payload<"heartbeat">["pods"]>;
+  /** After every welcome: e.g. kill orphaned Node processes. */
+  onWelcome?: () => void | Promise<void>;
 };
 
 /**
@@ -119,10 +125,23 @@ export class HostAgent {
           processId: this.opts.processId,
           ...facts,
           lastReceivedId: this.buffer.lastReceivedId,
-          liveAttempts: [],
+          liveAttempts: this.liveAttempts(),
         }),
       ),
     );
+  }
+
+  /**
+   * Attempts not reported yet (spec M3 §6): running here, or finished with a
+   * `node.result` the Gateway has not acknowledged. The Gateway treats any
+   * other running Attempt as lost after a restart.
+   */
+  liveAttempts(): string[] {
+    const live = new Set(this.opts.runningAttempts?.() ?? []);
+    for (const envelope of this.buffer.pending()) {
+      if (envelope.type === "node.result") live.add((envelope.payload as Payload<"node.result">).attemptId);
+    }
+    return [...live];
   }
 
   private scheduleReconnect(): void {
@@ -134,9 +153,18 @@ export class HostAgent {
 
   private beat(): void {
     this.heartbeat = this.opts.clock.setTimeout(() => {
-      this.socket?.send(serialize(controlMessage("heartbeat", { at: this.opts.clock.now().toISOString(), pods: [] })));
       this.beat();
+      void this.sendHeartbeat();
     }, HEARTBEAT_MS);
+  }
+
+  private async sendHeartbeat(): Promise<void> {
+    const socket = this.socket;
+    const pods = await (this.opts.podStatuses?.() ?? Promise.resolve([])).catch((error: unknown) => {
+      this.log(`pod statuses: ${String(error)}`);
+      return [];
+    });
+    socket?.send(serialize(controlMessage("heartbeat", { at: this.opts.clock.now().toISOString(), pods })));
   }
 
   private stopHeartbeat(): void {
@@ -162,6 +190,7 @@ export class HostAgent {
       this.stopHeartbeat();
       this.beat();
       for (const missed of this.buffer.unacked((envelope.payload as Payload<"welcome">).lastReceivedId)) socket.send(serialize(missed));
+      if (this.opts.onWelcome) void Promise.resolve(this.opts.onWelcome()).catch((error: unknown) => this.log(`after welcome: ${String(error)}`));
       return;
     }
     if (envelope.type === "ack") {

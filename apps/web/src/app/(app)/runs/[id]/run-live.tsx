@@ -5,8 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { duration, formatTime, tokens } from "../../../../components/format";
 import { openGatewaySocket } from "../../../../components/gateway-socket";
 import { Icon } from "../../../../components/icons";
+import { HumanForm } from "../../../../components/human-form";
+import { OutputValue } from "../../../../components/output-value";
 import { OType, StatePill } from "../../../../components/state-pill";
 import type { viewRun } from "../../../../server/runs";
+import { RetryFromHere } from "./retry-run";
 
 type Timeline = Exclude<Awaited<ReturnType<typeof viewRun>>, "not-found">["timeline"];
 type TimelineNode = Timeline[number];
@@ -66,50 +69,38 @@ function classify(line: Line): string {
   return "";
 }
 
-function OutputValue({ type, value }: { type: string; value: unknown }) {
-  const v = value as Record<string, unknown> | string;
-  if (typeof v === "string") return <div className="outv">{v}</div>;
-  if (type === "issue") return <div className="outv">#{String(v.number)} {String(v.title ?? "")}</div>;
-  if (type === "branch")
-    return (
-      <div className="outv mono">
-        {String(v.branch)}
-        {v.headCommit ? <span className="faint"> @ {String(v.headCommit).slice(0, 7)}</span> : null}
-      </div>
-    );
-  if (type === "test-result")
-    return (
-      <pre className="outv mono">
-        Exit code {String(v.exitCode)}
-        {"\n\n"}
-        {String(v.tail ?? "")}
-      </pre>
-    );
-  if (type === "pull-request")
-    return (
-      <div className="outv mono">
-        <a href={String(v.url)} target="_blank" rel="noreferrer">
-          {String(v.url)}
-        </a>
-      </div>
-    );
-  return <pre className="outv mono">{JSON.stringify(value, null, 2)}</pre>;
-}
-
 /**
  * The Node list and the selected Node's live log, Inputs and Outputs (TRK-1,
  * TRK-2, NFR-4). The page refreshes when the Run changes; log lines are
  * backfilled from storage, then streamed.
  */
-export function RunLive({ gatewayUrl, runId, timeline, runEnded }: { gatewayUrl: string; runId: string; timeline: Timeline; runEnded: boolean }) {
+export function RunLive({
+  gatewayUrl,
+  runId,
+  timeline,
+  runEnded,
+  retryable,
+  retryContext,
+}: {
+  gatewayUrl: string;
+  runId: string;
+  timeline: Timeline;
+  runEnded: boolean;
+  /** Failed or Interrupted: every Node offers Retry from here (spec M3 §4). */
+  retryable: boolean;
+  /** What a retried Node would be told, before the note. */
+  retryContext: string | null;
+}) {
   const router = useRouter();
   const socket = useGatewaySocket(gatewayUrl);
   const current =
-    timeline.find((n) => n.state === "running") ?? timeline.find((n) => n.state === "failed") ?? [...timeline].reverse().find((n) => n.attempts.length > 0) ?? timeline[0];
+    timeline.find((n) => n.state === "running") ??
+    timeline.find((n) => n.state === "waiting_for_human") ??
+    timeline.find((n) => n.state === "failed" || n.state === "interrupted") ?? [...timeline].reverse().find((n) => n.attempts.length > 0) ?? timeline[0];
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const node = timeline.find((n) => n.id === selectedId) ?? current;
   const [attemptPick, setAttemptPick] = useState<Record<string, string>>({});
-  const attempt = node?.attempts.find((a) => a.id === attemptPick[node.id]) ?? node?.attempts.at(-1);
+  const attempt = node?.attempts.find((a) => a.id === attemptPick[node.id]) ?? node?.attempts[0];
 
   const [lines, setLines] = useState<Line[]>([]);
   const [follow, setFollow] = useState(true);
@@ -169,6 +160,11 @@ export function RunLive({ gatewayUrl, runId, timeline, runEnded }: { gatewayUrl:
             </span>
             <h2>{node.name}</h2>
             <StatePill state={attempt ? attempt.state : node.state} />
+            {retryable && (
+              <span style={{ marginLeft: "auto" }}>
+                <RetryFromHere runId={runId} nodeId={node.id} nodeName={node.name} inputs={node.retryInputs} context={retryContext} />
+              </span>
+            )}
           </div>
           {node.description && (
             <p className={`faint small ${node.kind === "command" ? "mono" : ""}`} style={{ marginTop: 6, maxWidth: "75ch" }}>
@@ -182,8 +178,22 @@ export function RunLive({ gatewayUrl, runId, timeline, runEnded }: { gatewayUrl:
             {node.attempts.map((a) => (
               <button key={a.id} type="button" role="tab" aria-selected={a.id === attempt?.id} className={a.id === attempt?.id ? "on" : ""} onClick={() => setAttemptPick({ ...attemptPick, [node.id]: a.id })}>
                 #{a.number}
+                {a.superseded && <span className="faint"> · earlier pass</span>}
               </button>
             ))}
+          </div>
+        )}
+
+        {node.openRequest && (
+          <div className="card card-pad stack" style={{ gap: 12 }}>
+            <span className="eyebrow">{node.openRequest.kind === "grill" ? `Claude asks · round ${node.openRequest.round}` : "Waiting for a decision"}</span>
+            {node.openRequest.kind === "approve" && node.openRequest.subject && (
+              <div className="stack" style={{ gap: 4 }}>
+                <OType type={node.openRequest.subject.type} label={node.openRequest.subject.name} />
+                <OutputValue type={node.openRequest.subject.type} value={node.openRequest.subject.value} />
+              </div>
+            )}
+            <HumanForm request={node.openRequest} runId={runId} />
           </div>
         )}
 
@@ -199,7 +209,7 @@ export function RunLive({ gatewayUrl, runId, timeline, runEnded }: { gatewayUrl:
               <dd className="num">{formatTime(new Date(attempt.startedAt))}</dd>
               <dt>Duration</dt>
               <dd className="num">{attempt.endedAt ? duration(new Date(attempt.endedAt).getTime() - new Date(attempt.startedAt).getTime()) : "running…"}</dd>
-              {node.kind === "agent" && (
+              {(node.kind === "agent" || node.kind === "grill") && (
                 <>
                   <dt>Tokens</dt>
                   <dd className="num">{attempt.inputTokens !== null ? `${tokens(attempt.inputTokens)} in · ${tokens(attempt.outputTokens ?? 0)} out` : "counting…"}</dd>
@@ -211,7 +221,35 @@ export function RunLive({ gatewayUrl, runId, timeline, runEnded }: { gatewayUrl:
                   <dd style={{ color: "var(--fail)" }}>{attempt.error}</dd>
                 </>
               )}
+              {attempt.superseded && (
+                <>
+                  <dt>Pass</dt>
+                  <dd className="faint">An earlier pass, replaced by a Retry</dd>
+                </>
+              )}
             </dl>
+
+            {attempt.retryContext && (
+              <details className="stack" style={{ gap: 6 }}>
+                <summary className="eyebrow" style={{ cursor: "pointer" }}>
+                  Retry context
+                </summary>
+                <pre className="outv mono" style={{ whiteSpace: "pre-wrap" }}>
+                  {attempt.retryContext}
+                </pre>
+              </details>
+            )}
+
+            {attempt.rounds.length > 0 && (
+              <div className="stack" style={{ gap: 8 }}>
+                <span className="eyebrow">{node.kind === "grill" ? "Rounds" : "Decision"}</span>
+                <div className="qa">
+                  {attempt.rounds.map((r) => (
+                    <Round key={r.id} round={r} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {node.kind !== "ticket" && (
               <div className="stack" style={{ gap: 8 }}>
@@ -266,8 +304,49 @@ export function RunLive({ gatewayUrl, runId, timeline, runEnded }: { gatewayUrl:
   );
 }
 
+type RoundView = TimelineNode["attempts"][number]["rounds"][number];
+
+/** One Grill round or Approve decision, with who answered and when (spec M3 §2.2, §8). */
+function Round({ round }: { round: RoundView }) {
+  const response = round.response;
+  const who = round.respondedBy ? `${round.respondedBy} · ${formatTime(new Date(round.respondedAt!))}` : "";
+  return (
+    <>
+      {round.kind === "grill" &&
+        round.questions.map((q) => (
+          <div key={q.id} className="stack" style={{ gap: 6 }}>
+            <div className="q">
+              <span className="who">Claude · round {round.round}</span>
+              {q.text}
+            </div>
+            {response && "answers" in response && (
+              <div className="ans">
+                <span className="who">{who}</span>
+                {response.answers[q.id]}
+              </div>
+            )}
+          </div>
+        ))}
+      {response && "cancelled" in response && <span className="small faint">Closed by Cancel{who && ` · ${who}`}</span>}
+      {response && "decision" in response && response.decision === "approve" && (
+        <div className="ans">
+          <span className="who">{who}</span>
+          Approved
+        </div>
+      )}
+      {response && "decision" in response && response.decision === "reject" && (
+        <div className="ans">
+          <span className="who">{who}</span>
+          Rejected: {response.feedback}
+        </div>
+      )}
+      {!response && round.kind === "approve" && <span className="small faint">Waiting for Approve or Reject…</span>}
+    </>
+  );
+}
+
 function NodeRow({ node, on, onSelect }: { node: TimelineNode; on: boolean; onSelect: () => void }) {
-  const icon = node.state === "succeeded" ? Icon.check : node.state === "failed" ? Icon.x : node.state === "running" ? Icon.spin : null;
+  const icon = node.state === "succeeded" ? Icon.check : node.state === "failed" || node.state === "interrupted" ? Icon.x : node.state === "running" ? Icon.spin : null;
   const [, kindLabel] = KIND[node.kind] ?? ["?", node.kind];
   return (
     <button type="button" role="listitem" className={`node-row ${on ? "on" : ""}`} aria-current={on} onClick={onSelect}>
@@ -280,6 +359,7 @@ function NodeRow({ node, on, onSelect }: { node: TimelineNode; on: boolean; onSe
           {kindLabel}
           {node.attempts.length > 1 && ` · ${node.attempts.length} Attempts`}
           {node.state === "not reached" && " · not reached"}
+          {node.state === "waiting_for_human" && " · waiting for a person"}
         </span>
       </span>
       <span className="meta num">{node.state === "running" ? "…" : node.durationMs !== null ? duration(node.durationMs) : ""}</span>

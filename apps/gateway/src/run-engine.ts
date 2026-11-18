@@ -2,28 +2,41 @@ import {
   activeOutputs,
   branchName,
   buildAgentPrompt,
+  buildGrillAnswerPrompt,
   checkAgentResult,
   commandOutputs,
   mask,
   nextNode,
+  parseGrillQuestions,
+  renderRetryContext,
   schedule,
   simulatedDelayMs,
   simulatedOutputs,
   snapshotFlow,
   type Clock,
   type FlowSnapshot,
+  type GrillAnswers,
+  type GrillQuestion,
   type OutputValue,
+  type RetryContext,
   type SnapshotNode,
 } from "@clauderon/core";
 import {
   appendLogChunk,
+  askHuman,
   attemptsOfRun,
   createAttempt,
   finishAttempt,
   getAttempt,
   getPod,
   getRunContext,
+  interruptRun,
+  latestAnsweredRound,
+  markRetryLoginsChecked,
   moveRun,
+  podsWithQueuedRuns,
+  runningAttemptIds,
+  runningRuns,
   runsOfPod,
   setAttemptUsage,
   updateRun,
@@ -48,6 +61,18 @@ export type RunEngineOptions = {
   /** Source of randomness for the Dry-run runner; default `Math.random`. */
   random?: () => number;
   log?: (message: string) => void;
+  /** Whether the Host Agent is connected; Queued Runs wait while it is not (spec M3 §6). */
+  hostConnected?: () => boolean;
+};
+
+/** What the Gateway learned from a `hello` (spec M3 §6). */
+export type HostBack = {
+  liveAttempts: readonly string[];
+  /** The Host Agent process changed, or this Gateway just booted: lost Attempts cannot report any more. */
+  checkLive: boolean;
+  /** Messages to and from the Gateway were lost too, so simulated Dry-run Nodes stopped. */
+  gatewayRestarted: boolean;
+  reason: string;
 };
 
 type RunContext = NonNullable<Awaited<ReturnType<typeof getRunContext>>>;
@@ -59,6 +84,8 @@ type RunContext = NonNullable<Awaited<ReturnType<typeof getRunContext>>>;
  */
 export class RunEngine {
   private queue: Promise<void> = Promise.resolve();
+  /** Grill rounds whose resume was sent, so a repeated command never runs one twice. */
+  private resumedRounds = new Set<string>();
 
   constructor(private readonly opts: RunEngineOptions) {}
 
@@ -78,6 +105,8 @@ export class RunEngine {
   }
 
   private async scheduleNow(podId: string): Promise<void> {
+    // Queued Runs wait for the Pod Host (spec M3 §6); its next hello schedules every Pod.
+    if (this.opts.hostConnected && !this.opts.hostConnected()) return;
     const pod = await getPod(this.opts.db, podId);
     if (!pod) return;
     const runs = await runsOfPod(this.opts.db, podId, ["queued", "running", "waiting_for_human"]);
@@ -93,8 +122,11 @@ export class RunEngine {
     if (runs.length > 0 && (await this.waitingForLogins(podId)).length > 0) this.opts.link.send("pod.checkLogins", { podId });
   }
 
+  /** Real Runs waiting for their login check: new ones, and retried ones (spec M3 §4). */
   private async waitingForLogins(podId: string) {
-    return (await runsOfPod(this.opts.db, podId, ["running"])).filter((r) => r.mode === "real" && r.branch === null);
+    return (await runsOfPod(this.opts.db, podId, ["running"])).filter(
+      (r) => r.mode === "real" && (r.branch === null || (r.pendingRetry !== null && !r.pendingRetry.loginsChecked)),
+    );
   }
 
   /**
@@ -114,7 +146,12 @@ export class RunEngine {
       for (const run of await this.waitingForLogins(pod.id)) {
         if (!pod.claudeLoggedIn) await this.fail(run.id, "Claude Code not logged in");
         else if (!pod.ghLoggedIn) await this.fail(run.id, "gh not logged in");
-        else await this.prepare(run.id);
+        else if (run.pendingRetry) {
+          // A retried Run keeps its worktree (RUN-7); one that never got it prepares it now.
+          await markRetryLoginsChecked(this.opts.db, run.id);
+          if (run.worktreePath) await this.advance(run.id);
+          else await this.prepare(run.id);
+        } else await this.prepare(run.id);
       }
     });
   }
@@ -146,11 +183,17 @@ export class RunEngine {
     return this.serial(() => this.fail(runId, `Workspace: ${this.hide(error)}`));
   }
 
-  /** Starts the next Node, or ends the Run when none is left (RUN-2, RUN-16). */
+  /**
+   * Starts the next Node, or ends the Run when none is left (RUN-2, RUN-16).
+   * Only Attempts of the current pass count: a Retry supersedes the rest
+   * (RUN-7). A Run already running or waiting at a Node is left alone.
+   */
   private async advance(runId: string): Promise<void> {
     const ctx = await getRunContext(this.opts.db, runId);
     if (!ctx?.run.podId || ctx.run.state !== "running") return;
-    const attempts = await attemptsOfRun(this.opts.db, runId);
+    const all = await attemptsOfRun(this.opts.db, runId);
+    const attempts = all.filter((a) => !a.superseded);
+    if (attempts.some((a) => a.state === "running" || a.state === "waiting_for_human")) return;
     const views = attempts.map((a) => ({ flowNodeId: a.flowNodeId, state: a.state, outputs: a.outputs.map((o) => o.name) }));
     const next = nextNode(snapshotFlow(ctx.snapshot), views);
 
@@ -163,7 +206,7 @@ export class RunEngine {
     const attempt = await createAttempt(this.opts.db, {
       runId,
       flowNodeId: node.id,
-      number: attempts.filter((a) => a.flowNodeId === node.id).length + 1,
+      number: all.filter((a) => a.flowNodeId === node.id).length + 1,
       startedAt: this.now(),
     });
     this.opts.live.runChanged(runId);
@@ -179,17 +222,21 @@ export class RunEngine {
       return this.advance(runId);
     }
 
-    if (node.kind !== "agent" && node.kind !== "command") {
-      const error = `${node.name}: Human Nodes arrive in M3`;
-      await finishAttempt(this.opts.db, attempt.id, { state: "failed", endedAt: this.now(), error });
-      return this.fail(runId, error);
+    const inputs = this.inputsOf(ctx.snapshot, node, attempts);
+    if (node.kind === "approve") {
+      // Waits for a person with the input it passes through (spec M3 §2.1); no timeout.
+      const input = inputs[0] ?? null;
+      await askHuman(this.opts.db, { runId, attemptId: attempt.id, kind: "approve", questions: { input }, now: this.now() });
+      this.opts.live.runChanged(runId);
+      return;
     }
 
+    // A Dry-run simulates Grill Nodes like Agent Nodes: no questions (RUN-13).
     if (ctx.run.mode === "dry") return this.simulate(runId, node, attempt.id);
 
-    const inputs = this.inputsOf(ctx.snapshot, node, attempts);
+    const retryContext = attempt.retryContext as RetryContext | null;
     const base = { attemptId: attempt.id, runId, podId: ctx.run.podId, worktreePath: ctx.run.worktreePath ?? "" };
-    if (node.kind === "agent") {
+    if (node.kind === "agent" || node.kind === "grill") {
       const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs);
       const prompt = buildAgentPrompt({
         instructions: node.instructions,
@@ -197,12 +244,57 @@ export class RunEngine {
         batchInstructions: ctx.batchInstructions,
         inputs,
         outputs: outputs.map((o) => o.name),
+        grill: node.kind === "grill",
+        retryContext,
       });
-      const env: Record<string, string> = outputs.some((o) => o.type === "branch") ? { CLAUDERON_EXPECT_COMMIT: "1" } : {};
-      this.opts.link.send("node.run", { ...base, kind: "agent", prompt, env });
+      this.opts.link.send("node.run", { ...base, kind: "agent", prompt, env: this.agentEnv(node) });
     } else {
-      this.opts.link.send("node.run", { ...base, kind: "command", command: node.command ?? "true", env: this.commandEnv(ctx, inputs) });
+      const env = this.commandEnv(ctx, inputs);
+      // The Host Agent turns it into $CLAUDERON_RETRY_CONTEXT_FILE (spec M3 §4).
+      if (retryContext) env.CLAUDERON_RETRY_CONTEXT = renderRetryContext(retryContext);
+      this.opts.link.send("node.run", { ...base, kind: "command", command: node.command ?? "true", env });
     }
+  }
+
+  private agentEnv(node: SnapshotNode): Record<string, string> {
+    const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs);
+    return outputs.some((o) => o.type === "branch") ? { CLAUDERON_EXPECT_COMMIT: "1" } : {};
+  }
+
+  /**
+   * A person approved or answered (spec M3 §2): the web app already moved the
+   * Run back to `running`. An answered Grill round resumes the same Claude
+   * session on the same Attempt; otherwise the Run goes on to its next Node.
+   */
+  resume(runId: string): Promise<void> {
+    return this.serial(async () => {
+      const ctx = await getRunContext(this.opts.db, runId);
+      if (!ctx?.run.podId || ctx.run.state !== "running") return;
+      const attempt = (await attemptsOfRun(this.opts.db, runId)).find((a) => !a.superseded && a.state === "running");
+      if (!attempt) return this.advance(runId);
+      const node = ctx.snapshot.nodes.find((n) => n.id === attempt.flowNodeId);
+      if (node?.kind !== "grill") return;
+      const round = await latestAnsweredRound(this.opts.db, attempt.id);
+      if (!round || this.resumedRounds.has(round.id)) return;
+      this.resumedRounds.add(round.id);
+      if (!attempt.claudeSessionId) {
+        const end = { endedAt: this.now(), exitCode: -1, claudeSessionId: null };
+        return this.failAttempt(ctx, attempt.id, "No Claude session to resume", end);
+      }
+      const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs).map((o) => o.name);
+      const answers = (round.response as { answers?: GrillAnswers } | null)?.answers ?? {};
+      this.opts.link.send("node.run", {
+        attemptId: attempt.id,
+        runId,
+        podId: ctx.run.podId,
+        worktreePath: ctx.run.worktreePath ?? "",
+        kind: "agent",
+        prompt: buildGrillAnswerPrompt((round.questions ?? []) as GrillQuestion[], answers, outputs),
+        resumeSessionId: attempt.claudeSessionId,
+        env: this.agentEnv(node),
+      });
+      this.opts.live.runChanged(runId);
+    });
   }
 
   /**
@@ -235,15 +327,15 @@ export class RunEngine {
     await this.advance(runId);
   }
 
-  /** Every input's value: the Output on its edge from the latest succeeded Attempt. */
+  /** Every input's value: the Output on its edge from the latest succeeded Attempt of this pass. */
   private inputsOf(snapshot: FlowSnapshot, node: SnapshotNode, attempts: readonly AttemptWithOutputs[]) {
-    const values: { name: string; value: unknown }[] = [];
+    const values: { name: string; type: string; value: unknown }[] = [];
     for (const input of node.inputs) {
       const edge = snapshot.edges.find((e) => e.toFlowNodeId === node.id && e.toInput === input.name);
       if (!edge) continue;
       const source = attempts.filter((a) => a.flowNodeId === edge.fromFlowNodeId && a.state === "succeeded").at(-1);
       const output = source?.outputs.find((o) => o.name === edge.fromOutput);
-      if (output) values.push({ name: input.name, value: output.value });
+      if (output) values.push({ name: input.name, type: output.type, value: output.value });
     }
     return values;
   }
@@ -287,12 +379,23 @@ export class RunEngine {
       const node = ctx?.snapshot.nodes.find((n) => n.id === attempt.flowNodeId);
       if (!ctx || !node) return;
 
-      const end = { endedAt: this.now(), exitCode: result.exitCode, claudeSessionId: result.sessionId ?? null };
+      const end = { endedAt: this.now(), exitCode: result.exitCode, claudeSessionId: result.sessionId ?? attempt.claudeSessionId };
       const branch = { branch: ctx.run.branch ?? "", headCommit: result.headCommit ?? null };
       let outputs: OutputValue[];
       if (result.error) {
         return this.failAttempt(ctx, attempt.id, this.hide(result.error), end);
-      } else if (node.kind === "agent") {
+      }
+      if (node.kind === "grill") {
+        // Questions instead of Outputs: a new round for a person (spec M3 §2.2).
+        const asked = parseGrillQuestions(result.result);
+        if (asked && !asked.ok) return this.failAttempt(ctx, attempt.id, asked.reason, end);
+        if (asked?.ok) {
+          await askHuman(this.opts.db, { runId: ctx.run.id, attemptId: attempt.id, kind: "grill", questions: asked.questions, claudeSessionId: end.claudeSessionId, now: this.now() });
+          this.opts.live.runChanged(ctx.run.id);
+          return;
+        }
+      }
+      if (node.kind === "agent" || node.kind === "grill") {
         const checked = checkAgentResult(node, node.enabledOptionalOutputs, result.result, result.headCommit ? branch : undefined);
         if (!checked.ok) return this.failAttempt(ctx, attempt.id, checked.reason, end);
         outputs = checked.outputs;
@@ -332,6 +435,84 @@ export class RunEngine {
   private async ended(runId: string, podId: string): Promise<void> {
     this.opts.live.runChanged(runId);
     await this.scheduleNow(podId);
+  }
+
+  /**
+   * Interrupt Running Runs (RUN-12): they keep their worktree and wait for a
+   * person; nothing is retried automatically. Returns the interrupted Attempts.
+   */
+  private async interrupt(runIds: readonly string[], reason: string): Promise<string[]> {
+    const killed: string[] = [];
+    const pods = new Set<string>();
+    for (const r of await runningRuns(this.opts.db)) {
+      if (!runIds.includes(r.id)) continue;
+      const attempts = await interruptRun(this.opts.db, r.id, reason, this.now());
+      if (!attempts) continue;
+      killed.push(...attempts);
+      if (r.podId) pods.add(r.podId);
+      this.opts.live.runChanged(r.id);
+    }
+    // Their Slots are free now; Queued Runs start if the Pod Host is there.
+    for (const podId of pods) await this.scheduleNow(podId);
+    return killed;
+  }
+
+  /** No heartbeat for 30 s (spec M3 §6): every Real Running Run becomes Interrupted. */
+  hostLost(reason: string, includeDryRuns = false): Promise<void> {
+    return this.serial(async () => {
+      const runs = (await runningRuns(this.opts.db)).filter((r) => r.mode === "real" || includeDryRuns);
+      await this.interrupt(runs.map((r) => r.id), reason);
+    });
+  }
+
+  /** A Pod stopped or crashed (spec M3 §6): its Running Runs become Interrupted. */
+  podDown(podId: string, reason: string): Promise<void> {
+    return this.serial(async () => {
+      const runs = await runningRuns(this.opts.db, podId);
+      await this.interrupt(runs.map((r) => r.id), reason);
+    });
+  }
+
+  /**
+   * The Host Agent said hello (spec M3 §6). After a Host Agent restart or a
+   * Gateway restart, Running Runs whose Attempts are not live can never
+   * report and become Interrupted. Then every live Attempt that is not
+   * running in the database is killed, and Runs that lost a command go on.
+   */
+  hostBack(back: HostBack): Promise<void> {
+    return this.serial(async () => {
+      const live = new Set(back.liveAttempts);
+      const lost: string[] = [];
+      if (back.checkLive) {
+        for (const r of await runningRuns(this.opts.db)) {
+          if (r.mode === "dry") {
+            // Simulated in this Gateway: only a Gateway restart loses them.
+            if (back.gatewayRestarted && r.attemptIds.length > 0) lost.push(r.id);
+          } else if (r.attemptIds.length > 0 ? r.attemptIds.some((id) => !live.has(id)) : r.branch !== null && r.worktreePath === null) {
+            // A Node, or a Workspace being prepared, that can no longer report.
+            lost.push(r.id);
+          }
+        }
+      }
+      const interrupted = await this.interrupt(lost, back.reason);
+      const running = await runningAttemptIds(this.opts.db, back.liveAttempts);
+      for (const attemptId of new Set([...back.liveAttempts.filter((id) => !running.has(id)), ...interrupted])) {
+        this.opts.link.send("node.kill", { attemptId });
+      }
+      await this.reconcile();
+    });
+  }
+
+  /** Re-drives Runs after a reconnect: a Run with no Node in flight goes on; every Pod schedules. */
+  private async reconcile(): Promise<void> {
+    const pods = new Set(await podsWithQueuedRuns(this.opts.db));
+    for (const r of await runningRuns(this.opts.db)) {
+      if (r.podId) pods.add(r.podId);
+      if (r.attemptIds.length > 0) continue;
+      const waitingForLogins = r.mode === "real" && (r.branch === null || (r.pendingRetry !== null && !r.pendingRetry.loginsChecked));
+      if (r.mode === "dry" || (!waitingForLogins && r.worktreePath !== null)) await this.advance(r.id);
+    }
+    for (const podId of pods) await this.scheduleNow(podId);
   }
 
   private hide(text: string): string {

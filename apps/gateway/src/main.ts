@@ -26,6 +26,8 @@ const gateway = createGateway({
 });
 
 await gateway.link.start();
+// The boot wait (spec M3 §6): Run state is in the database; the Host Agent has 30 s to say hello.
+gateway.watch.start();
 await listenMemberRevoked(databaseUrl, (email) => gateway.hub.revoke(email));
 await listenGatewayCommands(databaseUrl, (command) => {
   gateway.pods.command(command).catch((error: unknown) => console.warn(`gateway command ${command.type} failed: ${String(error)}`));

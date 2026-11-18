@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
-import { cancelRunAs } from "../../../../server/runs";
+import { cancelRunAs, retryAs } from "../../../../server/runs";
 import { deps, requireMember } from "../../../../server/runtime";
 
 export type CancelFormState = { error: string | null };
@@ -17,4 +17,18 @@ export async function cancelRunAction(_state: CancelFormState, form: FormData): 
   revalidatePath("/runs");
   revalidatePath("/pods", "layout");
   return { error: result.ok ? null : "This Run has already ended." };
+}
+
+export type RetryFormState = { error: string | null };
+
+/** Retry from a Node (RUN-7): any Member, a Failed or Interrupted Run. */
+export async function retryRunAction(_state: RetryFormState, form: FormData): Promise<RetryFormState> {
+  const member = await requireMember();
+  const runId = String(form.get("runId") ?? "");
+  const result = await retryAs(deps(), member, runId, String(form.get("nodeId") ?? ""), String(form.get("note") ?? ""));
+  if (result === "not-found") notFound();
+  revalidatePath(`/runs/${runId}`);
+  revalidatePath("/runs");
+  revalidatePath("/pods", "layout");
+  return { error: result.ok ? null : result.error };
 }

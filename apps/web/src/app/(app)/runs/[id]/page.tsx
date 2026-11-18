@@ -1,8 +1,8 @@
-import { isActive } from "@clauderon/core";
+import { isActive, renderRetryContext } from "@clauderon/core";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Avatar } from "../../../../components/brand";
-import { ago, duration, tokens } from "../../../../components/format";
+import { ago, duration, formatTime, tokens } from "../../../../components/format";
 import { Icon } from "../../../../components/icons";
 import { StatePill } from "../../../../components/state-pill";
 import { viewRun } from "../../../../server/runs";
@@ -21,7 +21,8 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const now = new Date();
   const podOwner = run.podOwner ? (run.podOwner.name ?? run.podOwner.email) : null;
   const podLabel = run.podName ?? `${podOwner}'s Pod`;
-  const failedAt = run.timeline.find((n) => n.state === "failed");
+  const failedAt = run.timeline.find((n) => n.state === "failed" || n.state === "interrupted");
+  const waitingAt = run.timeline.find((n) => n.openRequest);
   const runningAt = run.timeline.find((n) => n.state === "running");
   const active = isActive(r.state);
 
@@ -54,7 +55,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               <span className="row" style={{ gap: 6 }}>
                 <Avatar name={run.starter.name} email={run.starter.email} picture={run.starter.pictureUrl} />
                 <span className="small">
-                  started by <b>{run.starter.name ?? run.starter.email}</b> {ago(r.queuedAt, now)}
+                  started by <b>{run.starter.name ?? run.starter.email}</b> {ago(r.createdAt, now)}
                 </span>
               </span>
             </div>
@@ -69,7 +70,27 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
             <p>
               <b>Failed{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
             </p>
-            <p className="small">The Run stays Active and keeps its worktree, but frees its Slot. Cancel it to end it for good; Retry arrives in M3.</p>
+            <p className="small">The Run stays Active and keeps its worktree, but frees its Slot. Pick a Node and use Retry from here, or Cancel it to end it for good.</p>
+          </div>
+        </div>
+      )}
+      {r.state === "interrupted" && (
+        <div className="banner intr" role="status">
+          <div className="grow">
+            <p>
+              <b>Interrupted{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
+            </p>
+            <p className="small">Nothing is retried automatically. The Run keeps its worktree but not a Slot: Retry from a Node, or Cancel it.</p>
+          </div>
+        </div>
+      )}
+      {r.state === "waiting_for_human" && (
+        <div className="banner wait" role="status">
+          <div className="grow">
+            <p>
+              <b>Waiting for a person{waitingAt ? ` at “${waitingAt.name}”` : ""}</b>
+            </p>
+            <p className="small">Any Member can respond below or from Needs you. The Run keeps its Slot until someone does; there is no timeout.</p>
           </div>
         </div>
       )}
@@ -139,7 +160,34 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
       </div>
 
       <div className="card">
-        <RunLive gatewayUrl={gatewayUrl()} runId={r.id} timeline={run.timeline} runEnded={r.endedAt !== null} />
+        <RunLive
+          gatewayUrl={gatewayUrl()}
+          runId={r.id}
+          timeline={run.timeline}
+          runEnded={r.endedAt !== null}
+          retryable={run.retryable}
+          retryContext={run.retryContext ? renderRetryContext(run.retryContext) || null : null}
+        />
+      </div>
+
+      <div className="card card-pad stack" style={{ gap: 10 }}>
+        <span className="eyebrow">History</span>
+        {run.history.length === 0 ? (
+          <span className="faint small">Nothing recorded yet.</span>
+        ) : (
+          <ul className="history" aria-label="Run history">
+            {run.history.map((h) => (
+              <li key={h.id}>
+                <span className="faint num nowrap">{formatTime(h.at)}</span>
+                <span className="mono">{h.action}</span>
+                <span>{h.actorEmail}</span>
+                {typeof h.detail.node === "string" && <span className="faint">at “{h.detail.node}”</span>}
+                {typeof h.detail.feedback === "string" && <span className="faint">: {h.detail.feedback}</span>}
+                {typeof h.detail.note === "string" && <span className="faint">: {h.detail.note}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </>
   );

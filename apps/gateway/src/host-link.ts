@@ -15,6 +15,9 @@ import {
 } from "@clauderon/protocol";
 
 type Handler<T extends MessageType> = (payload: Payload<T>, envelope: Envelope<Payload<T>>) => void | Promise<void>;
+/** A `hello`: whether the Host Agent process changed since the one the Gateway last knew. */
+export type HelloListener = (hello: Payload<"hello">, info: { processChanged: boolean }) => void | Promise<void>;
+export type HeartbeatListener = (heartbeat: Payload<"heartbeat">) => void | Promise<void>;
 
 export type HostLinkOptions = {
   db: Db;
@@ -36,8 +39,28 @@ export class HostLink {
   private processId: string | null = null;
   private handlers = new Map<string, Handler<MessageType>[]>();
   private queue: Promise<void> = Promise.resolve();
+  private helloListeners: HelloListener[] = [];
+  private heartbeatListeners: HeartbeatListener[] = [];
 
   constructor(private readonly opts: HostLinkOptions) {}
+
+  /** Called after each `welcome` and the resent messages (spec M3 §6). */
+  onHello(listener: HelloListener): void {
+    this.helloListeners.push(listener);
+  }
+
+  onHeartbeat(listener: HeartbeatListener): void {
+    this.heartbeatListeners.push(listener);
+  }
+
+  /** Closes the current socket, e.g. a silent one; the Host Agent reconnects with a hello. */
+  drop(reason: string): void {
+    const socket = this.current;
+    if (!socket) return;
+    this.current = null;
+    socket.close(CloseCode.Silent, reason);
+    this.enqueue(() => recordHostDisconnected(this.opts.db));
+  }
 
   /** Loads the persisted message ids; call once before accepting sockets. */
   async start(): Promise<void> {
@@ -113,6 +136,7 @@ export class HostLink {
         return;
       case "heartbeat":
         await recordHeartbeat(this.opts.db, this.opts.clock.now());
+        for (const listener of this.heartbeatListeners) await listener(envelope.payload as Payload<"heartbeat">);
         return;
       case "welcome":
         return;
@@ -132,7 +156,8 @@ export class HostLink {
     this.current = socket;
 
     // A new Host Agent process numbers its messages from 1 again.
-    if (hello.processId !== this.processId) this.buffer.lastReceivedId = 0;
+    const processChanged = hello.processId !== this.processId;
+    if (processChanged) this.buffer.lastReceivedId = 0;
     this.processId = hello.processId;
 
     const { lastReceivedId: _ignored, liveAttempts: _live, ...facts } = hello;
@@ -141,6 +166,7 @@ export class HostLink {
 
     socket.send(serialize(controlMessage("welcome", { lastReceivedId: this.buffer.lastReceivedId, podImage: this.opts.podImage })));
     for (const missed of this.buffer.unacked(hello.lastReceivedId)) socket.send(serialize(missed));
+    for (const listener of this.helloListeners) await listener(hello, { processChanged });
   }
 
   private async deliver(envelope: Envelope, known: boolean): Promise<void> {

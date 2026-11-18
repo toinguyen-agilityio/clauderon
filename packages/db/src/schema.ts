@@ -179,6 +179,9 @@ export const ticket = pgTable(
   (t) => [uniqueIndex("ticket_project_number_idx").on(t.projectId, t.number)],
 );
 
+/** `run.pending_retry`: set by Retry, cleared when the chosen Node's Attempt starts. */
+export type PendingRetry = { flowNodeId: string; context: unknown; loginsChecked: boolean };
+
 export type NodeInputJson = { name: string; type: string; required: boolean };
 export type NodeOutputJson = { name: string; type: string; optional: boolean };
 
@@ -287,6 +290,8 @@ export const run = pgTable(
     /** Pull request state is refreshed at most once a minute (TIC-6). */
     pullRequestCheckedAt: ts("pull_request_checked_at"),
     failureReason: text("failure_reason"),
+    /** A Retry waiting for its Node to start (RUN-7): the chosen Node and its retry context. */
+    pendingRetry: jsonb("pending_retry").$type<PendingRetry>(),
   },
   (t) => [
     index("run_queue_idx").on(t.podId, t.state, t.queuedAt),
@@ -314,6 +319,8 @@ export const attempt = pgTable("attempt", {
   outputTokens: integer("output_tokens"),
   claudeSessionId: text("claude_session_id"),
   retryContext: jsonb("retry_context"),
+  /** Left out of the current pass by a later Retry (RUN-7); still shown on the Run page. */
+  superseded: boolean("superseded").notNull().default(false),
 });
 
 export const output = pgTable("output", {

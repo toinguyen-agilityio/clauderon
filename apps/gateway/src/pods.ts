@@ -15,6 +15,7 @@ export class PodService {
   async command(command: GatewayCommand): Promise<void> {
     if (command.type === "schedule") return this.opts.engine.schedule(command.podId);
     if (command.type === "run.cancel") return this.opts.engine.cancelled(command);
+    if (command.type === "run.resume") return this.opts.engine.resume(command.runId);
     // The web app deleted the row first, so there is nothing to look up.
     if (command.type === "pod.delete") {
       this.opts.link.send("pod.delete", { podId: command.podId });
@@ -36,7 +37,23 @@ export class PodService {
     if (!pod) return;
     // Starting a Pod triggers a login check (spec M1 §2.2).
     if (pod.status === "running" && before?.status !== "running") this.opts.link.send("pod.checkLogins", { podId: pod.id });
+    // A Pod that stops or crashes interrupts its Running Runs (spec M3 §6).
+    if (pod.status !== "running" && pod.status !== "creating") await this.opts.engine.podDown(pod.id, `Pod ${pod.status}${status.error ? `: ${status.error}` : ""}`);
     await this.opts.engine.schedule(pod.id);
+  }
+
+  /**
+   * Pod container states in a heartbeat: a container the database thinks is
+   * running but the Pod Host reports stopped has crashed or been stopped
+   * outside the app.
+   */
+  async heartbeat(heartbeat: Payload<"heartbeat">): Promise<void> {
+    for (const reported of heartbeat.pods) {
+      if (reported.status === "running") continue;
+      const pod = await getPod(this.opts.db, reported.podId);
+      if (pod?.status !== "running") continue;
+      await this.status({ podId: pod.id, status: reported.status, containerId: null, imageDigest: null, error: "container is not running" });
+    }
   }
 
   async logins(logins: Payload<"pod.logins">): Promise<void> {
