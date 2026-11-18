@@ -477,7 +477,6 @@ summary::before { content: ""; flex: none; width: 5px; height: 5px; margin: 0 2p
 details[open] > summary::before { transform: rotate(45deg); }
 details[open] > summary.small { margin-bottom: 12px; }
 .details-body { margin-top: 12px; }
-.node-form-wrap { min-width: 420px; }
 
 /* Tables */
 .tbl.top td { vertical-align: top; }
@@ -493,4 +492,77 @@ details[open] > summary.small { margin-bottom: 12px; }
 }
 @media (max-width: 860px) {
   .pod-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+}
+
+/* Node library (ticket #71): a filterable list that opens a full-width editor under its row */
+.tag.k-agent { background: var(--accent-weak); color: var(--accent-text); }
+.tag.k-command { background: var(--run-bg); color: var(--run); }
+.tag.k-approve { background: var(--wait-bg); color: var(--wait); }
+.tag.k-grill { background: var(--intr-bg); color: var(--intr); }
+.tag.k-ticket { background: var(--mute-bg); color: var(--mute); }
+.tag.sample { background: transparent; border: 1px solid var(--line); color: var(--fg3); font-weight: 500; }
+.lib-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.lib-search { flex: 1 1 240px; max-width: 360px; }
+.lib-toolbar .chips { flex: 1 1 auto; }
+.lib-legend { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.lib-new-h { font-size: 1.05rem; margin-bottom: 14px; }
+.lib-list { display: flex; flex-direction: column; gap: 10px; }
+.lib-cols { display: grid; grid-template-columns: minmax(0, 1.5fr) 100px minmax(0, 1.6fr) minmax(0, 1.5fr) minmax(0, 1.3fr); gap: 16px; align-items: center; }
+.lib-head { padding: 0 18px; color: var(--fg3); font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.lib-row { overflow: hidden; }
+.lib-row.open { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.lib-row-head { width: 100%; padding: 14px 18px; border: 0; background: transparent; text-align: left; cursor: pointer; color: inherit; }
+.lib-row-head:hover { background: var(--hover); }
+.lib-name { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; overflow-wrap: anywhere; }
+.lib-chev { flex: none; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); opacity: 0.7; transition: transform 200ms var(--ease); }
+.lib-row.open .lib-chev { transform: rotate(45deg); }
+.lib-ports { display: flex; flex-wrap: wrap; gap: 6px; }
+.lib-port { display: inline-flex; gap: 6px; align-items: baseline; height: 24px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--sunk); line-height: 22px; }
+.lib-port b { font-size: 12.5px; font-weight: 600; }
+.lib-port i { font-style: normal; font-family: var(--font-mono); font-size: 11.5px; color: var(--fg3); }
+.lib-port.opt { border-style: dashed; border-color: var(--line); }
+.lib-port.opt b { font-weight: 500; color: var(--fg2); }
+.lib-flow { display: inline-block; margin: 0 6px 4px 0; padding: 1px 8px; border-radius: 8px; background: var(--sunk); }
+.lib-cell-label { display: none; }
+.lib-editor { border-top: 1px solid var(--line); padding: 18px; }
+.lib-links { margin-top: 12px; }
+
+.nf { display: flex; flex-direction: column; gap: 16px; }
+.nf-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.nf-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.nf-namekind { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; }
+.nf-kindhelp { margin: -4px 0 0; }
+.nf-instructions { min-height: 190px; overflow: hidden; resize: vertical; }
+.nf-count { text-align: right; font-variant-numeric: tabular-nums; }
+.nf-label { font-weight: 600; font-size: 12.5px; }
+.nf-ports { display: flex; flex-direction: column; gap: 8px; }
+.nf-prow { display: grid; grid-template-columns: minmax(0, 1fr) 132px auto auto; gap: 8px; align-items: center; }
+.nf-flag { gap: 6px; white-space: nowrap; color: var(--fg2); }
+.nf-help { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 14px; background: var(--sunk); }
+.nf-help summary { font-weight: 600; }
+.nf-help dl { margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.nf-dl-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 14px; }
+.nf-help dd { margin: 0; color: var(--fg2); }
+.nf-dl-h { margin: 12px 0 0; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg3); font-weight: 600; }
+.nf-confirm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--r-sm); background: var(--fail-bg); border: 1px solid color-mix(in srgb, var(--fail) 35%, transparent); font-size: 13px; }
+.nf-confirm .grow { flex: 1 1 260px; min-width: 0; }
+.nf-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 14px; }
+.nf-status { flex: 1 1 160px; min-width: 0; font-size: 12.5px; color: var(--fg2); overflow-wrap: anywhere; }
+.nf-status.ok { color: var(--ok); }
+.nf-status.error { color: var(--fail); }
+.nf-dirty { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--wait); }
+.nf-dirty::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.nf-delete { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+
+@media (max-width: 860px) {
+  .lib-head { display: none; }
+  .lib-cols { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .lib-cell-label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg3); margin-bottom: 4px; }
+  .lib-search { max-width: none; }
+  .nf-grid { grid-template-columns: minmax(0, 1fr); }
+  .nf-namekind { grid-template-columns: minmax(0, 1fr); }
+  .nf-prow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .nf-prow .nf-flag, .nf-prow .btn { justify-self: start; }
+  .nf-delete { margin-left: 0; }
+  .nf-dl-row { grid-template-columns: minmax(0, 1fr); }
 }
