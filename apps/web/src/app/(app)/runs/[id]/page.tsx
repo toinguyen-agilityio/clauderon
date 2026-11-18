@@ -28,7 +28,10 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const active = isActive(r.state);
   // A failed Agent Node may be out of Claude usage or logged out: its Pod's owner
   // can sign in to another Claude account here, then Retry (the Pod page's login, POD-5).
-  const canSwitchClaude = r.state === "failed" && failedAt?.kind === "agent" && run.podOwnerId === member.id && run.podStatus === "running";
+  // Only when Claude Code itself failed (usage limit, logged out); not for
+  // "no commit on the branch" or a missing result block.
+  const claudeFailed = /^Claude Code exited/.test(r.failureReason ?? "");
+  const canSwitchClaude = r.state === "failed" && failedAt?.kind === "agent" && claudeFailed && run.podOwnerId === member.id && run.podStatus === "running";
 
   return (
     <>
@@ -120,7 +123,8 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
       )}
-      {r.state === "running" && !r.branch && (
+      {/* A Dry-run needs no logins and no worktree, so it never gets a branch. */}
+      {r.state === "running" && r.mode === "real" && !r.branch && (
         <div className="banner info" role="status">
           <div className="grow small">Checking the Pod&apos;s logins and preparing the worktree…</div>
         </div>

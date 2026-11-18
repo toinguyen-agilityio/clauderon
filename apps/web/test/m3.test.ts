@@ -258,19 +258,24 @@ describe("Retry (RUN-7, RUN-9, spec M3 §4)", () => {
     const { runId, nodeId } = await failedRun(f);
     await clock.advance(60_000);
     expect(await retryAs(deps, f.bo, runId, "00000000-0000-0000-0000-000000000000", "")).toEqual({ ok: false, error: "That Node is not part of this Run." });
-    expect(await retryAs(deps, f.bo, runId, nodeId("Code a change"), "Mind the rounding.")).toEqual({ ok: true });
+    // Code a change comes after the rejected Approve a plan: a Retry cannot skip the approval.
+    expect(await retryAs(deps, f.bo, runId, nodeId("Code a change"), "")).toEqual({
+      ok: false,
+      error: "Retry from the Node that failed or an earlier one: a Retry cannot skip a Node that did not succeed.",
+    });
+    expect(await retryAs(deps, f.bo, runId, nodeId("Grill a plan"), "Mind the rounding.")).toEqual({ ok: true });
 
     const run = (await getRun(db, runId))!;
     expect(run).toMatchObject({ state: "queued", queuedAt: clock.now(), endedAt: null, failureReason: null });
     expect(run.pendingRetry).toMatchObject({
-      flowNodeId: nodeId("Code a change"),
+      flowNodeId: nodeId("Grill a plan"),
       loginsChecked: false,
       context: { feedback: "Keep the old API.", note: "Mind the rounding.", retriedBy: "bo@example.com", failure: { node: "Approve a plan", exitCode: null } },
     });
     expect(commands).toEqual([{ type: "schedule", podId: f.pod.id }]);
     expect((await audit()).find((e) => e.action === "run.retry")).toMatchObject({
       actorEmail: "bo@example.com",
-      detail: { node: "Code a change", note: "Mind the rounding.", from: "failed" },
+      detail: { node: "Grill a plan", note: "Mind the rounding.", from: "failed" },
     });
     // Only Failed or Interrupted Runs can be retried.
     expect(await retryAs(deps, f.bo, runId, nodeId("Code a change"), "")).toEqual({ ok: false, error: "Only a Failed or Interrupted Run can be retried." });

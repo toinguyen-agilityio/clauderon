@@ -21,6 +21,19 @@ const GIT_IDENTITY = [
  * Run.
  */
 export function registerWorkspaceHandlers(link: AgentLink, docker: DockerClient, log: Log): void {
+  // One prepare at a time per clone: a Batch starts several Runs of the same
+  // Project together, and two first-time clones into one directory collide.
+  const queues = new Map<string, Promise<void>>();
+  const oneAtATime = (key: string, task: () => Promise<void>): Promise<void> => {
+    const next = (queues.get(key) ?? Promise.resolve()).then(task);
+    const tail = next.catch(() => undefined);
+    queues.set(key, tail);
+    void tail.then(() => {
+      if (queues.get(key) === tail) queues.delete(key);
+    });
+    return next;
+  };
+
   link.on("workspace.prepare", detached(async ({ runId, podId, owner, repo, baseBranch, branch }) => {
     try {
       for (const value of [owner, repo, baseBranch, branch, runId]) {
@@ -30,14 +43,15 @@ export function registerWorkspaceHandlers(link: AgentLink, docker: DockerClient,
       const options = { user: POD_USER };
       const dir = projectDir(owner, repo);
       const git = (args: string[]) => execText(docker, container, ["git", "-C", dir, ...args], options);
-
-      await execText(docker, container, ["bash", "-lc", GIT_IDENTITY], options);
-      const cloned = (await docker.exec(container, ["test", "-d", `${dir}/.git`], options)) === 0;
-      if (cloned) await git(["fetch", "origin", baseBranch]);
-      else await execText(docker, container, ["gh", "repo", "clone", `${owner}/${repo}`, dir], options);
-
       const path = worktreeDir(runId);
-      await git(["worktree", "add", path, "-b", branch, `origin/${baseBranch}`]);
+
+      await oneAtATime(`${container}:${dir}`, async () => {
+        await execText(docker, container, ["bash", "-lc", GIT_IDENTITY], options);
+        const cloned = (await docker.exec(container, ["test", "-d", `${dir}/.git`], options)) === 0;
+        if (cloned) await git(["fetch", "origin", baseBranch]);
+        else await execText(docker, container, ["gh", "repo", "clone", `${owner}/${repo}`, dir], options);
+        await git(["worktree", "add", path, "-b", branch, `origin/${baseBranch}`]);
+      });
       link.send("workspace.ready", { runId, worktreePath: path });
     } catch (error) {
       const text = mask(error instanceof Error ? error.message : String(error));

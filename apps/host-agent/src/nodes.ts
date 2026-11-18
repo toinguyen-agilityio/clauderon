@@ -54,6 +54,9 @@ sleep ${KILL_GRACE_SECONDS}
 kill -KILL $pids 2>/dev/null
 true`;
 
+/** Terminal colour and cursor codes (CSI sequences). */
+const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+
 /** What Claude Code prints when `--resume` names a session it does not know. */
 const UNKNOWN_SESSION = /no conversation found|session[^\n]*(not found|does not exist|unknown)|invalid session/i;
 
@@ -183,8 +186,11 @@ export async function runNode(
     if (run.kind === "command") {
       const output: string[] = [];
       let pullRequest: unknown;
+      // Test runners and servers colour their output; the codes would end up
+      // in the log view and the pull request's test result as raw text.
+      const plain = (emit: (line: string) => void) => (line: string) => emit(line.replace(ANSI, ""));
       const streams = {
-        stdout: new Lines((line) => {
+        stdout: new Lines(plain((line) => {
           output.push(line);
           if (line.startsWith('{"pullRequest"')) {
             try {
@@ -194,11 +200,11 @@ export async function runNode(
             }
           }
           log("stdout", line);
-        }),
-        stderr: new Lines((line) => {
+        })),
+        stderr: new Lines(plain((line) => {
           output.push(line);
           log("stderr", line);
-        }),
+        })),
       };
       exitCode = await docker.exec(container, ["bash", "-lc", run.command ?? "true"], { ...inWorktree, env }, (stream, text) => streams[stream].push(text));
       streams.stdout.flush();
@@ -215,7 +221,9 @@ export async function runNode(
         if (run.resumeSessionId && !unknownSession && UNKNOWN_SESSION.test(line)) unknownSession = line.trim();
       };
       const stdout = new Lines((line) => {
-        watch(line);
+        // A stream-json event carries the session id and Claude's own text, which
+        // can read like the unknown-session message; only plain lines count.
+        if (!line.trimStart().startsWith("{")) watch(line);
         const event = parseClaudeLine(line);
         errors.event(event);
         if (event.sessionId) sessionId = event.sessionId;

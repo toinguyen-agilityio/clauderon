@@ -594,6 +594,7 @@ dialog.modal.lib-dialog { width: min(980px, calc(100vw - 32px)); }
 .nf-namekind { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; }
 .nf-kindhelp { margin: -4px 0 0; }
 .nf-instructions { min-height: 190px; overflow: hidden; resize: vertical; }
+.nf-command { resize: vertical; white-space: pre; overflow-x: auto; }
 .nf-count { text-align: right; font-variant-numeric: tabular-nums; }
 .nf-label { font-weight: 600; font-size: 12.5px; }
 .nf-ports { display: flex; flex-direction: column; gap: 8px; }

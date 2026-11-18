@@ -160,14 +160,14 @@ export function RunLive({
             </span>
             <h2>{node.name}</h2>
             <StatePill state={attempt ? attempt.state : node.state} />
-            {retryable && (
+            {retryable && node.canRetry && (
               <span style={{ marginLeft: "auto" }}>
                 <RetryFromHere runId={runId} nodeId={node.id} nodeName={node.name} inputs={node.retryInputs} context={retryContext} />
               </span>
             )}
           </div>
           {node.description && (
-            <p className={`faint small ${node.kind === "command" ? "mono" : ""}`} style={{ marginTop: 6, maxWidth: "75ch" }}>
+            <p className={`faint small ${node.kind === "command" ? "mono" : ""}`} style={{ marginTop: 6, maxWidth: "75ch", whiteSpace: "pre-wrap" }}>
               {node.description}
             </p>
           )}
