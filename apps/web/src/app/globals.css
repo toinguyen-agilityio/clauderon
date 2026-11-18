@@ -1,64 +1,65 @@
-/* Design system from the Clauderon prototype: an operator console with a fixed
-   left rail, a dense work area, state as pills and monospace for anything that
-   comes from git, GitHub or a Pod. Later milestones add their own sections. */
+/* Design system: "Estilo de IA Ética" (see /DESIGN.md). Clean, airy, trustworthy:
+   flat surfaces, Roboto, ethical blue, restrained shadows, subtle ease-out motion.
+   Light is the default; dark follows the sidebar toggle (or the OS under "System"). Monospace for git/Pod data. */
 :root {
-  --bg: #f3f4f7; --panel: #ffffff; --sunk: #eceef3; --hover: #e6e9f0;
-  --line: #dde1e9; --line-strong: #c6ccd8;
-  --fg: #131722; --fg2: #4b5365; --fg3: #848c9e;
-  --accent: #3344c4; --accent-2: #2735a6; --accent-weak: #e6e8fa; --on-accent: #ffffff;
-  --run: #2160c4; --run-bg: #e1eafa;
-  --wait: #9a5800; --wait-bg: #fbeed6;
-  --ok: #14773f; --ok-bg: #dcf2e5;
-  --fail: #c02828; --fail-bg: #fae2e2;
-  --intr: #b0430c; --intr-bg: #fae5d8;
-  --mute: #5d6474; --mute-bg: #e9ebf0;
-  --t-issue: #6b7280; --t-plan: #7a3be0; --t-branch: #0b8487; --t-test: #a86d12; --t-pr: #14773f; --t-summary: #2160c4; --t-shot: #bb3384;
-  --code-bg: #f7f8fb;
-  --term-bg: #151924; --term-fg: #d5dae6;
-  --shadow: 0 1px 2px rgba(18, 24, 40, 0.06), 0 6px 20px rgba(18, 24, 40, 0.07);
-  --scrim: rgba(14, 18, 28, 0.42);
-  --font-ui: var(--font-instrument), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bg: #f8f9fa; --panel: #ffffff; --sunk: #f1f3f4; --hover: #e8eaed;
+  --line: #e1e4e8; --line-strong: #c4c7cc;
+  --fg: #202124; --fg2: #3c4043; --fg3: #6b7075;
+  --accent: #1a73e8; --accent-2: #1557b0; --accent-text: #1a73e8; --accent-weak: #e8f0fe; --on-accent: #ffffff;
+  --run: #1a73e8; --run-bg: #e8f0fe;
+  --wait: #8a5a00; --wait-bg: #fef3cd;
+  --ok: #1e7e34; --ok-bg: #e6f4ea;
+  --fail: #c5221f; --fail-bg: #fce8e6;
+  --intr: #b3500b; --intr-bg: #feefe3;
+  --mute: #5f6368; --mute-bg: #f1f3f4;
+  --t-issue: #5f6368; --t-plan: #7b4fd1; --t-branch: #0b8a96; --t-test: #a86d12; --t-pr: #1e7e34; --t-summary: #1a73e8; --t-shot: #b8387f;
+  --code-bg: #f8f9fa;
+  --term-bg: #202124; --term-fg: #e8eaed;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --scrim: rgba(32, 33, 36, 0.4);
+  --font-ui: var(--font-roboto), Roboto, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --r: 8px; --r-sm: 6px;
+  --r: 8px; --r-sm: 8px; --r-md: 16px; --r-lg: 24px;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #202124; --panel: #292a2d; --sunk: #303134; --hover: #3c4043;
+  --line: #3c4043; --line-strong: #5f6368;
+  --fg: #e8eaed; --fg2: #bdc1c6; --fg3: #9aa0a6;
+  --accent: #1a73e8; --accent-2: #4d94f0; --accent-text: #8ab4f8; --accent-weak: #1c2b45; --on-accent: #ffffff;
+  --run: #8ab4f8; --run-bg: #1c2b45;
+  --wait: #fdd663; --wait-bg: #3a3118;
+  --ok: #81c995; --ok-bg: #1a3322;
+  --fail: #f28b82; --fail-bg: #3c1f1e;
+  --intr: #ffa66b; --intr-bg: #3a2414;
+  --mute: #bdc1c6; --mute-bg: #303134;
+  --t-issue: #9aa0a6; --t-plan: #c3a6ff; --t-branch: #78d9ec; --t-test: #fdd663; --t-pr: #81c995; --t-summary: #8ab4f8; --t-shot: #ff8bcb;
+  --code-bg: #25262a;
+  --term-bg: #17181a; --term-fg: #e8eaed;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --scrim: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1118; --panel: #151922; --sunk: #1b2029; --hover: #222834;
-    --line: #272e3a; --line-strong: #353d4c;
-    --fg: #e6e9f0; --fg2: #a4acbd; --fg3: #6d7689;
-    --accent: #8d9bff; --accent-2: #a9b4ff; --accent-weak: #1f2550; --on-accent: #0e1118;
-    --run: #7fa8f5; --run-bg: #172742;
-    --wait: #f0b55a; --wait-bg: #3a2a10;
-    --ok: #62cf8f; --ok-bg: #12301f;
-    --fail: #ff7d7d; --fail-bg: #3d1717;
-    --intr: #ff9a62; --intr-bg: #3b1f10;
-    --mute: #9aa2b2; --mute-bg: #232935;
-    --t-issue: #9aa2b2; --t-plan: #b590ff; --t-branch: #4fd0d2; --t-test: #e8b45a; --t-pr: #62cf8f; --t-summary: #7fa8f5; --t-shot: #f07cc0;
-    --code-bg: #11151d;
-    --term-bg: #0a0d13;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-    --scrim: rgba(0, 0, 0, 0.6);
+    --bg: #202124; --panel: #292a2d; --sunk: #303134; --hover: #3c4043;
+    --line: #3c4043; --line-strong: #5f6368;
+    --fg: #e8eaed; --fg2: #bdc1c6; --fg3: #9aa0a6;
+    --accent: #1a73e8; --accent-2: #4d94f0; --accent-text: #8ab4f8; --accent-weak: #1c2b45; --on-accent: #ffffff;
+    --run: #8ab4f8; --run-bg: #1c2b45;
+    --wait: #fdd663; --wait-bg: #3a3118;
+    --ok: #81c995; --ok-bg: #1a3322;
+    --fail: #f28b82; --fail-bg: #3c1f1e;
+    --intr: #ffa66b; --intr-bg: #3a2414;
+    --mute: #bdc1c6; --mute-bg: #303134;
+    --t-issue: #9aa0a6; --t-plan: #c3a6ff; --t-branch: #78d9ec; --t-test: #fdd663; --t-pr: #81c995; --t-summary: #8ab4f8; --t-shot: #ff8bcb;
+    --code-bg: #25262a;
+    --term-bg: #17181a; --term-fg: #e8eaed;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --scrim: rgba(0, 0, 0, 0.55);
     color-scheme: dark;
   }
-}
-:root[data-theme="dark"] {
-  --bg: #0e1118; --panel: #151922; --sunk: #1b2029; --hover: #222834;
-  --line: #272e3a; --line-strong: #353d4c;
-  --fg: #e6e9f0; --fg2: #a4acbd; --fg3: #6d7689;
-  --accent: #8d9bff; --accent-2: #a9b4ff; --accent-weak: #1f2550; --on-accent: #0e1118;
-  --run: #7fa8f5; --run-bg: #172742;
-  --wait: #f0b55a; --wait-bg: #3a2a10;
-  --ok: #62cf8f; --ok-bg: #12301f;
-  --fail: #ff7d7d; --fail-bg: #3d1717;
-  --intr: #ff9a62; --intr-bg: #3b1f10;
-  --mute: #9aa2b2; --mute-bg: #232935;
-  --t-issue: #9aa2b2; --t-plan: #b590ff; --t-branch: #4fd0d2; --t-test: #e8b45a; --t-pr: #62cf8f; --t-summary: #7fa8f5; --t-shot: #f07cc0;
-  --code-bg: #11151d;
-  --term-bg: #0a0d13;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-  --scrim: rgba(0, 0, 0, 0.6);
-  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -361,3 +362,36 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .fport.lit { background: var(--accent-weak); border-radius: 4px; }
 .fnode .react-flow__handle { width: 9px; height: 9px; background: var(--fg3); border: 1px solid var(--panel); }
 .fnode .react-flow__handle.lit { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+
+/* Ethical-AI layer: airy type, flat surfaces, subtle ease-out motion */
+body { font-size: 15px; line-height: 1.6; }
+h1 { font-weight: 700; letter-spacing: -0.01em; font-size: clamp(1.5rem, 2.2vw, 2.25rem); }
+h2 { font-weight: 700; font-size: 1.25rem; }
+.nav a, .btn, .fchip, .seg button, .seg a, .tbl tbody tr, .card, a.pod-tile, a.stat, .opt-card { transition: background-color 200ms var(--ease), color 200ms var(--ease), border-color 200ms var(--ease), box-shadow 200ms var(--ease), transform 200ms var(--ease); }
+.nav a { font-weight: 500; }
+.nav a.on { position: relative; font-weight: 500; }
+.nav a.on::before { content: ""; position: absolute; left: -14px; top: 6px; bottom: 6px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.brand-mark { background: var(--accent); color: #fff; }
+.btn { font-weight: 500; }
+.btn.primary { font-weight: 600; }
+.btn:not(:disabled):hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+.btn:not(:disabled):active { transform: translateY(1px); }
+.card { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05); }
+a.pod-tile:hover, a.stat:hover { box-shadow: var(--shadow); }
+.input:focus, .select:focus, .textarea:focus { box-shadow: none; }
+.pill.acc, .tag.real, .nav a.on, .seg button.on, .seg a.on, .fchip.on, .att-tabs button.on { color: var(--accent-text); }
+.selbar { background: var(--fg); color: var(--bg); }
+.ndot.succeeded, .ndot.failed { color: #fff; }
+.btn.danger.solid { color: #fff; }
+dialog.modal { border-radius: var(--r-md); }
+.signin-card { border-radius: var(--r-md); box-shadow: var(--shadow); }
+
+@keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.view > *, .pod-grid > *, .stats > * { animation: rise 420ms var(--ease) both; }
+.view > *:nth-child(2), .pod-grid > *:nth-child(2), .stats > *:nth-child(2) { animation-delay: 80ms; }
+.view > *:nth-child(3), .pod-grid > *:nth-child(3), .stats > *:nth-child(3) { animation-delay: 160ms; }
+.view > *:nth-child(n+4), .pod-grid > *:nth-child(n+4), .stats > *:nth-child(n+4) { animation-delay: 240ms; }
+@media (prefers-reduced-motion: reduce) {
+  .view > *, .pod-grid > *, .stats > * { animation: none; }
+  .nav a, .btn, a.pod-tile, a.stat { transition: none; }
+}
