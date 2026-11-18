@@ -36,9 +36,10 @@ done
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NODE="$(command -v node)"
-TSX="$REPO/node_modules/.bin/tsx"
+# The JS entry, not node_modules/.bin/tsx: pnpm makes that a shell wrapper node cannot run.
+TSX="$REPO/node_modules/tsx/dist/cli.mjs"
 MAIN="$REPO/apps/host-agent/src/main.ts"
-[ -x "$TSX" ] || { echo "run pnpm install in $REPO first" >&2; exit 1; }
+[ -f "$TSX" ] || { echo "run pnpm install in $REPO first" >&2; exit 1; }
 RUN_GROUP="$(id -gn "$RUN_USER")"
 
 env_file() {
