@@ -1,5 +1,7 @@
 # The web app runs on Vercel, with an always-on Gateway for long-lived connections
 
+> **Hosting superseded by [ADR 0005](0005-self-host-the-app-on-the-pod-host.md)** (2026-11-18): the web app, Gateway and Postgres now run on the Pod Host. The split into a web app and an always-on Gateway below still holds.
+
 The team wants Next.js on Vercel for the web app, but Vercel runs functions that live seconds to minutes, cannot hold a connection open and has no process running in the background. Clauderon needs exactly those things: the Host Agent keeps one WebSocket open to the app (ADR 0003), the web terminal streams through the app, a missing heartbeat must be noticed within 30 seconds (Vercel Cron runs at most once a minute), the app orchestrates each Run Node by Node, and removing an email from the allowlist must close open terminals and connections at once. So the app is split in two, in one monorepo: the **web app** (Next.js on Vercel) serves the UI and the ordinary API, and the **Gateway** (a small always-on Node service on Railway or Fly) holds the Host Agent link and the terminals, watches the heartbeat and runs the Run engine. Both use the same managed Postgres and the same protocol package.
 
 ## Considered Options

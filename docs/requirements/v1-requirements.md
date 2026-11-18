@@ -317,7 +317,7 @@ A Run holds a Slot only while Running or Waiting for human.
 ### Assumptions
 
 - The Pod Host is a team machine that stays on, runs Docker (for example Docker Desktop on an ARM64 Mac), and reaches the Gateway and GitHub over outbound HTTPS.
-- **Hosting:** the web app runs on Vercel; the Gateway runs as an always-on service on Railway or Fly; the database is a managed Postgres. Every Member reaches the web app over the internet, behind Google sign-in.
+- **Hosting:** the web app, the Gateway and Postgres run on the Pod Host as one Docker Compose stack; Members reach the web app over Tailscale, behind Google sign-in ([ADR 0005](../adr/0005-self-host-the-app-on-the-pod-host.md); originally Vercel, Railway or Fly and a managed Postgres).
 - **Tech stack:** TypeScript throughout. The web app is Next.js; the Gateway and the Host Agent are Node; one repository holds the web app, the Gateway, the Host Agent and the Pod image as a monorepo (Turborepo if it fits), with the protocol types in a shared package. Tests use Vitest.
 - Claude Code runs headless in a container, can resume a session (for Grill), ends with a structured result, and reports output and token usage as it goes.
 - Every Member has a Google account (Google Workspace or personal Gmail) with the email on the allowlist. The OAuth client lives in the company's Google Cloud project, whose consent screen is published rather than in "Testing" mode.

@@ -39,7 +39,7 @@ Fixed in M0; later specs add files inside it, never new top-level parts.
 
 | Path | What |
 | --- | --- |
-| `apps/web` | Next.js web app on Vercel: UI and ordinary API (route handlers, server actions) |
+| `apps/web` | Next.js web app: UI and ordinary API (route handlers, server actions) |
 | `apps/gateway` | Always-on Node service: Host Agent link, terminals, heartbeat, Run engine, live log fan-out |
 | `apps/host-agent` | Node process on the Pod Host: Docker, Workspaces, Node execution, terminal PTYs |
 | `packages/db` | Schema, migrations, typed queries; the only package that talks to Postgres |

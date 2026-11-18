@@ -64,19 +64,21 @@ When a Run ends `succeeded` or `cancelled`, after the Artifact step, the Gateway
 
 ### 5.1 Environments and deploys (R10)
 
-| Part | Staging | Production |
+Everything runs on the Pod Host ([ADR 0005](../adr/0005-self-host-the-app-on-the-pod-host.md)); how to set it up is in [deploy/README.md](../../deploy/README.md). Production comes first; staging follows later.
+
+| Part | Staging (later) | Production |
 | --- | --- | --- |
-| Web app | Vercel preview branch `staging` | Vercel production |
-| Gateway | Railway or Fly service `gateway-staging` | `gateway` |
-| Database | Its own managed Postgres | Its own managed Postgres |
+| Web app | Compose project `clauderon-staging`, its own port behind Tailscale Serve | Compose project `clauderon`, Tailscale Serve on 443 |
+| Gateway | The same project, its own port | The same project, Tailscale Serve on 8443 |
+| Database | Its own Postgres container and volume | Its own Postgres container and volume |
 | Host Agent | The same Pod Host, a second Host Agent with its own secret and Pods prefixed `stg-` | The Pod Host's main Host Agent |
 
-Order for every deploy: run migrations, deploy the Gateway, deploy the web app. Migrations only add (no drops or renames in v1), so the old Gateway keeps working while the new web app ships, and the reverse.
+Order for every deploy: run migrations, deploy the Gateway, deploy the web app (the Compose stack enforces it). Migrations only add (no drops or renames in v1), so the old Gateway keeps working while the new web app ships, and the reverse.
 
 ### 5.2 Retention and backups (NFR-5)
 
 - A daily job in the Gateway deletes `log_chunk` rows older than 90 days. Runs, Outputs and Artifacts are kept.
-- The managed Postgres takes a daily backup kept 14 days; the README says where to restore from and a restore is tried once on staging.
+- `deploy/backup.sh` takes a daily Postgres backup kept 14 days, synced off the Pod Host; `deploy/README.md` says how to restore, and a restore is tried once before the release.
 
 ### 5.3 Guides
 
