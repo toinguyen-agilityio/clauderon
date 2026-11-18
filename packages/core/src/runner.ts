@@ -1,4 +1,5 @@
 import type { NodeKind, NodeOutput, OutputType } from "./flow";
+import { renderRetryContext, resultContract, type RetryContext } from "./human";
 
 // What the Run engine and the Host Agent agree on for running a Node (spec M1
 // §4): branch names, Agent prompts, the result contract of M0 §6 and the
@@ -58,6 +59,10 @@ export type PromptParts = {
   inputs: readonly PromptInput[];
   /** Names of the Outputs the Node must report (optional ones turned on). */
   outputs: readonly string[];
+  /** A Grill Node may ask questions instead (spec M3 §2.2). */
+  grill?: boolean;
+  /** Set on a retried Attempt (RUN-7). */
+  retryContext?: RetryContext | null;
 };
 
 function render(value: unknown): string {
@@ -67,37 +72,30 @@ function render(value: unknown): string {
 /**
  * The Agent Node prompt (spec M1 §4.3): the Node's instructions, the
  * placement's and the Batch's extra instructions, each input under a heading
- * named after it, then the result contract of M0 §6.
+ * named after it, the retry context of a retried Attempt (RUN-7), then the
+ * result contract of M0 §6.
  */
 export function buildAgentPrompt(parts: PromptParts): string {
   const sections = [parts.instructions.trim()];
   if (parts.placementInstructions.trim()) sections.push(`Extra instructions for this step:\n${parts.placementInstructions.trim()}`);
   if (parts.batchInstructions.trim()) sections.push(`Extra instructions from the person who started this run:\n${parts.batchInstructions.trim()}`);
   for (const input of parts.inputs) sections.push(`## ${input.name}\n\n${render(input.value)}`);
-
-  const example = Object.fromEntries(parts.outputs.filter((o) => o !== "branch").map((o) => [o, `<${o}>`]));
-  const contract = [
-    "## Result",
-    "",
-    "Finish your final message with one fenced JSON block, the last one in the message, naming your Outputs:",
-    "",
-    "```json",
-    JSON.stringify({ outputs: example }),
-    "```",
-  ];
-  if (parts.outputs.includes("branch")) {
-    contract.push("", "Commit your work on the current branch before you finish. The branch is reported for you; do not push.");
-  }
-  sections.push(contract.join("\n"));
+  const retry = renderRetryContext(parts.retryContext);
+  if (retry) sections.push(retry);
+  sections.push(resultContract(parts.outputs, parts.grill ?? false));
   return `${sections.join("\n\n")}\n`;
 }
 
 const FENCED_JSON = /```json\s*\n([\s\S]*?)```/g;
 
-/** The last fenced JSON block of the agent's final message, or null. */
+/**
+ * The last fenced JSON block of the agent's final message, or null. A message
+ * that is nothing but a JSON object counts too: the M0 spike saw a resumed
+ * session answer with bare JSON (docs/specs/notes/claude-headless.md).
+ */
 export function extractResultBlock(text: string): unknown {
   const blocks = [...text.matchAll(FENCED_JSON)];
-  const last = blocks.at(-1)?.[1];
+  const last = blocks.at(-1)?.[1] ?? (/^\s*\{[\s\S]*\}\s*$/.test(text) ? text : undefined);
   if (last === undefined) return null;
   try {
     return JSON.parse(last);

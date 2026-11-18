@@ -1,3 +1,4 @@
+import type { Clock, TimerHandle } from "@clauderon/core";
 import {
   ResumeBuffer,
   controlMessage,
@@ -28,6 +29,7 @@ export class FakeHostAgent {
   autoAck = true;
   private socket: LinkSocket | null = null;
   private responders = new Map<string, Responder<MessageType>>();
+  private beat: { clock: Clock; timer: TimerHandle; everyMs: number } | null = null;
 
   constructor(private readonly processId = "fake-process-1") {}
 
@@ -75,8 +77,23 @@ export class FakeHostAgent {
     return envelope;
   }
 
-  heartbeat(at = new Date().toISOString()): void {
-    this.socket?.send(serialize(controlMessage("heartbeat", { at, pods: [] })));
+  heartbeat(at = new Date().toISOString(), pods: Payload<"heartbeat">["pods"] = []): void {
+    this.socket?.send(serialize(controlMessage("heartbeat", { at, pods })));
+  }
+
+  /** Heartbeats on a (fake) clock while connected, as the real Host Agent does every 10 s. */
+  beatEvery(clock: Clock, everyMs = 10_000): void {
+    this.stopBeating();
+    const tick = () => {
+      if (this.welcome) this.heartbeat(clock.now().toISOString());
+      this.beat = { clock, everyMs, timer: clock.setTimeout(tick, everyMs) };
+    };
+    this.beat = { clock, everyMs, timer: clock.setTimeout(tick, everyMs) };
+  }
+
+  stopBeating(): void {
+    if (this.beat) this.beat.clock.clearTimeout(this.beat.timer);
+    this.beat = null;
   }
 
   ack(): void {

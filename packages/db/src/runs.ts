@@ -1,5 +1,15 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
-import type { FlowSnapshot, OutputValue, RunState } from "@clauderon/core";
+import {
+  retryLogLines,
+  snapshotFlow,
+  tailLines,
+  topologicalOrder,
+  type FlowSnapshot,
+  type HumanResponse,
+  type OutputValue,
+  type RetryContext,
+  type RunState,
+} from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
 import { attempt, batch, flow, humanRequest, logChunk, member, output, pod, project, run, ticket } from "./schema";
@@ -106,7 +116,7 @@ export async function getRunContext(db: Db, runId: string) {
 
 export async function runsOfPod(db: Db, podId: string, states: readonly RunState[]) {
   return db
-    .select({ id: run.id, state: run.state, mode: run.mode, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath })
+    .select({ id: run.id, state: run.state, mode: run.mode, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
     .from(run)
     .where(and(eq(run.podId, podId), inArray(run.state, [...states])));
 }
@@ -158,6 +168,165 @@ export async function cancelRun(db: Db, runId: string, actorEmail: string, now: 
   });
 }
 
+export type RetryResult =
+  | { ok: true; podId: string; context: RetryContext }
+  | { ok: false; reason: "not-found" | "not-retryable" | "unknown-node" | "no-pod" };
+
+/**
+ * What a retried Node is told (RUN-7): the Run's latest Reject feedback, why
+ * the failed Node failed with its last log lines, and the note.
+ */
+export async function buildRetryContext(db: Db, runId: string, note: string, retriedBy: string): Promise<RetryContext> {
+  const [r] = await db.select({ flowSnapshot: run.flowSnapshot }).from(run).where(eq(run.id, runId));
+  const snapshot = r?.flowSnapshot as FlowSnapshot | undefined;
+
+  const [rejected] = await db
+    .select({ response: humanRequest.response })
+    .from(humanRequest)
+    .innerJoin(attempt, eq(attempt.id, humanRequest.attemptId))
+    .where(and(eq(attempt.runId, runId), eq(humanRequest.kind, "approve"), sql`${humanRequest.response}->>'decision' = 'reject'`))
+    .orderBy(desc(humanRequest.respondedAt))
+    .limit(1);
+  const feedback = (rejected?.response as Extract<HumanResponse, { decision: "reject" }> | undefined)?.feedback ?? null;
+
+  const [failed] = await db
+    .select()
+    .from(attempt)
+    .where(and(eq(attempt.runId, runId), eq(attempt.superseded, false), inArray(attempt.state, ["failed", "interrupted"])))
+    .orderBy(desc(attempt.endedAt), desc(attempt.startedAt))
+    .limit(1);
+  let failure: RetryContext["failure"] = null;
+  if (failed) {
+    const node = snapshot?.nodes.find((n) => n.id === failed.flowNodeId);
+    const n = retryLogLines(node?.kind ?? "agent");
+    const chunks = await db
+      .select({ text: logChunk.text })
+      .from(logChunk)
+      .where(eq(logChunk.attemptId, failed.id))
+      .orderBy(desc(logChunk.seq))
+      .limit(n);
+    const lastLines = tailLines(chunks.reverse().map((c) => c.text).join("\n"), n);
+    failure = { node: node?.name ?? failed.flowNodeId, exitCode: failed.exitCode, error: failed.error, lastLines };
+  }
+  return { feedback, failure, note: note.trim() || null, retriedBy };
+}
+
+/** The Nodes a Retry from `flowNodeId` runs again: it and every later one in topological order. */
+export function nodesFrom(snapshot: FlowSnapshot, flowNodeId: string): string[] {
+  const order = topologicalOrder(snapshotFlow(snapshot).flow);
+  const at = order.indexOf(flowNodeId);
+  return at < 0 ? [] : order.slice(at);
+}
+
+/**
+ * Retry from a Node (RUN-7, spec M3 §4): any Member, on a Failed or
+ * Interrupted Run. Later Nodes' Attempts are superseded but kept; the Run
+ * joins the end of its Pod's queue with the retry context waiting for the
+ * chosen Node. A Real Retry checks the logins again before it continues.
+ */
+export async function retryRun(db: Db, runId: string, flowNodeId: string, note: string, actorEmail: string, now: Date): Promise<RetryResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(runId)) return { ok: false, reason: "not-found" };
+  return db.transaction(async (tx) => {
+    const [current] = await tx.select().from(run).where(eq(run.id, runId)).for("update");
+    if (!current) return { ok: false, reason: "not-found" } as const;
+    if (current.state !== "failed" && current.state !== "interrupted") return { ok: false, reason: "not-retryable" } as const;
+    if (!current.podId) return { ok: false, reason: "no-pod" } as const;
+    const snapshot = current.flowSnapshot as FlowSnapshot;
+    const node = snapshot.nodes.find((n) => n.id === flowNodeId);
+    const again = nodesFrom(snapshot, flowNodeId);
+    if (!node || again.length === 0) return { ok: false, reason: "unknown-node" } as const;
+
+    const context = await buildRetryContext(tx, runId, note, actorEmail);
+    await tx
+      .update(attempt)
+      .set({ superseded: true })
+      .where(and(eq(attempt.runId, runId), inArray(attempt.flowNodeId, again)));
+    await tx
+      .update(run)
+      .set({
+        state: "queued",
+        queuedAt: now,
+        endedAt: null,
+        failureReason: null,
+        pendingRetry: { flowNodeId, context, loginsChecked: current.mode === "dry" },
+      })
+      .where(eq(run.id, runId));
+    await recordAudit(tx, {
+      actorEmail,
+      action: "run.retry",
+      subjectType: "run",
+      subjectId: runId,
+      detail: { from: current.state, node: node.name, flowNodeId, note: context.note },
+    });
+    return { ok: true, podId: current.podId, context } as const;
+  });
+}
+
+/** A Real retried Run's login check passed: it may continue in its worktree. */
+export async function markRetryLoginsChecked(db: Db, runId: string): Promise<void> {
+  await db
+    .update(run)
+    .set({ pendingRetry: sql`jsonb_set(${run.pendingRetry}, '{loginsChecked}', 'true')` })
+    .where(and(eq(run.id, runId), sql`${run.pendingRetry} is not null`));
+}
+
+/** Running Runs with their running Attempts, for the heartbeat watcher and recovery (RUN-12). */
+export async function runningRuns(db: Db, podId?: string) {
+  const runs = await db
+    .select({ id: run.id, podId: run.podId, mode: run.mode, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
+    .from(run)
+    .where(podId ? and(eq(run.state, "running"), eq(run.podId, podId)) : eq(run.state, "running"));
+  if (runs.length === 0) return [];
+  const attempts = await db
+    .select({ id: attempt.id, runId: attempt.runId, state: attempt.state })
+    .from(attempt)
+    .where(and(inArray(attempt.runId, runs.map((r) => r.id)), inArray(attempt.state, ["running", "waiting_for_human"])));
+  return runs.map((r) => ({ ...r, attemptIds: attempts.filter((a) => a.runId === r.id).map((a) => a.id) }));
+}
+
+/**
+ * Interrupt a Running Run (RUN-12): it and its running Attempts become
+ * `interrupted` with the reason; it keeps its worktree and waits for a person
+ * to Retry or Cancel. Returns the interrupted Attempts, or null if the Run
+ * was not running any more.
+ */
+export async function interruptRun(db: Db, runId: string, reason: string, now: Date): Promise<string[] | null> {
+  return db.transaction(async (tx) => {
+    const moved = await tx
+      .update(run)
+      .set({ state: "interrupted", endedAt: now, failureReason: reason })
+      .where(and(eq(run.id, runId), eq(run.state, "running")))
+      .returning({ id: run.id });
+    if (moved.length === 0) return null;
+    const attempts = await tx
+      .update(attempt)
+      .set({ state: "interrupted", endedAt: now, error: reason })
+      .where(and(eq(attempt.runId, runId), eq(attempt.state, "running")))
+      .returning({ id: attempt.id });
+    return attempts.map((a) => a.id);
+  });
+}
+
+/** Which of these Attempts are running in the database. */
+export async function runningAttemptIds(db: Db, attemptIds: readonly string[]): Promise<Set<string>> {
+  const ids = attemptIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ id: attempt.id })
+    .from(attempt)
+    .where(and(inArray(attempt.id, ids), eq(attempt.state, "running")));
+  return new Set(rows.map((r) => r.id));
+}
+
+/** Pods with Queued Runs, for the scheduler after the Pod Host is back. */
+export async function podsWithQueuedRuns(db: Db): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ podId: run.podId })
+    .from(run)
+    .where(and(eq(run.state, "queued"), sql`${run.podId} is not null`));
+  return rows.map((r) => r.podId!);
+}
+
 export type AttemptWithOutputs = Attempt & { outputs: (typeof output.$inferSelect)[] };
 
 export async function attemptsOfRun(db: Db, runId: string): Promise<AttemptWithOutputs[]> {
@@ -181,12 +350,23 @@ export async function getAttempt(db: Db, attemptId: string): Promise<Attempt | n
   return row ?? null;
 }
 
-export async function createAttempt(db: Db, values: { runId: string; flowNodeId: string; number: number; startedAt: Date }): Promise<Attempt> {
-  const [row] = await db
-    .insert(attempt)
-    .values({ ...values, state: "running" })
-    .returning();
-  return row!;
+export type NewAttempt = { runId: string; flowNodeId: string; number: number; startedAt: Date; retryContext?: RetryContext | null };
+
+/**
+ * A new running Attempt. When it is the Node a Retry chose, it takes the
+ * Run's pending retry context and clears it (RUN-7).
+ */
+export async function createAttempt(db: Db, values: NewAttempt): Promise<Attempt> {
+  return db.transaction(async (tx) => {
+    const [r] = await tx.select({ pendingRetry: run.pendingRetry }).from(run).where(eq(run.id, values.runId)).for("update");
+    const pending = r?.pendingRetry?.flowNodeId === values.flowNodeId ? r.pendingRetry : null;
+    const [row] = await tx
+      .insert(attempt)
+      .values({ ...values, state: "running", retryContext: values.retryContext ?? pending?.context ?? null })
+      .returning();
+    if (pending) await tx.update(run).set({ pendingRetry: null }).where(eq(run.id, values.runId));
+    return row!;
+  });
 }
 
 export type AttemptEnd = {

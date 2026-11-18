@@ -67,8 +67,9 @@ export async function startSampleBatch(
   now: Date,
   extraInstructions = "",
   mode: "real" | "dry" = "real",
+  slug = "basic-ticket-delivery",
 ) {
-  const flowId = await sampleFlowId(db);
+  const flowId = await sampleFlowId(db, slug);
   const flowSnapshot = (await buildFlowSnapshot(db, flowId))!;
   return startBatch(db, { flowId, flowSnapshot, starter, podId, mode, extraInstructions, ticketIds }, now);
 }

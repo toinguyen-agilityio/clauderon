@@ -39,6 +39,12 @@ export const Icon = {
       <path d="M2 4.5h4l1.5 1.5H14v6.5H2z" />
     </svg>
   ),
+  audit: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <rect x="3" y="1.5" width="10" height="13" rx="1.5" />
+      <path d="M5.5 5h5M5.5 8h5M5.5 11h3" />
+    </svg>
+  ),
   allowlist: (
     <svg viewBox="0 0 16 16" {...stroke}>
       <rect x="3" y="7" width="10" height="7" rx="1.5" />

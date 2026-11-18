@@ -136,6 +136,8 @@ export const CloseCode = {
   Revoked: 4403,
   /** Not the Member's to open, e.g. another Member's terminal (POD-9). */
   NotFound: 4404,
+  /** No heartbeat for too long (RUN-12): the Gateway dropped the link; the Host Agent reconnects. */
+  Silent: 4408,
   /** A newer Host Agent connection replaced this one. */
   Replaced: 4409,
 } as const;

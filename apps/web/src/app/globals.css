@@ -429,3 +429,17 @@ a.pod-tile:hover, a.stat:hover { transform: translateY(-2px); box-shadow: var(--
   .nav a, .btn, a.pod-tile, a.stat { transition: none; }
 }
 @media (max-width: 860px) { .side { background: var(--panel-solid); } }
+
+/* M3: Needs you, Grill rounds, Retry and the audit log (spec M3 §3, §8). */
+.nav .badge { margin-left: auto; }
+.badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--wait); color: var(--panel); font-size: 11.5px; font-weight: 700; display: inline-grid; place-items: center; }
+.btn.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.qa { display: flex; flex-direction: column; gap: 10px; }
+.qa .q, .qa .ans { padding: 10px 12px; border-radius: var(--r-sm); max-width: 62ch; font-size: 13px; white-space: pre-wrap; }
+.qa .q { background: var(--panel); border: 1px solid var(--line); }
+.qa .ans { background: var(--accent-weak); align-self: flex-end; }
+.qa .who { font-size: 11px; color: var(--fg3); font-weight: 600; margin-bottom: 2px; display: block; white-space: normal; }
+.superseded { opacity: 0.6; }
+.history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.history li { display: flex; gap: 10px; align-items: baseline; font-size: 13px; flex-wrap: wrap; }
+.ndot.waiting_for_human { border-color: var(--wait); background: var(--wait-bg); color: var(--wait); }
