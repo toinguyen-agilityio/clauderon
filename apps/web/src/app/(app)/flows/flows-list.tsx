@@ -90,9 +90,9 @@ export function FlowsList({ flows }: { flows: FlowRowView[] }) {
     <>
       <div className="lib-toolbar">
         <input className="input lib-search" type="search" aria-label="Search Flows" placeholder="Search Flows by name or Node" autoComplete="off" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <div className="chips" role="group" aria-label="Show">
+        <div className="seg lib-groups" role="group" aria-label="Show">
           {SCOPES.filter((s) => s.scope !== "problems" || counts.problems > 0 || scope === "problems").map((s) => (
-            <button key={s.scope} type="button" className={`fchip ${scope === s.scope ? "on" : ""}`} aria-pressed={scope === s.scope} onClick={() => setScope(s.scope)}>
+            <button key={s.scope} type="button" className={scope === s.scope ? "on" : ""} aria-pressed={scope === s.scope} onClick={() => setScope(s.scope)}>
               {s.label} <span className="n">{counts[s.scope]}</span>
             </button>
           ))}
