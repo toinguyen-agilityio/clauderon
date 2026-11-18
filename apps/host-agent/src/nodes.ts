@@ -1,6 +1,6 @@
 import { mask, tailLines } from "@clauderon/core";
 import type { Payload } from "@clauderon/protocol";
-import { claudeCommand, claudeResult, parseClaudeLine } from "./claude";
+import { ClaudeErrorWatch, claudeCommand, claudeResult, parseClaudeLine } from "./claude";
 import { CONTAINER_PREFIX, POD_USER, containerName, execText, type DockerClient } from "./docker";
 import type { AgentLink, Log } from "./pods";
 
@@ -210,12 +210,14 @@ export async function runNode(
       await writeFile(promptFile, run.prompt ?? "");
       let finalText: string | undefined;
       let unknownSession: string | undefined;
+      const errors = new ClaudeErrorWatch();
       const watch = (line: string) => {
         if (run.resumeSessionId && !unknownSession && UNKNOWN_SESSION.test(line)) unknownSession = line.trim();
       };
       const stdout = new Lines((line) => {
         watch(line);
         const event = parseClaudeLine(line);
+        errors.event(event);
         if (event.sessionId) sessionId = event.sessionId;
         if (event.usage) link.send("node.usage", { attemptId: run.attemptId, ...event.usage });
         if (event.finalText !== undefined) finalText = event.finalText;
@@ -223,6 +225,7 @@ export async function runNode(
       });
       const stderr = new Lines((line) => {
         watch(line);
+        errors.stderr(line);
         log("stderr", line);
       });
       exitCode = await docker.exec(
@@ -234,7 +237,7 @@ export async function runNode(
       stdout.flush();
       stderr.flush();
       result = claudeResult(finalText);
-      if (exitCode !== 0) error = `Claude Code exited ${exitCode}`;
+      if (exitCode !== 0) error = hide(errors.reason(exitCode));
       // A Grill round whose session Claude no longer knows (spec M3 §2.2).
       if (unknownSession && result === undefined) error = `Claude session ${run.resumeSessionId} could not be resumed: ${hide(unknownSession)}`;
     }
