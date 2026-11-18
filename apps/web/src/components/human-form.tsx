@@ -1,15 +1,18 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { respondAction, type RespondFormState } from "../app/(app)/needs-you/actions";
+import { OTHER_CHOICE } from "../server/grill-answers";
 import { Icon } from "./icons";
 
 export type OpenRequest = {
   id: string;
   kind: "approve" | "grill";
   round: number;
-  questions: { id: string; text: string }[];
+  questions: Question[];
 };
+
+type Question = { id: string; text: string; options?: { label: string; recommended?: boolean }[]; multiSelect?: boolean };
 
 /**
  * The answer form of one waiting Human Node (spec M3 §2, §3): Approve, or
@@ -33,14 +36,18 @@ export function HumanForm({ request, runId }: { request: OpenRequest; runId: str
         <input type="hidden" name="requestId" value={request.id} />
         <input type="hidden" name="runId" value={runId} />
         <input type="hidden" name="decision" value="answer" />
-        {request.questions.map((q, i) => (
-          <div key={q.id} className="field">
-            <label htmlFor={`a-${request.id}-${q.id}`}>
-              {i + 1}. {q.text}
-            </label>
-            <textarea className="textarea" id={`a-${request.id}-${q.id}`} name={`answer:${q.id}`} required style={{ minHeight: 56 }} />
-          </div>
-        ))}
+        {request.questions.map((q, i) =>
+          q.options?.length ? (
+            <Choices key={q.id} requestId={request.id} index={i} question={q} />
+          ) : (
+            <div key={q.id} className="field">
+              <label htmlFor={`a-${request.id}-${q.id}`}>
+                {i + 1}. {q.text}
+              </label>
+              <textarea className="textarea" id={`a-${request.id}-${q.id}`} name={`answer:${q.id}`} required style={{ minHeight: 56 }} />
+            </div>
+          ),
+        )}
         {error}
         <div className="row">
           <button type="submit" className="btn primary" disabled={pending}>
@@ -78,5 +85,46 @@ export function HumanForm({ request, runId }: { request: OpenRequest; runId: str
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * A question with Claude's suggested options: one choice (radio) or several
+ * (checkbox), the recommended one picked already, and "Other" with a text of
+ * the person's own. Typing in that text picks "Other".
+ */
+function Choices({ requestId, index, question }: { requestId: string; index: number; question: Question }) {
+  const other = useRef<HTMLInputElement>(null);
+  const type = question.multiSelect ? "checkbox" : "radio";
+  const name = `answer:${question.id}`;
+  const id = (suffix: string) => `c-${requestId}-${question.id}-${suffix}`;
+  return (
+    <fieldset className="field choices">
+      <legend>
+        {index + 1}. {question.text}
+        {question.multiSelect && <span className="hint"> · pick any that apply</span>}
+      </legend>
+      {question.options!.map((o, n) => (
+        <label key={o.label} className="choice" htmlFor={id(String(n))}>
+          <input type={type} id={id(String(n))} name={name} value={o.label} defaultChecked={o.recommended} required={type === "radio"} />
+          <span>
+            {o.label}
+            {o.recommended && <span className="faint"> (Recommended)</span>}
+          </span>
+        </label>
+      ))}
+      <div className="choice">
+        <input ref={other} type={type} id={id("other")} name={name} value={OTHER_CHOICE} aria-label="Other" required={type === "radio"} />
+        <input
+          className="input"
+          name={`other:${question.id}`}
+          placeholder="Other: write your own answer"
+          aria-label={`Other answer to: ${question.text}`}
+          onFocus={() => {
+            if (other.current) other.current.checked = true;
+          }}
+        />
+      </div>
+    </fieldset>
   );
 }

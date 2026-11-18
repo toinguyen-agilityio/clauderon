@@ -163,6 +163,26 @@ describe("Grill answers (spec M3 §2.2)", () => {
   });
 });
 
+describe("Grill questions with suggested options", () => {
+  it("Needs you shows the options and the recommendation; the chosen option or Other's text is the answer", async () => {
+    const f = await fixture();
+    const { runId, nodeId } = await planRun(f);
+    await db.update(schema.run).set({ state: "running" }).where(sql`${schema.run.id} = ${runId}`);
+    const attempt = await createAttempt(db, { runId, flowNodeId: nodeId("Grill a plan"), number: 1, startedAt: clock.now() });
+    const questions = [
+      { id: "q1", text: "Rounding?", options: [{ label: "Per invoice", recommended: true }, { label: "Per line" }] },
+      { id: "q2", text: "Formats?", multiSelect: true, options: [{ label: "CSV" }, { label: "XLSX" }] },
+    ];
+    await askHuman(db, { runId, attemptId: attempt.id, kind: "grill", questions, claudeSessionId: "sess-1", now: clock.now() });
+
+    const [item] = await viewNeedsYou(deps);
+    expect(item!.questions).toEqual(questions);
+    expect(await respondAs(deps, f.ann, item!.id, { decision: "answer", answers: { q1: "Per invoice", q2: "CSV; ODS" } })).toEqual({ ok: true });
+    const [request] = await db.select().from(schema.humanRequest);
+    expect(request!.response).toEqual({ decision: "answer", answers: { q1: "Per invoice", q2: "CSV; ODS" } });
+  });
+});
+
 describe("Needs you (RUN-5, spec M3 §3)", () => {
   it("lists every open request oldest first with Ticket, Flow, Node, Starter and waiting time; the count follows", async () => {
     const f = await fixture(2);

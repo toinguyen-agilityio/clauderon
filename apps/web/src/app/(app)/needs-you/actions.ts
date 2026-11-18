@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import type { HumanAction } from "@clauderon/db";
+import { answersFromForm } from "../../../server/grill-answers";
 import { respondAs } from "../../../server/runs";
 import { deps, requireMember } from "../../../server/runtime";
 
@@ -10,7 +11,7 @@ export type RespondFormState = { error: string | null; done: boolean };
 
 /**
  * Approve, Reject or Answer (spec M3 §2, §3, MEM-2) from Needs you or the Run
- * page: any Member. Answers arrive as `answer:<question id>` fields.
+ * page: any Member. Grill answers arrive as `answer:<id>` and `other:<id>` fields.
  */
 export async function respondAction(_state: RespondFormState, form: FormData): Promise<RespondFormState> {
   const member = await requireMember();
@@ -20,11 +21,8 @@ export async function respondAction(_state: RespondFormState, form: FormData): P
   let action: HumanAction;
   if (decision === "approve") action = { decision: "approve" };
   else if (decision === "reject") action = { decision: "reject", feedback: String(form.get("feedback") ?? "") };
-  else if (decision === "answer") {
-    const answers: Record<string, string> = {};
-    for (const [key, value] of form.entries()) if (key.startsWith("answer:")) answers[key.slice("answer:".length)] = String(value);
-    action = { decision: "answer", answers };
-  } else return { error: "Pick Approve, Reject or Answer.", done: false };
+  else if (decision === "answer") action = { decision: "answer", answers: answersFromForm(form) };
+  else return { error: "Pick Approve, Reject or Answer.", done: false };
 
   const result = await respondAs(deps(), member, requestId, action);
   if (result === "not-found") notFound();
