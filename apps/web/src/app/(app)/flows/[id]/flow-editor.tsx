@@ -1,50 +1,27 @@
 "use client";
 
-import "@xyflow/react/dist/style.css";
-import { useCallback, useMemo, useState, createContext, useContext, type DragEvent } from "react";
-import {
-  Background,
-  BaseEdge,
-  Controls,
-  Handle,
-  MarkerType,
-  Position,
-  ReactFlow,
-  ReactFlowProvider,
-  getBezierPath,
-  useReactFlow,
-  type Connection,
-  type Edge,
-  type EdgeChangeset,
-  type EdgeProps,
-  type Node,
-  type NodeChangeset,
-  type NodeProps,
-  type OnConnectStartParams,
-} from "@xyflow/react";
+import { useMemo, useRef, useState, createContext, useContext, type DragEvent } from "react";
 import { validateFlow, type LibraryNode, type OutputType, type Problem } from "@clauderon/core";
 import type { EditorData } from "../../../../server/flows";
 import { saveFlowAction } from "./actions";
+import { CanvasHandle, FlowCanvas, type CanvasConnection, type CanvasEdge, type CanvasNode, type FlowCanvasHandle, type HandleType, type Selection } from "./flow-canvas";
 import { NodePanel, type PlacementPatch } from "./node-panel";
 
 // The canvas editor (spec M2 §3, FLW-3 … FLW-5): place Nodes from the library,
-// connect Outputs to inputs of the same type, see problems live, save.
+// connect Outputs to inputs of the same type, see problems live, save. The canvas
+// itself is hand-made (flow-canvas.tsx); this file owns the Flow being edited.
 
 type Placement = EditorData["graph"]["nodes"][number];
-type NodeData = { lib: LibraryNode; placement: Placement; compatible: Set<string> };
-type FlowNode = Node<NodeData, "clauderon">;
-type FlowEdge = Edge<{ reason: string | null }>;
 
 const KIND_LABEL: Record<string, string> = { ticket: "Ticket", agent: "Agent", command: "Command", approve: "Approve", grill: "Grill" };
 
 const newId = () => crypto.randomUUID();
-const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((x) => b.has(x));
 
 /** The Output being dragged right now, so inputs it can connect to light up (FLW-4). */
 const DragContext = createContext<{ from: { nodeId: string; type: OutputType } | null }>({ from: null });
 
-function NodeView({ id, data, selected }: NodeProps<FlowNode>) {
-  const { lib, placement } = data;
+function NodeView({ id, lib, placement, selected }: { id: string; lib: LibraryNode; placement: Placement; selected: boolean }) {
   const drag = useContext(DragContext);
   return (
     <div className={`fnode ${selected ? "on" : ""}`} data-kind={lib.kind} data-testid={`fnode-${lib.name}`}>
@@ -58,7 +35,7 @@ function NodeView({ id, data, selected }: NodeProps<FlowNode>) {
             const lit = drag.from !== null && drag.from.nodeId !== id && drag.from.type === i.type;
             return (
               <div key={i.name} className={`fport in ${lit ? "lit" : ""}`}>
-                <Handle type="target" position={Position.Left} id={i.name} className={lit ? "lit" : ""} />
+                <CanvasHandle nodeId={id} type="target" name={i.name} lit={lit} />
                 <span>
                   {i.name}
                   {i.required ? " *" : ""} <span className="faint">{i.type}</span>
@@ -76,7 +53,7 @@ function NodeView({ id, data, selected }: NodeProps<FlowNode>) {
                   {o.name}
                   {o.optional ? " (optional)" : ""} <span className="faint">{o.type}</span>
                 </span>
-                <Handle type="source" position={Position.Right} id={o.name} />
+                <CanvasHandle nodeId={id} type="source" name={o.name} />
               </div>
             );
           })}
@@ -86,39 +63,17 @@ function NodeView({ id, data, selected }: NodeProps<FlowNode>) {
   );
 }
 
-/** An edge in an error state draws red; its reason shows on hover (FLW-4). */
-function EdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd, selected }: EdgeProps<FlowEdge>) {
-  const [path] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
-  const reason = data?.reason ?? null;
-  return (
-    <g data-testid={reason ? "edge-error" : "edge"} data-edge={id}>
-      {reason && <title>{reason}</title>}
-      <BaseEdge path={path} markerEnd={markerEnd} style={{ stroke: reason ? "var(--fail)" : selected ? "var(--accent)" : "var(--fg3)", strokeWidth: reason ? 2.5 : 2, strokeDasharray: reason ? "6 4" : undefined }} />
-    </g>
-  );
-}
-
-const nodeTypes = { clauderon: NodeView };
-const edgeTypes = { clauderon: EdgeView };
-
 export function FlowEditor({ data }: { data: EditorData }) {
-  return (
-    <ReactFlowProvider>
-      <Canvas data={data} />
-    </ReactFlowProvider>
-  );
-}
-
-function Canvas({ data }: { data: EditorData }) {
   const { library, readOnly } = data;
   const libById = useMemo(() => new Map(library.map((n) => [n.id, n])), [library]);
-  const { screenToFlowPosition, setCenter } = useReactFlow();
+  const canvas = useRef<FlowCanvasHandle>(null);
 
   const [name, setName] = useState(data.flow.name);
   const [placements, setPlacements] = useState<Placement[]>(data.graph.nodes);
   const [graphEdges, setGraphEdges] = useState(data.graph.edges);
-  const [selected, setSelected] = useState<{ nodes: Set<string>; edges: Set<string> }>({ nodes: new Set(), edges: new Set() });
+  const [selected, setSelected] = useState<Selection>({ nodes: new Set(), edges: new Set() });
   const [dragFrom, setDragFrom] = useState<{ nodeId: string; type: OutputType } | null>(null);
+  const dragValue = useMemo(() => ({ from: dragFrom }), [dragFrom]);
   const [showProblems, setShowProblems] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState(false);
@@ -142,88 +97,51 @@ function Canvas({ data }: { data: EditorData }) {
   );
   const edgeProblem = useMemo(() => new Map(problems.filter((p) => p.edgeId).map((p) => [p.edgeId!, p.message])), [problems]);
 
-  const nodes: FlowNode[] = useMemo(
-    () =>
-      placements.flatMap((p) => {
-        const lib = libById.get(p.nodeId);
-        return lib
-          ? [{ id: p.id, type: "clauderon" as const, position: { x: p.x, y: p.y }, selected: selected.nodes.has(p.id), data: { lib, placement: p, compatible: new Set<string>() } }]
-          : [];
-      }),
-    [placements, libById, selected],
-  );
-  const edges: FlowEdge[] = useMemo(
-    () =>
-      graphEdges.map((e) => ({
-        id: e.id,
-        type: "clauderon",
-        source: e.fromFlowNodeId,
-        sourceHandle: e.fromOutput,
-        target: e.toFlowNodeId,
-        targetHandle: e.toInput,
-        selected: selected.edges.has(e.id),
-        markerEnd: { type: MarkerType.ArrowClosed },
-        data: { reason: edgeProblem.get(e.id) ?? null },
-      })),
-    [graphEdges, selected, edgeProblem],
-  );
+  const nodes: CanvasNode[] = placements.flatMap((p) => {
+    const lib = libById.get(p.nodeId);
+    const isSelected = selected.nodes.has(p.id);
+    return lib ? [{ id: p.id, x: p.x, y: p.y, selected: isSelected, content: <NodeView id={p.id} lib={lib} placement={p} selected={isSelected} /> }] : [];
+  });
+  const edges: CanvasEdge[] = graphEdges.map((e) => ({
+    id: e.id,
+    fromNodeId: e.fromFlowNodeId,
+    fromOutput: e.fromOutput,
+    toNodeId: e.toFlowNodeId,
+    toInput: e.toInput,
+    selected: selected.edges.has(e.id),
+    reason: edgeProblem.get(e.id) ?? null,
+  }));
 
-  const onNodesChange = useCallback(
-    (changeset: NodeChangeset<FlowNode>) => {
-      let changed = false;
-      const changes = changeset.toArray();
-      const next = changeset.applyTo(nodes);
-      const removed = new Set(changes.filter((c) => c.type === "remove").map((c) => c.id));
-      if (removed.size > 0) {
-        setPlacements((ps) => ps.filter((p) => !removed.has(p.id)));
-        setGraphEdges((es) => es.filter((e) => !removed.has(e.fromFlowNodeId) && !removed.has(e.toFlowNodeId)));
-        changed = true;
-      }
-      const moved = new Map(next.map((n) => [n.id, n.position]));
-      if (changes.some((c) => c.type === "position" && c.position)) {
-        setPlacements((ps) => ps.map((p) => ({ ...p, x: moved.get(p.id)?.x ?? p.x, y: moved.get(p.id)?.y ?? p.y })));
-        changed = true;
-      }
-      if (changes.some((c) => c.type === "select")) {
-        const ids = new Set(next.filter((n) => n.selected).map((n) => n.id));
-        setSelected((s) => (sameSet(s.nodes, ids) ? s : { ...s, nodes: ids }));
-      }
-      if (changed) touch();
-    },
-    [nodes],
-  );
+  const onSelect = (next: Selection) => setSelected((s) => (sameSet(s.nodes, next.nodes) && sameSet(s.edges, next.edges) ? s : next));
 
-  const onEdgesChange = useCallback(
-    (changeset: EdgeChangeset<FlowEdge>) => {
-      const changes = changeset.toArray();
-      const removed = new Set(changes.filter((c) => c.type === "remove").map((c) => c.id));
-      if (removed.size > 0) {
-        setGraphEdges((es) => es.filter((e) => !removed.has(e.id)));
-        touch();
-      }
-      if (changes.some((c) => c.type === "select")) {
-        const ids = new Set(changeset.applyTo(edges).filter((e) => e.selected).map((e) => e.id));
-        setSelected((s) => (sameSet(s.edges, ids) ? s : { ...s, edges: ids }));
-      }
-    },
-    [edges],
-  );
-
-  const onConnect = useCallback((c: Connection) => {
-    if (!c.sourceHandle || !c.targetHandle) return;
-    // A mismatched edge is still drawn, in an error state, and counts as a problem (FLW-4).
-    setGraphEdges((es) => [...es, { id: newId(), fromFlowNodeId: c.source, fromOutput: c.sourceHandle!, toFlowNodeId: c.target, toInput: c.targetHandle! }]);
+  const onMoveNodes = (moves: { id: string; x: number; y: number }[]) => {
+    const to = new Map(moves.map((m) => [m.id, m]));
+    setPlacements((ps) => ps.map((p) => (to.has(p.id) ? { ...p, x: to.get(p.id)!.x, y: to.get(p.id)!.y } : p)));
     touch();
-  }, []);
+  };
 
-  const onConnectStart = useCallback(
-    (_: unknown, params: OnConnectStartParams) => {
-      if (params.handleType !== "source" || !params.nodeId) return;
-      const output = libById.get(placements.find((p) => p.id === params.nodeId)?.nodeId ?? "")?.outputs.find((o) => o.name === params.handleId);
-      if (output) setDragFrom({ nodeId: params.nodeId, type: output.type });
-    },
-    [libById, placements],
-  );
+  const onDelete = (what: Selection) => {
+    if (what.nodes.size > 0) {
+      setPlacements((ps) => ps.filter((p) => !what.nodes.has(p.id)));
+      setGraphEdges((es) => es.filter((e) => !what.nodes.has(e.fromFlowNodeId) && !what.nodes.has(e.toFlowNodeId) && !what.edges.has(e.id)));
+    } else {
+      setGraphEdges((es) => es.filter((e) => !what.edges.has(e.id)));
+    }
+    setSelected({ nodes: new Set(), edges: new Set() });
+    touch();
+  };
+
+  const onConnect = (c: CanvasConnection) => {
+    // A mismatched edge is still drawn, in an error state, and counts as a problem (FLW-4).
+    setGraphEdges((es) => [...es, { id: newId(), fromFlowNodeId: c.source, fromOutput: c.sourceHandle, toFlowNodeId: c.target, toInput: c.targetHandle }]);
+    touch();
+  };
+
+  const onConnectStart = (from: { nodeId: string; type: HandleType; name: string }) => {
+    if (from.type !== "source") return;
+    const output = libById.get(placements.find((p) => p.id === from.nodeId)?.nodeId ?? "")?.outputs.find((o) => o.name === from.name);
+    if (output) setDragFrom({ nodeId: from.nodeId, type: output.type });
+  };
 
   const add = (lib: LibraryNode, at: { x: number; y: number }) => {
     setPlacements((ps) => [...ps, { id: newId(), nodeId: lib.id, label: null, extraInstructions: "", enabledOptionalOutputs: [], x: at.x, y: at.y }]);
@@ -233,13 +151,13 @@ function Canvas({ data }: { data: EditorData }) {
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
     const lib = libById.get(event.dataTransfer.getData("application/clauderon-node"));
-    if (lib && !readOnly) add(lib, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+    if (lib && !readOnly && canvas.current) add(lib, canvas.current.screenToWorld(event.clientX, event.clientY));
   };
 
   const focus = (problem: Problem) => {
     const placement = placements.find((p) => p.id === (problem.flowNodeId ?? graphEdges.find((e) => e.id === problem.edgeId)?.toFlowNodeId));
     setSelected({ nodes: new Set(problem.flowNodeId ? [problem.flowNodeId] : []), edges: new Set(problem.edgeId ? [problem.edgeId] : []) });
-    if (placement) setCenter(placement.x + 100, placement.y + 40, { zoom: 1, duration: 300 });
+    if (placement) canvas.current?.centerOn(placement.x + 100, placement.y + 40, { zoom: 1, duration: 300 });
   };
 
   const save = async () => {
@@ -344,27 +262,21 @@ function Canvas({ data }: { data: EditorData }) {
         )}
 
         <div className="flow-canvas card" data-testid="flow-canvas" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
-          <DragContext.Provider value={{ from: dragFrom }}>
-            <ReactFlow<FlowNode, FlowEdge>
+          <DragContext.Provider value={dragValue}>
+            <FlowCanvas
+              ref={canvas}
               nodes={nodes}
               edges={edges}
-              nodeTypes={nodeTypes}
-              edgeTypes={edgeTypes}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
+              readOnly={readOnly}
+              onSelect={onSelect}
+              onMoveNodes={onMoveNodes}
               onConnect={onConnect}
+              onDelete={onDelete}
               onConnectStart={onConnectStart}
               onConnectEnd={() => setDragFrom(null)}
               // Mismatches are allowed and drawn as errors; only a Node to itself is refused.
-              isValidConnection={(c) => c.source !== c.target}
-              nodesDraggable={!readOnly}
-              nodesConnectable={!readOnly}
-              deleteKeyCode={readOnly ? null : "Backspace"}
-              fitView
-            >
-              <Background />
-              <Controls showInteractive={false} />
-            </ReactFlow>
+              canConnect={(c) => c.source !== c.target}
+            />
           </DragContext.Provider>
         </div>
 

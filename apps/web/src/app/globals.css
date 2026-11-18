@@ -344,8 +344,33 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .fport { position: relative; padding: 0 12px; line-height: 18px; }
 .fport.off { opacity: 0.45; }
 .fport.lit { background: var(--accent-weak); border-radius: 4px; }
-.fnode .react-flow__handle { width: 9px; height: 9px; background: var(--fg3); border: 1px solid var(--panel); }
-.fnode .react-flow__handle.lit { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.fnode { position: relative; }
+.fhandle { position: absolute; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--fg3); border: 1px solid var(--panel-solid, var(--panel)); cursor: crosshair; touch-action: none; z-index: 2; }
+.fhandle.target { left: -5px; }
+.fhandle.source { right: -5px; }
+.fhandle:hover { background: var(--accent-text); }
+.fhandle.lit { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+
+/* The hand-made canvas (flow-canvas.tsx): a pannable, zoomable surface with a dot grid */
+.fc { position: relative; width: 100%; height: 100%; overflow: hidden; cursor: grab; touch-action: none; user-select: none; background-image: radial-gradient(circle, var(--line-strong) 1px, transparent 1.2px); }
+.fc:active { cursor: grabbing; }
+.fc-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.fc-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.fc-node { position: absolute; left: 0; top: 0; cursor: default; }
+.fc-node.on { z-index: 5; }
+.fc-edge { fill: none; stroke: var(--fg3); stroke-width: 2; pointer-events: none; }
+.fc-edge.sel { stroke: var(--accent-text); }
+.fc-edge.err { stroke: var(--fail); stroke-width: 2.5; stroke-dasharray: 6 4; }
+.fc-edge.temp { stroke: var(--accent-text); stroke-dasharray: 5 4; }
+.fc-edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.fc-arrow { fill: var(--fg3); }
+.fc-arrow.sel { fill: var(--accent-text); }
+.fc-arrow.err { fill: var(--fail); }
+.fc-controls { position: absolute; left: 12px; bottom: 12px; display: flex; flex-direction: column; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; background: var(--panel-solid, var(--panel)); cursor: default; }
+.fc-controls button { width: 28px; height: 28px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--fg); font-size: 16px; line-height: 1; cursor: pointer; }
+.fc-controls button:last-child { border-bottom: 0; }
+.fc-controls button:hover:not(:disabled) { background: var(--hover); }
+.fc-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
 /* Mesh layer: drifting gradient backdrop, frosted-glass surfaces, soft motion */
 html { background: var(--bg); }
 body { background: transparent; font-size: 14.5px; line-height: 1.6; }
