@@ -51,6 +51,7 @@ Fill in every value. `deploy/.env.production` is git-ignored and must never be c
 | `OPERATOR_EMAILS` | web, gateway | Comma-separated Operator emails |
 | `GITHUB_TOKEN` | web, gateway | Read-only token |
 | `POD_IMAGE` | web, gateway | `clauderon-pod:local` or a GHCR tag |
+| `WEB_HOST_PORT`, `GATEWAY_HOST_PORT` | compose | Ports on 127.0.0.1, default 3000 and 4000 |
 | `POD_LIMIT_CEILING` | web | Max Slots, CPU and RAM per Pod; leave room for the stack |
 
 ## 4. Start the stack
@@ -65,8 +66,8 @@ Compose runs migrations first, then the Gateway, then the web app once the Gatew
 ## 5. Publish with Tailscale Serve
 
 ```sh
-tailscale serve --bg --https=443 http://127.0.0.1:3000
-tailscale serve --bg --https=8443 http://127.0.0.1:4000
+tailscale serve --bg --https=443 http://127.0.0.1:3000    # WEB_HOST_PORT
+tailscale serve --bg --https=8443 http://127.0.0.1:4000   # GATEWAY_HOST_PORT
 tailscale serve status
 ```
 
@@ -79,7 +80,7 @@ sudo GATEWAY_URL=ws://127.0.0.1:4000 HOST_AGENT_SECRET=<same value as in deploy/
   scripts/install-host-agent.sh
 ```
 
-Check it connected: `curl -s http://127.0.0.1:4000/health` shows `"hostAgentConnected":true`.
+Use `GATEWAY_HOST_PORT` in place of 4000 if you changed it. Check it connected: `curl -s http://127.0.0.1:4000/health` shows `"hostAgentConnected":true`.
 
 ## 7. Backups
 
