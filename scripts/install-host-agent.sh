@@ -111,7 +111,9 @@ fi
 
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
 
-install -d -m 755 "$ENV_DIR" "$LOG_DIR"
+install -d -m 755 "$ENV_DIR"
+# launchd opens StandardOutPath as the job's user, so the agent must own its log directory.
+install -d -m 755 -o "$RUN_USER" -g "$RUN_GROUP" "$LOG_DIR"
 install -d -m 700 -o "$RUN_USER" -g "$RUN_GROUP" "$STATE_DIR"
 umask 077
 env_file >"$ENV_FILE"
