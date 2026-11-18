@@ -53,8 +53,8 @@ export default async function PodsPage() {
 
       <div className="card host" data-testid="pod-host">
         <div className="host-head">
-          <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
-            <span style={{ color: "var(--fg2)" }}>{Icon.host}</span>
+          <div className="host-title">
+            <span className="host-icon">{Icon.host}</span>
             <div>
               <h2>
                 Pod Host{" "}
@@ -81,7 +81,7 @@ export default async function PodsPage() {
         </p>
 
         {!connected && (
-          <div className="banner fail" style={{ margin: "0 16px" }}>
+          <div className="banner fail inset">
             <div className="grow small">
               <b>The Host Agent is not connected.</b> Nothing can start until it is. It reconnects by itself when the Pod Host is back
               online; if it never connected, install it with <span className="mono">scripts/install-host-agent.sh</span>.
@@ -89,7 +89,7 @@ export default async function PodsPage() {
           </div>
         )}
         {overCommitted && (
-          <div className="banner wait" style={{ margin: "0 16px" }}>
+          <div className="banner wait inset">
             <div className="grow small">
               <b>The Pods&apos; limits add up to more than the Pod Host has.</b> Pods still start; they share the machine when busy.
             </div>
@@ -97,13 +97,13 @@ export default async function PodsPage() {
         )}
       </div>
 
-      <h2>Your Pod</h2>
+      <h2 className="section-title">Your Pod</h2>
       <div className="pod-grid">
         {mine ? (
           <PodTile pod={mine} hostConnected={connected} now={now} />
         ) : (
           <div className="pod-tile new" data-testid="no-pod">
-            <span style={{ color: "var(--fg2)" }}>{Icon.cube}</span>
+            <span className="pod-icon">{Icon.cube}</span>
             <b>You have no Pod yet</b>
             <span className="small faint">
               One container for you with its own Workspace. Its page then walks you through logging in to Claude Code and GitHub.
@@ -115,7 +115,7 @@ export default async function PodsPage() {
 
       {others.length > 0 && (
         <>
-          <h2>
+          <h2 className="section-title">
             Team Pods <span className="faint num small">{others.length}</span>
           </h2>
           <div className="pod-grid compact" data-testid="team-pods">
@@ -139,7 +139,7 @@ function PodTile({ pod, hostConnected, now }: { pod: PodView; hostConnected: boo
       data-testid={pod.mine ? "my-pod" : undefined}
     >
       <div className="row between">
-        <span style={{ color: "var(--fg2)" }}>{Icon.cube}</span>
+        <span className="pod-icon">{Icon.cube}</span>
         <PodStatusChip status={pod.status} hostConnected={hostConnected} />
       </div>
 

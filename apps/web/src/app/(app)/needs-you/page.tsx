@@ -57,7 +57,7 @@ export default async function NeedsYouPage() {
                 </div>
               </div>
               <details className="card-pad" open={items.length <= 3}>
-                <summary className="small" style={{ cursor: "pointer", marginBottom: 12 }}>
+                <summary className="small">
                   {item.kind === "grill" ? "Answer the questions" : "Review and decide"}
                 </summary>
                 {item.kind === "approve" ? (
