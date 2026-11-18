@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deleteBlocker, filterNodes, kindCounts, saveBlocker, sameValue, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
+import { cardMeta, deleteBlocker, filterNodes, groupCounts, kindGroupOf, saveBlocker, sameValue, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
 
 const node = (name: string, kind: "agent" | "command" | "approve", over: { instructions?: string; command?: string | null } = {}) => ({
   name,
@@ -23,18 +23,37 @@ describe("Node library list (ticket #71)", () => {
     expect(filterNodes(nodes, "  ", "all")).toHaveLength(4);
   });
 
-  it("filters by Kind, and the two filters combine", () => {
+  it("filters by Kind group, and the two filters combine", () => {
     expect(filterNodes(nodes, "", "agent").map((n) => n.name)).toEqual(["Code a change", "Summary by Claude Artifact"]);
     expect(filterNodes(nodes, "summary", "agent").map((n) => n.name)).toEqual(["Summary by Claude Artifact"]);
     expect(filterNodes(nodes, "summary", "command")).toEqual([]);
+    expect(filterNodes(nodes, "", "human").map((n) => n.name)).toEqual(["Approve a plan"]);
   });
 
-  it("counts the Nodes of each Kind that has any", () => {
-    expect(kindCounts(nodes)).toEqual([
-      { kind: "agent", count: 2 },
-      { kind: "command", count: 1 },
-      { kind: "approve", count: 1 },
+  it("also finds Nodes by port name and Output Type", () => {
+    const withPorts = [
+      { ...node("Code a change", "agent"), inputs: [{ name: "issue", type: "issue" as const, required: true }], outputs: [{ name: "branch", type: "branch" as const, optional: false }] },
+      { ...node("Run tests", "command", { command: "npm test" }), inputs: [], outputs: [{ name: "result", type: "test-result" as const, optional: false }] },
+    ];
+    expect(filterNodes(withPorts, "TEST-RESULT", "all").map((n) => n.name)).toEqual(["Run tests"]);
+    expect(filterNodes(withPorts, "branch", "all").map((n) => n.name)).toEqual(["Code a change"]);
+  });
+
+  it("groups approve and grill as Human, and counts each group that has any in a fixed order", () => {
+    expect(kindGroupOf("approve")).toBe("human");
+    expect(kindGroupOf("grill")).toBe("human");
+    expect(kindGroupOf("agent")).toBe("agent");
+    expect(groupCounts([...nodes, node("Grill a plan", "approve")])).toEqual([
+      { group: "agent", count: 2 },
+      { group: "command", count: 1 },
+      { group: "human", count: 2 },
     ]);
+  });
+
+  it("describes a card by its Kind and how many Flows place it", () => {
+    expect(cardMeta({ kind: "grill", usedBy: [{ flowId: "a", name: "A", locked: false }, { flowId: "b", name: "B", locked: false }] })).toBe("Human · Grill · in 2 Flows");
+    expect(cardMeta({ kind: "agent", usedBy: [{ flowId: "a", name: "A", locked: false }] })).toBe("Agent · in 1 Flow");
+    expect(cardMeta({ kind: "command", usedBy: [] })).toBe("Command · in no Flow");
   });
 });
 
