@@ -2,7 +2,38 @@
 // `human_request` and `attempt.retry_context`, and the prompt parts built from
 // them. Pure functions, shared by the Gateway and the web app.
 
-export type GrillQuestion = { id: string; text: string };
+/** A suggested answer; Claude may mark the one it recommends. */
+export type GrillOption = { label: string; recommended?: boolean };
+/**
+ * One Grill question. With `options`, the form offers them plus "Other" for a
+ * free answer; `multiSelect` lets the person pick several.
+ */
+export type GrillQuestion = { id: string; text: string; options?: GrillOption[]; multiSelect?: boolean };
+
+/** The most suggested options kept per question. */
+export const MAX_GRILL_OPTIONS = 6;
+
+function parseOptions(raw: unknown, multiSelect: boolean): GrillOption[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const options: GrillOption[] = [];
+  for (const o of raw) {
+    const label = (typeof o === "string" ? o : (o as { label?: unknown })?.label);
+    if (typeof label !== "string" || !label.trim()) continue;
+    if (options.some((x) => x.label === label.trim())) continue;
+    const recommended = typeof o === "object" && (o as { recommended?: unknown }).recommended === true;
+    options.push(recommended ? { label: label.trim(), recommended: true } : { label: label.trim() });
+  }
+  if (options.length === 0) return undefined;
+  // A single choice keeps one recommendation, listed first.
+  if (!multiSelect) {
+    const first = options.findIndex((o) => o.recommended);
+    options.forEach((o, i) => {
+      if (i !== first) delete o.recommended;
+    });
+    if (first > 0) options.unshift(...options.splice(first, 1));
+  }
+  return options.slice(0, MAX_GRILL_OPTIONS);
+}
 export type GrillAnswers = Record<string, string>;
 
 /** `human_request.response`: what the person decided, or that a Cancel closed it. */
@@ -33,7 +64,9 @@ export function parseGrillQuestions(result: unknown): { ok: true; questions: Gri
     }
     if (seen.has(id)) return { ok: false, reason: `Grill question id ${id} is repeated` };
     seen.add(id);
-    questions.push({ id, text: text.trim() });
+    const multiSelect = typeof q === "object" && (q as { multiSelect?: unknown }).multiSelect === true;
+    const options = typeof q === "object" ? parseOptions((q as { options?: unknown }).options, multiSelect) : undefined;
+    questions.push({ id, text: text.trim(), ...(options ? { options, ...(multiSelect ? { multiSelect } : {}) } : {}) });
   }
   return { ok: true, questions };
 }
@@ -78,8 +111,16 @@ export function resultContract(outputs: readonly string[], grill: boolean): stri
       "If you need a person to answer questions before you can produce your Outputs, ask them all in one batch instead, as one fenced JSON block, the last one in the message:",
       "",
       "```json",
-      JSON.stringify({ questions: [{ id: "q1", text: "<question>" }] }),
+      JSON.stringify({
+        questions: [
+          { id: "q1", text: "<question>", options: [{ label: "<option you recommend>", recommended: true }, { label: "<another option>" }] },
+          { id: "q2", text: "<question with several answers>", multiSelect: true, options: [{ label: "<option>" }, { label: "<option>" }] },
+          { id: "q3", text: "<open question>" },
+        ],
+      }),
       "```",
+      "",
+      `Where you can, suggest 2 to 4 short options per question and mark the one you recommend; set "multiSelect": true only when several options can apply together. The person can always write their own answer instead. Leave "options" out for an open question.`,
     );
   }
   if (outputs.includes("branch")) lines.push("", "Commit your work on the current branch before you finish. The branch is reported for you; do not push.");

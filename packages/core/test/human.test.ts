@@ -27,6 +27,27 @@ describe("Grill results (spec M3 §2.2)", () => {
     expect(parseGrillQuestions({ questions: [{ id: "q1", text: "a" }, { id: "q1", text: "b" }] })).toEqual({ ok: false, reason: "Grill question id q1 is repeated" });
   });
 
+  it("keeps suggested options: one recommendation listed first for a single choice, several for a multi-select", () => {
+    const single = parseGrillQuestions({
+      questions: [{ id: "q1", text: "Rounding?", options: ["Per line", { label: "Per invoice", recommended: true }, { label: "Per day", recommended: true }, " ", "Per line"] }],
+    });
+    expect(single).toEqual({
+      ok: true,
+      questions: [{ id: "q1", text: "Rounding?", options: [{ label: "Per invoice", recommended: true }, { label: "Per line" }, { label: "Per day" }] }],
+    });
+    const multi = parseGrillQuestions({
+      questions: [{ id: "q1", text: "Formats?", multiSelect: true, options: [{ label: "CSV", recommended: true }, { label: "XLSX", recommended: true }] }],
+    });
+    expect(multi).toEqual({
+      ok: true,
+      questions: [{ id: "q1", text: "Formats?", multiSelect: true, options: [{ label: "CSV", recommended: true }, { label: "XLSX", recommended: true }] }],
+    });
+    // multiSelect means nothing without options; too many options are cut.
+    expect(parseGrillQuestions({ questions: [{ id: "q1", text: "Open?", multiSelect: true, options: [] }] })).toEqual({ ok: true, questions: [{ id: "q1", text: "Open?" }] });
+    const many = parseGrillQuestions({ questions: [{ id: "q1", text: "Pick", options: ["a", "b", "c", "d", "e", "f", "g", "h"] }] });
+    expect(many?.ok ? many.questions[0]!.options : []).toHaveLength(6);
+  });
+
   it("requires every answer", () => {
     const questions = [{ id: "q1", text: "A?" }, { id: "q2", text: "B?" }];
     expect(checkAnswers(questions, { q1: " yes ", q2: "no" })).toEqual({ ok: true, answers: { q1: "yes", q2: "no" } });
@@ -35,7 +56,8 @@ describe("Grill results (spec M3 §2.2)", () => {
 
   it("a Grill prompt allows questions; the answer prompt holds every question and answer", () => {
     const prompt = buildAgentPrompt({ instructions: "Plan it.", placementInstructions: "", batchInstructions: "", inputs: [], outputs: ["plan"], grill: true });
-    expect(prompt).toContain('{"questions":[{"id":"q1","text":"<question>"}]}');
+    expect(prompt).toContain('"options":[{"label":"<option you recommend>","recommended":true}');
+    expect(prompt).toContain('"multiSelect":true');
     const plain = buildAgentPrompt({ instructions: "Plan it.", placementInstructions: "", batchInstructions: "", inputs: [], outputs: ["plan"] });
     expect(plain).not.toContain("questions");
 
