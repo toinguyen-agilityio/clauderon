@@ -1,64 +1,50 @@
-/* Design system from the Clauderon prototype: an operator console with a fixed
-   left rail, a dense work area, state as pills and monospace for anything that
-   comes from git, GitHub or a Pod. Later milestones add their own sections. */
+/* Design system: "Dark Mode" (designmd.app/library/dark-mode). Near-black neutral
+   backgrounds (never pure black), desaturated accents, elevation through lighter
+   surfaces instead of shadows. Dark is the default; light is opt-in from the
+   sidebar. Monospace for anything from git, GitHub or a Pod. */
 :root {
+  --bg: #0c0c10; --panel: #16161c; --sunk: #101014; --hover: #1e1e26;
+  --line: rgba(255, 255, 255, 0.09); --line-strong: rgba(255, 255, 255, 0.18);
+  --fg: #e8e8ec; --fg2: #9a9aa5; --fg3: #7d7d89;
+  --accent: #7c9cff; --accent-2: #96b0ff; --accent-text: #7c9cff; --accent-weak: rgba(124, 156, 255, 0.14); --on-accent: #000000;
+  --mint: #7fd9c4;
+  --run: #7c9cff; --run-bg: rgba(124, 156, 255, 0.14);
+  --wait: #e0b866; --wait-bg: rgba(224, 184, 102, 0.13);
+  --ok: #7fd9c4; --ok-bg: rgba(127, 217, 196, 0.12);
+  --fail: #ee8a8a; --fail-bg: rgba(238, 138, 138, 0.13);
+  --intr: #e8a074; --intr-bg: rgba(232, 160, 116, 0.13);
+  --mute: #9a9aa5; --mute-bg: #1e1e26;
+  --t-issue: #9a9aa5; --t-plan: #b79cff; --t-branch: #7fd9c4; --t-test: #e0b866; --t-pr: #7fd9c4; --t-summary: #7c9cff; --t-shot: #e88cc0;
+  --code-bg: #101014;
+  --term-bg: #08080b; --term-fg: #d5d5dc;
+  --shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.62);
+  --font-ui: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --r: 16px; --r-sm: 8px;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
   --bg: #f3f4f7; --panel: #ffffff; --sunk: #eceef3; --hover: #e6e9f0;
   --line: #dde1e9; --line-strong: #c6ccd8;
-  --fg: #131722; --fg2: #4b5365; --fg3: #848c9e;
-  --accent: #3344c4; --accent-2: #2735a6; --accent-weak: #e6e8fa; --on-accent: #ffffff;
+  --fg: #131722; --fg2: #4b5365; --fg3: #6f778a;
+  --accent: #3b55d9; --accent-2: #2c43bd; --accent-text: #3b55d9; --accent-weak: #e6eafc; --on-accent: #ffffff;
   --run: #2160c4; --run-bg: #e1eafa;
   --wait: #9a5800; --wait-bg: #fbeed6;
-  --ok: #14773f; --ok-bg: #dcf2e5;
+  --ok: #0f766e; --ok-bg: #d9f3ee;
   --fail: #c02828; --fail-bg: #fae2e2;
   --intr: #b0430c; --intr-bg: #fae5d8;
   --mute: #5d6474; --mute-bg: #e9ebf0;
-  --t-issue: #6b7280; --t-plan: #7a3be0; --t-branch: #0b8487; --t-test: #a86d12; --t-pr: #14773f; --t-summary: #2160c4; --t-shot: #bb3384;
+  --t-issue: #6b7280; --t-plan: #7a3be0; --t-branch: #0b8487; --t-test: #a86d12; --t-pr: #0f766e; --t-summary: #2160c4; --t-shot: #bb3384;
   --code-bg: #f7f8fb;
-  --term-bg: #151924; --term-fg: #d5dae6;
-  --shadow: 0 1px 2px rgba(18, 24, 40, 0.06), 0 6px 20px rgba(18, 24, 40, 0.07);
+  --shadow: 0 4px 10px rgba(18, 24, 40, 0.1);
+  --shadow-sm: 0 1px 2px rgba(18, 24, 40, 0.08);
+  --shadow-lg: 0 12px 28px rgba(18, 24, 40, 0.14);
   --scrim: rgba(14, 18, 28, 0.42);
-  --font-ui: var(--font-instrument), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --r: 8px; --r-sm: 6px;
   color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0e1118; --panel: #151922; --sunk: #1b2029; --hover: #222834;
-    --line: #272e3a; --line-strong: #353d4c;
-    --fg: #e6e9f0; --fg2: #a4acbd; --fg3: #6d7689;
-    --accent: #8d9bff; --accent-2: #a9b4ff; --accent-weak: #1f2550; --on-accent: #0e1118;
-    --run: #7fa8f5; --run-bg: #172742;
-    --wait: #f0b55a; --wait-bg: #3a2a10;
-    --ok: #62cf8f; --ok-bg: #12301f;
-    --fail: #ff7d7d; --fail-bg: #3d1717;
-    --intr: #ff9a62; --intr-bg: #3b1f10;
-    --mute: #9aa2b2; --mute-bg: #232935;
-    --t-issue: #9aa2b2; --t-plan: #b590ff; --t-branch: #4fd0d2; --t-test: #e8b45a; --t-pr: #62cf8f; --t-summary: #7fa8f5; --t-shot: #f07cc0;
-    --code-bg: #11151d;
-    --term-bg: #0a0d13;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-    --scrim: rgba(0, 0, 0, 0.6);
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0e1118; --panel: #151922; --sunk: #1b2029; --hover: #222834;
-  --line: #272e3a; --line-strong: #353d4c;
-  --fg: #e6e9f0; --fg2: #a4acbd; --fg3: #6d7689;
-  --accent: #8d9bff; --accent-2: #a9b4ff; --accent-weak: #1f2550; --on-accent: #0e1118;
-  --run: #7fa8f5; --run-bg: #172742;
-  --wait: #f0b55a; --wait-bg: #3a2a10;
-  --ok: #62cf8f; --ok-bg: #12301f;
-  --fail: #ff7d7d; --fail-bg: #3d1717;
-  --intr: #ff9a62; --intr-bg: #3b1f10;
-  --mute: #9aa2b2; --mute-bg: #232935;
-  --t-issue: #9aa2b2; --t-plan: #b590ff; --t-branch: #4fd0d2; --t-test: #e8b45a; --t-pr: #62cf8f; --t-summary: #7fa8f5; --t-shot: #f07cc0;
-  --code-bg: #11151d;
-  --term-bg: #0a0d13;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-  --scrim: rgba(0, 0, 0, 0.6);
-  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -361,3 +347,29 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .fport.lit { background: var(--accent-weak); border-radius: 4px; }
 .fnode .react-flow__handle { width: 9px; height: 9px; background: var(--fg3); border: 1px solid var(--panel); }
 .fnode .react-flow__handle.lit { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+
+/* Dark-mode layer: depth from lighter surfaces, not shadows; subtle motion */
+h1 { font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-size: clamp(1.5rem, 2.2vw, 2.25rem); }
+.eyebrow { font-size: 0.75rem; letter-spacing: 0.06em; }
+.card { box-shadow: var(--shadow-sm); }
+dialog.modal { border-radius: var(--r); box-shadow: var(--shadow-lg); }
+.signin-card { border-radius: var(--r); }
+.nav a.on { color: var(--accent-text); font-weight: 600; }
+.brand-mark { background: var(--accent); color: var(--on-accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.pill.acc, .tag.real, .seg button.on, .seg a.on, .fchip.on, .att-tabs button.on { color: var(--accent-text); }
+.btn:hover, .tbl tbody tr:hover td, .node-row:hover { background-color: var(--hover); }
+a.pod-tile:hover, a.stat:hover { box-shadow: var(--shadow); }
+
+.nav a, .btn, .fchip, .seg button, .seg a, .tbl tbody tr, .card, a.pod-tile, a.stat, .opt-card { transition: background-color 200ms var(--ease), color 200ms var(--ease), border-color 200ms var(--ease), box-shadow 200ms var(--ease), transform 200ms var(--ease); }
+.btn:not(:disabled):active { transform: translateY(1px); }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.view > *, .pod-grid > *, .stats > * { animation: rise 360ms var(--ease) both; }
+.view > *:nth-child(2), .pod-grid > *:nth-child(2), .stats > *:nth-child(2) { animation-delay: 60ms; }
+.view > *:nth-child(3), .pod-grid > *:nth-child(3), .stats > *:nth-child(3) { animation-delay: 120ms; }
+.view > *:nth-child(n+4), .pod-grid > *:nth-child(n+4), .stats > *:nth-child(n+4) { animation-delay: 180ms; }
+@media (prefers-reduced-motion: reduce) {
+  .view > *, .pod-grid > *, .stats > * { animation: none; }
+  .nav a, .btn, a.pod-tile, a.stat { transition: none; }
+}
