@@ -4,18 +4,20 @@ import { isOperator } from "@clauderon/db";
 import { signOut } from "../../auth";
 import { Avatar, Brand } from "../../components/brand";
 import { SideNav } from "../../components/side-nav";
+import { needsYouCount } from "../../server/runs";
 import { deps, requireMember } from "../../server/runtime";
 
 /** The signed-in shell of the prototype: left rail, work area on the right. */
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const member = await requireMember();
   const operator = isOperator(member.email, deps().operators);
+  const needsYou = await needsYouCount(deps());
 
   return (
     <div className="shell">
       <aside className="side">
         <Brand />
-        <SideNav operator={operator} />
+        <SideNav operator={operator} needsYou={needsYou} />
         <div className="side-foot">
           <div className="me">
             <Avatar name={member.name} email={member.email} picture={member.pictureUrl} />

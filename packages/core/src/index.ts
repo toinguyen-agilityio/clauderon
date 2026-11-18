@@ -1,6 +1,7 @@
 export * from "./clock";
 export * from "./flow";
 export * from "./github";
+export * from "./human";
 export * from "./library";
 export * from "./limits";
 export * from "./mask";

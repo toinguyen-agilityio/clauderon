@@ -37,6 +37,8 @@ export interface DockerClient {
   removeContainer(name: string): Promise<void>;
   /** Removes a named volume; a missing one is fine. */
   removeVolume(name: string): Promise<void>;
+  /** Containers whose name starts with `prefix`, running or not (for heartbeats and orphan kills). */
+  listContainers(prefix: string): Promise<{ name: string; running: boolean }[]>;
   /** The digest of the image a container runs, or null when unknown. */
   imageDigest(image: string): Promise<string | null>;
   /** Runs a command in a container, streaming its output; resolves with the exit code. */
@@ -45,7 +47,8 @@ export interface DockerClient {
 }
 
 export const POD_USER = "pod";
-export const containerName = (podId: string) => `clauderon-pod-${podId}`;
+export const CONTAINER_PREFIX = "clauderon-pod-";
+export const containerName = (podId: string) => `${CONTAINER_PREFIX}${podId}`;
 export const volumeName = (podId: string) => `clauderon-ws-${podId}`;
 
 /** Runs a command and collects its stdout; throws with stderr on a non-zero exit. */

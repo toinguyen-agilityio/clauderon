@@ -15,11 +15,13 @@ export type GatewayCommand =
   /** Run the Slot scheduler for a Pod after Runs were queued. */
   | { type: "schedule"; podId: string }
   /** A Run was cancelled: kill its cancelled Attempts on the Pod, then schedule (RUN-8). */
-  | { type: "run.cancel"; podId: string; runId: string; attemptIds: string[] };
+  | { type: "run.cancel"; podId: string; runId: string; attemptIds: string[] }
+  /** A person approved or answered (spec M3 §2): continue the Run or resume its Grill session. */
+  | { type: "run.resume"; podId: string; runId: string };
 
 export type CommandPublish = (command: GatewayCommand) => Promise<void>;
 
-const TYPES = new Set(["pod.create", "pod.start", "pod.stop", "pod.checkLogins", "pod.delete", "schedule", "run.cancel"]);
+const TYPES = new Set(["pod.create", "pod.start", "pod.stop", "pod.checkLogins", "pod.delete", "schedule", "run.cancel", "run.resume"]);
 
 export function notifyGatewayCommand(db: Db): CommandPublish {
   return async (command) => {
@@ -35,6 +37,10 @@ export function parseGatewayCommand(payload: string): GatewayCommand | null {
       const { runId, attemptIds } = value;
       if (typeof runId !== "string" || !Array.isArray(attemptIds) || !attemptIds.every((a) => typeof a === "string")) return null;
       return { type: "run.cancel", podId: value.podId, runId, attemptIds: attemptIds as string[] };
+    }
+    if (value.type === "run.resume") {
+      if (typeof value.runId !== "string") return null;
+      return { type: "run.resume", podId: value.podId, runId: value.runId };
     }
     return { type: value.type, podId: value.podId } as GatewayCommand;
   } catch {

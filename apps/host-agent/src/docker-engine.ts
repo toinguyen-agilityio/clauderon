@@ -67,6 +67,16 @@ export function dockerEngine(docker = new Docker()): DockerClient {
         });
     },
 
+    async listContainers(prefix) {
+      const list = await docker.listContainers({ all: true, filters: { name: [prefix] } });
+      return list.flatMap((c) =>
+        (c.Names ?? [])
+          .map((n) => n.replace(/^\//, ""))
+          .filter((n) => n.startsWith(prefix))
+          .map((name) => ({ name, running: c.State === "running" })),
+      );
+    },
+
     async removeContainer(name) {
       await docker
         .getContainer(name)

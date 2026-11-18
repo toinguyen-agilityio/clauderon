@@ -1,11 +1,11 @@
 import { mask, tailLines } from "@clauderon/core";
 import type { Payload } from "@clauderon/protocol";
 import { claudeCommand, claudeResult, parseClaudeLine } from "./claude";
-import { POD_USER, containerName, execText, type DockerClient } from "./docker";
+import { CONTAINER_PREFIX, POD_USER, containerName, execText, type DockerClient } from "./docker";
 import type { AgentLink, Log } from "./pods";
 
 /** Inputs passed as files: the Gateway sends the text, the Node gets `<NAME>_FILE`. */
-export const FILE_ENV = ["CLAUDERON_SUMMARY", "CLAUDERON_TEST_RESULT"] as const;
+export const FILE_ENV = ["CLAUDERON_SUMMARY", "CLAUDERON_TEST_RESULT", "CLAUDERON_RETRY_CONTEXT"] as const;
 /** Set by the Gateway when the Node must produce a `branch`: HEAD has to move. */
 export const EXPECT_COMMIT_ENV = "CLAUDERON_EXPECT_COMMIT";
 export const TAIL_LINES = 200;
@@ -32,6 +32,31 @@ sleep ${KILL_GRACE_SECONDS}
 signal_all "$1" KILL
 true`;
 
+/**
+ * Kills every Node process in the container that carries a
+ * `CLAUDERON_ATTEMPT_ID` this Host Agent holds no handle for (orphans, RUN-12).
+ * The ids to keep travel as arguments.
+ */
+const ORPHAN_SCRIPT = `
+orphans() {
+  for f in /proc/[0-9]*/environ; do
+    id=$(tr '\\0' '\\n' 2>/dev/null < "$f" | sed -n 's/^${ATTEMPT_ENV}=//p' | head -n 1)
+    [ -n "$id" ] || continue
+    keep=0
+    for k in "$@"; do [ "$k" = "$id" ] && keep=1; done
+    if [ "$keep" = 0 ]; then pid=\${f#/proc/}; echo "\${pid%/environ}"; fi
+  done
+}
+pids=$(orphans "$@")
+[ -n "$pids" ] || exit 0
+kill -TERM $pids 2>/dev/null
+sleep ${KILL_GRACE_SECONDS}
+kill -KILL $pids 2>/dev/null
+true`;
+
+/** What Claude Code prints when `--resume` names a session it does not know. */
+const UNKNOWN_SESSION = /no conversation found|session[^\n]*(not found|does not exist|unknown)|invalid session/i;
+
 /** Splits streamed text into lines, holding a partial line until it ends. */
 class Lines {
   private rest = "";
@@ -49,17 +74,29 @@ class Lines {
 
 export type NodeRunnerOptions = { log: Log; knownSecrets: readonly string[] };
 
+/** The Host Agent's handle on its Nodes: what runs, and the orphan sweep (spec M3 §6). */
+export type NodeHandles = {
+  running(): string[];
+  killOrphans(): Promise<void>;
+};
+
 /**
  * `node.run` (spec M1 §4.3, §4.4): runs a Command or Agent Node as `pod` in
  * the Run's worktree, streams masked log lines, and reports one `node.result`.
  * Runs in the background so the link keeps serving terminals and other Pods.
  */
-export function registerNodeHandlers(link: AgentLink, docker: DockerClient, options: NodeRunnerOptions): void {
+export function registerNodeHandlers(link: AgentLink, docker: DockerClient, options: NodeRunnerOptions): NodeHandles {
   // The container of every Node still running here, by Attempt.
   const running = new Map<string, string>();
+  // Log line numbers go on across a Grill Attempt's rounds, so none repeats.
+  const seqs = new Map<string, { next: number }>();
+  let sweep: Promise<void> = Promise.resolve();
   link.on("node.run", (payload) => {
     running.set(payload.attemptId, containerName(payload.podId));
-    void runNode(link, docker, options, payload).finally(() => running.delete(payload.attemptId));
+    const seq = seqs.get(payload.attemptId) ?? { next: 0 };
+    seqs.set(payload.attemptId, seq);
+    // After an orphan sweep, so the sweep never mistakes this Node for an orphan.
+    void sweep.then(() => runNode(link, docker, options, payload, seq)).finally(() => running.delete(payload.attemptId));
   });
   // A cancelled Run (RUN-8): the Gateway already ended the Attempt, so its
   // late `node.result` is ignored; an unknown Attempt has nothing to kill.
@@ -70,19 +107,49 @@ export function registerNodeHandlers(link: AgentLink, docker: DockerClient, opti
       options.log(`node ${attemptId}: kill failed: ${error instanceof Error ? error.message : String(error)}`),
     );
   });
+
+  return {
+    running: () => [...running.keys()],
+    killOrphans() {
+      const keep = [...running.keys()];
+      sweep = sweep.then(async () => {
+        for (const container of await docker.listContainers(CONTAINER_PREFIX)) {
+          if (!container.running) continue;
+          await docker
+            .exec(container.name, ["bash", "-c", ORPHAN_SCRIPT, "_", ...keep], { user: POD_USER })
+            .catch((error: unknown) => options.log(`orphans in ${container.name}: ${error instanceof Error ? error.message : String(error)}`));
+        }
+      }).catch((error: unknown) => options.log(`orphan sweep: ${String(error)}`));
+      return sweep;
+    },
+  };
+}
+
+/** Each Pod container's state for a heartbeat (spec M3 §6). */
+export async function podStatuses(docker: DockerClient) {
+  return (await docker.listContainers(CONTAINER_PREFIX)).map((c) => ({
+    podId: c.name.slice(CONTAINER_PREFIX.length),
+    status: c.running ? ("running" as const) : ("stopped" as const),
+  }));
 }
 
 export async function killNode(docker: DockerClient, container: string, attemptId: string): Promise<void> {
   await docker.exec(container, ["bash", "-c", KILL_SCRIPT, "_", attemptId], { user: POD_USER });
 }
 
-export async function runNode(link: AgentLink, docker: DockerClient, options: NodeRunnerOptions, run: Payload<"node.run">): Promise<void> {
+export async function runNode(
+  link: AgentLink,
+  docker: DockerClient,
+  options: NodeRunnerOptions,
+  run: Payload<"node.run">,
+  counter: { next: number } = { next: 0 },
+): Promise<void> {
   const container = containerName(run.podId);
   const inWorktree = { user: POD_USER, workdir: run.worktreePath };
   const secrets = [...options.knownSecrets];
   const hide = (text: string) => mask(text, secrets);
-  let seq = 0;
-  const log = (stream: "stdout" | "stderr" | "system", text: string) => link.send("node.log", { attemptId: run.attemptId, seq: seq++, stream, text: hide(text) });
+  const log = (stream: "stdout" | "stderr" | "system", text: string) =>
+    link.send("node.log", { attemptId: run.attemptId, seq: counter.next++, stream, text: hide(text) });
 
   try {
     // The owner's own gh token is a secret too (NFR-1).
@@ -142,14 +209,22 @@ export async function runNode(link: AgentLink, docker: DockerClient, options: No
       const promptFile = `${gitDir}/clauderon-prompt-${run.attemptId}.md`;
       await writeFile(promptFile, run.prompt ?? "");
       let finalText: string | undefined;
+      let unknownSession: string | undefined;
+      const watch = (line: string) => {
+        if (run.resumeSessionId && !unknownSession && UNKNOWN_SESSION.test(line)) unknownSession = line.trim();
+      };
       const stdout = new Lines((line) => {
+        watch(line);
         const event = parseClaudeLine(line);
         if (event.sessionId) sessionId = event.sessionId;
         if (event.usage) link.send("node.usage", { attemptId: run.attemptId, ...event.usage });
         if (event.finalText !== undefined) finalText = event.finalText;
         if (event.log) for (const part of event.log.split("\n")) log("stdout", part);
       });
-      const stderr = new Lines((line) => log("stderr", line));
+      const stderr = new Lines((line) => {
+        watch(line);
+        log("stderr", line);
+      });
       exitCode = await docker.exec(
         container,
         ["bash", "-lc", claudeCommand(run.resumeSessionId)],
@@ -160,6 +235,8 @@ export async function runNode(link: AgentLink, docker: DockerClient, options: No
       stderr.flush();
       result = claudeResult(finalText);
       if (exitCode !== 0) error = `Claude Code exited ${exitCode}`;
+      // A Grill round whose session Claude no longer knows (spec M3 §2.2).
+      if (unknownSession && result === undefined) error = `Claude session ${run.resumeSessionId} could not be resumed: ${hide(unknownSession)}`;
     }
 
     const headCommit = await git("rev-parse", "HEAD");

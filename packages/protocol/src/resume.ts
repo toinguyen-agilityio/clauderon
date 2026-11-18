@@ -30,6 +30,11 @@ export class ResumeBuffer {
     this.outbox = this.outbox.filter((e) => e.id > upTo);
   }
 
+  /** Messages sent but not acknowledged yet, oldest first. */
+  pending(): readonly Envelope[] {
+    return this.outbox;
+  }
+
   /** Messages to resend after the other side reported `lastReceivedId`. */
   unacked(lastReceivedId: number): Envelope[] {
     this.acknowledge(lastReceivedId);

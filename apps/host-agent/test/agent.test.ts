@@ -186,4 +186,60 @@ describe("HostAgent", () => {
     await clock.advance(30_000);
     expect(gateway.inbox.flat().filter((e) => e.type === "heartbeat").length).toBe(before);
   });
+
+  it("RUN-12: hello lists running Attempts and those with an unacknowledged result; heartbeats carry Pod states", async () => {
+    agent = new HostAgent({
+      url: "ws://gateway.test",
+      secret: "s3cret",
+      clock,
+      connect: gateway.connector,
+      facts,
+      state,
+      processId: "proc-1",
+      version: "0.1.0",
+      log: () => {},
+      runningAttempts: () => ["att-running"],
+      podStatuses: async () => [{ podId: "pod-1", status: "stopped" }],
+    });
+    await agent.start();
+    await settle();
+    gateway.welcome();
+    await settle();
+    agent.send("node.result", { attemptId: "att-done", exitCode: 0 });
+    await clock.advance(10_000);
+    expect(gateway.received.find((e) => e.type === "heartbeat")!.payload).toMatchObject({ pods: [{ podId: "pod-1", status: "stopped" }] });
+
+    gateway.socket.cut();
+    await settle();
+    await clock.advance(1000);
+    expect((gateway.received[0]!.payload as { liveAttempts: string[] }).liveAttempts.sort()).toEqual(["att-done", "att-running"]);
+  });
+
+  it("RUN-12: runs onWelcome after every welcome, e.g. the orphan sweep", async () => {
+    let sweeps = 0;
+    agent = new HostAgent({
+      url: "ws://gateway.test",
+      secret: "s3cret",
+      clock,
+      connect: gateway.connector,
+      facts,
+      state,
+      processId: "proc-1",
+      version: "0.1.0",
+      log: () => {},
+      onWelcome: () => {
+        sweeps++;
+      },
+    });
+    await agent.start();
+    await settle();
+    gateway.welcome();
+    await settle();
+    gateway.socket.cut();
+    await settle();
+    await clock.advance(1000);
+    gateway.welcome();
+    await settle();
+    expect(sweeps).toBe(2);
+  });
 });
