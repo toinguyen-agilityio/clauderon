@@ -15,7 +15,7 @@ import {
 import type { AppDeps } from "../src/server/deps";
 import { createMyPod, gbToMb, podAction, removePod, setMyPodSettings, terminalAccess, viewPod, viewPods } from "../src/server/pods";
 import { enableRepository, enableableRepositories, syncProject } from "../src/server/projects";
-import { viewRun, viewRuns } from "../src/server/runs";
+import { cancelRunAs, viewRun, viewRuns } from "../src/server/runs";
 import { startDialog, startRuns } from "../src/server/start";
 import { viewTickets } from "../src/server/tickets";
 
@@ -439,5 +439,34 @@ describe("Slots, limits and the queue (spec M2 §6)", () => {
     const fresh = await ticketRow(db, project.id, 4);
     const dialog = await startDialog(deps, ann, [fresh.id]);
     expect(dialog.positions).toEqual([3]);
+  });
+});
+
+describe("Cancel (RUN-8, MEM-2)", () => {
+  it("any Member cancels an Active Run: it ends at once, the Gateway is told, and the Pod can then be removed", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    const pod = await podRow(db, ann.id);
+    const project = await projectRow(db);
+    const ticket = await ticketRow(db, project.id, 1);
+    const start = await startSampleBatch(db, ann, pod.id, [ticket.id], deps.clock.now());
+    if (!start.ok) throw new Error("start failed");
+    const runId = start.runIds[0]!;
+    await db.update(schema.run).set({ state: "running" });
+    const [attempt] = await db
+      .insert(schema.attempt)
+      .values({ runId, flowNodeId: "00000000-0000-0000-0000-000000000001", number: 1, state: "running" })
+      .returning();
+
+    expect(await removePod(deps, ann, pod.id)).toEqual({ ok: false, reason: "busy" });
+    expect(await cancelRunAs(deps, bob, runId)).toEqual({ ok: true });
+    expect((await db.select().from(schema.run))[0]).toMatchObject({ state: "cancelled", endedAt: deps.clock.now() });
+    expect((await db.select().from(schema.attempt))[0]).toMatchObject({ id: attempt!.id, state: "cancelled" });
+    expect(commands).toEqual([{ type: "run.cancel", podId: pod.id, runId, attemptIds: [attempt!.id] }]);
+    expect(await actions()).toContain("run.cancel");
+
+    expect(await cancelRunAs(deps, ann, runId)).toEqual({ ok: false, reason: "ended" });
+    expect(await cancelRunAs(deps, ann, "not-a-uuid")).toBe("not-found");
+    expect(await removePod(deps, ann, pod.id)).toEqual({ ok: true });
   });
 });
