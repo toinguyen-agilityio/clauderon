@@ -339,6 +339,21 @@ describe("Retry on the Gateway (spec M3 §4)", () => {
     expect((await getRun(db, c!))!.state).toBe("waiting_for_human");
     expect((await getRun(db, a!))!.state).toBe("queued");
   });
+
+  it("a Retry cannot skip the Node that failed: only it or an earlier Node", async () => {
+    const { ann, agent, start } = await setup(1, 1);
+    scriptPlanAndDeliver(agent);
+    const [runId] = await start();
+    const request = await openRequest(runId!);
+    await respondToHuman(db, request.request.id, ann.email, { decision: "reject", feedback: "No." }, new Date());
+
+    const snapshot = (await getRun(db, runId!))!.flowSnapshot as FlowSnapshot;
+    const nodeOf = (name: string) => snapshot.nodes.find((n) => n.name === name)!.id;
+    // Code a change comes after the rejected Approve a plan: retrying it would skip the approval.
+    expect(await retryRun(db, runId!, nodeOf("Code a change"), "", ann.email, new Date())).toEqual({ ok: false, reason: "after-failure" });
+    expect((await getRun(db, runId!))!.state).toBe("failed");
+    expect(await retryRun(db, runId!, nodeOf("Approve a plan"), "", ann.email, new Date())).toMatchObject({ ok: true });
+  });
 });
 
 describe("Interrupted and resilience (spec M3 §6)", () => {

@@ -170,7 +170,7 @@ export async function cancelRun(db: Db, runId: string, actorEmail: string, now: 
 
 export type RetryResult =
   | { ok: true; podId: string; context: RetryContext }
-  | { ok: false; reason: "not-found" | "not-retryable" | "unknown-node" | "no-pod" };
+  | { ok: false; reason: "not-found" | "not-retryable" | "unknown-node" | "after-failure" | "no-pod" };
 
 /**
  * What a retried Node is told (RUN-7): the Run's latest Reject feedback, why
@@ -219,6 +219,19 @@ export function nodesFrom(snapshot: FlowSnapshot, flowNodeId: string): string[] 
 }
 
 /**
+ * The Nodes a Retry may start from: the Node that failed (or was
+ * interrupted) in the current pass and every Node before it. A later Node
+ * would run with that Node still not succeeded, and it may be an Approve Node:
+ * retrying past it would skip a person's decision.
+ */
+export function retryableNodes(snapshot: FlowSnapshot, current: readonly { flowNodeId: string; state: string }[]): string[] {
+  const order = topologicalOrder(snapshotFlow(snapshot).flow);
+  const stopped = new Set(current.filter((a) => a.state === "failed" || a.state === "interrupted").map((a) => a.flowNodeId));
+  const at = order.findIndex((id) => stopped.has(id));
+  return at < 0 ? order : order.slice(0, at + 1);
+}
+
+/**
  * Retry from a Node (RUN-7, spec M3 §4): any Member, on a Failed or
  * Interrupted Run. Later Nodes' Attempts are superseded but kept; the Run
  * joins the end of its Pod's queue with the retry context waiting for the
@@ -235,6 +248,11 @@ export async function retryRun(db: Db, runId: string, flowNodeId: string, note: 
     const node = snapshot.nodes.find((n) => n.id === flowNodeId);
     const again = nodesFrom(snapshot, flowNodeId);
     if (!node || again.length === 0) return { ok: false, reason: "unknown-node" } as const;
+    const pass = await tx
+      .select({ flowNodeId: attempt.flowNodeId, state: attempt.state })
+      .from(attempt)
+      .where(and(eq(attempt.runId, runId), eq(attempt.superseded, false)));
+    if (!retryableNodes(snapshot, pass).includes(flowNodeId)) return { ok: false, reason: "after-failure" } as const;
 
     const context = await buildRetryContext(tx, runId, note, actorEmail);
     await tx

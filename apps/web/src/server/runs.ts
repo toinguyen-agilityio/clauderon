@@ -28,6 +28,7 @@ import {
   pullRequestCounts,
   respondToHuman,
   retryRun,
+  retryableNodes,
   runStateCounts,
   type AuditFilters,
   type HumanAction,
@@ -150,6 +151,7 @@ export async function retryAs(deps: AppDeps, viewer: Viewer, runId: string, flow
     const errors = {
       "not-retryable": "Only a Failed or Interrupted Run can be retried.",
       "unknown-node": "That Node is not part of this Run.",
+      "after-failure": "Retry from the Node that failed or an earlier one: a Retry cannot skip a Node that did not succeed.",
       "no-pod": "This Run's Pod was removed.",
     } as const;
     return { ok: false, error: errors[result.reason] };
@@ -211,6 +213,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
   const current = run.attempts.filter((a) => !a.superseded);
 
   const order = topologicalOrder(snapshotFlow(run.snapshot).flow);
+  const canRetryFrom = new Set(retryable ? retryableNodes(run.snapshot, current) : []);
   const timeline = order.map((id) => {
     const node = run.snapshot.nodes.find((n) => n.id === id)!;
     const attempts = run.attempts.filter((a) => a.flowNodeId === id);
@@ -235,6 +238,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
       kind: node.kind,
       description: node.kind === "command" ? `$ ${node.command ?? ""}` : node.instructions,
       inputs,
+      canRetry: canRetryFrom.has(id),
       retryInputs,
       state,
       durationMs: last ? (last.endedAt ?? deps.clock.now()).getTime() - last.startedAt.getTime() : null,
