@@ -96,6 +96,17 @@ describe("workspace.prepare (T1-16, POD-10, RUN-3)", () => {
     ]);
   });
 
+  it("clones once when a Batch prepares two Runs of the same Project at once", async () => {
+    await Promise.all([
+      link.deliver("workspace.prepare", prepare("run-1", "clauderon/1-a-run1")),
+      link.deliver("workspace.prepare", prepare("run-2", "clauderon/2-b-run2")),
+    ]);
+
+    expect(docker.commands().filter((c) => c.startsWith("gh repo clone"))).toHaveLength(1);
+    expect(link.of("workspace.failed")).toEqual([]);
+    expect(link.of("workspace.ready").map((r) => r.runId).sort()).toEqual(["run-1", "run-2"]);
+  });
+
   it("reports workspace.failed with the masked error", async () => {
     docker.script(({ argv }) => (argv.includes("clone") ? { exitCode: 1, stderr: "auth failed for ghp_abcdefghijklmnopqrstuvwxyz0123" } : undefined));
     await link.deliver("workspace.prepare", prepare("run-1", "clauderon/1-a-run1"));
@@ -130,6 +141,15 @@ const nodeRun = (extra: Partial<Payload<"node.run">> & Pick<Payload<"node.run">,
 });
 
 describe("Command Nodes (RUN-10)", () => {
+  it("drops terminal colour codes from the log and the test-result", async () => {
+    scriptGit(["h1", "h1"]);
+    docker.script(({ argv }) => (argv[0] === "bash" && argv[1] === "-lc" ? { stdout: "\u001b[0mGET /health \u001b[32m200\u001b[0m 2 ms\nok 1\n" } : undefined));
+    await link.deliver("node.run", nodeRun({ kind: "command", command: "npm test" }));
+
+    expect((link.of("node.result")[0]!.result as { tail: string }).tail).toBe("GET /health 200 2 ms\nok 1");
+    expect(link.of("node.log").map((l) => l.text)).toEqual(["GET /health 200 2 ms", "ok 1"]);
+  });
+
   it("exit 0 succeeds; test-result holds the last 200 lines; env inputs become files", async () => {
     scriptGit(["h1", "h1"]);
     const lines = Array.from({ length: 250 }, (_, i) => `line ${i}`).join("\n");

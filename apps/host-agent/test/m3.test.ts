@@ -64,6 +64,15 @@ describe("Grill rounds on the Host Agent (spec M3 §2.2)", () => {
   });
 });
 
+describe("A resumed session's own output (spec M3 §2.2)", () => {
+  it("is never read as an unknown-session error", async () => {
+    // The plan mentions a 404 ("not found") and the stream-json line names the session.
+    docker.script(({ argv }) => (argv[2]?.startsWith("claude ") ? { stdout: claudeStream("The plan: GET /api/foods/999 is not found.") } : undefined));
+    await link.deliver("node.run", nodeRun({ kind: "agent", prompt: "Answers", resumeSessionId: "sess-1" }));
+    expect(link.of("node.result")[0]!.error).toBeUndefined();
+  });
+});
+
 describe("Retry context file (spec M3 §4)", () => {
   it("a Command Node gets CLAUDERON_RETRY_CONTEXT_FILE inside the git dir", async () => {
     await link.deliver("node.run", nodeRun({ kind: "command", command: "make test", env: { CLAUDERON_RETRY_CONTEXT: "## Feedback from the last review\n\nUse X" } }));
