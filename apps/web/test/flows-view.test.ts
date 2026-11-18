@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterFlows, pipelinePreview, problemsLabel, scopeCounts, type FlowRowView } from "../src/app/(app)/flows/flows-view";
+import { filterFlows, groupFlows, pipelinePreview, problemsLabel, scopeCounts, type FlowRowView } from "../src/app/(app)/flows/flows-view";
 
 const flow = (name: string, over: Partial<FlowRowView> = {}): FlowRowView => ({
   id: name,
@@ -42,6 +42,13 @@ describe("Flows list (ticket: Flows UI)", () => {
 
   it("counts the Flows in each scope", () => {
     expect(scopeCounts(flows)).toEqual({ all: 4, mine: 2, samples: 2, problems: 1 });
+  });
+
+  it("puts the samples apart from the Flows people made, keeping each group's order", () => {
+    const { samples, mine } = groupFlows(flows);
+    expect(samples.map((f) => f.name)).toEqual(["Plan and deliver", "Basic ticket delivery"]);
+    expect(mine.map((f) => f.name)).toEqual(["Brainstorm and deliver PR", "Basic ticket delivery with Artifact"]);
+    expect(groupFlows([])).toEqual({ samples: [], mine: [] });
   });
 
   it("previews the first Nodes and says how many are left out", () => {
