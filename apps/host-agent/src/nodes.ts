@@ -9,6 +9,28 @@ export const FILE_ENV = ["CLAUDERON_SUMMARY", "CLAUDERON_TEST_RESULT"] as const;
 /** Set by the Gateway when the Node must produce a `branch`: HEAD has to move. */
 export const EXPECT_COMMIT_ENV = "CLAUDERON_EXPECT_COMMIT";
 export const TAIL_LINES = 200;
+/** Set on every Node process, and inherited by its children, so `node.kill` can find them all. */
+export const ATTEMPT_ENV = "CLAUDERON_ATTEMPT_ID";
+/** Seconds between SIGTERM and SIGKILL when a Node is killed. */
+export const KILL_GRACE_SECONDS = 10;
+
+/**
+ * Signals every process in the container whose environment holds
+ * `CLAUDERON_ATTEMPT_ID=$1`: SIGTERM first, SIGKILL after the grace period.
+ * The id travels as an argument, so this script never matches itself.
+ */
+const KILL_SCRIPT = `
+signal_all() {
+  for f in /proc/[0-9]*/environ; do
+    if tr '\\0' '\\n' 2>/dev/null < "$f" | grep -qxF "${ATTEMPT_ENV}=$1"; then
+      pid=\${f#/proc/}; kill -"$2" "\${pid%/environ}" 2>/dev/null
+    fi
+  done
+}
+signal_all "$1" TERM
+sleep ${KILL_GRACE_SECONDS}
+signal_all "$1" KILL
+true`;
 
 /** Splits streamed text into lines, holding a partial line until it ends. */
 class Lines {
@@ -33,9 +55,25 @@ export type NodeRunnerOptions = { log: Log; knownSecrets: readonly string[] };
  * Runs in the background so the link keeps serving terminals and other Pods.
  */
 export function registerNodeHandlers(link: AgentLink, docker: DockerClient, options: NodeRunnerOptions): void {
+  // The container of every Node still running here, by Attempt.
+  const running = new Map<string, string>();
   link.on("node.run", (payload) => {
-    void runNode(link, docker, options, payload);
+    running.set(payload.attemptId, containerName(payload.podId));
+    void runNode(link, docker, options, payload).finally(() => running.delete(payload.attemptId));
   });
+  // A cancelled Run (RUN-8): the Gateway already ended the Attempt, so its
+  // late `node.result` is ignored; an unknown Attempt has nothing to kill.
+  link.on("node.kill", ({ attemptId }) => {
+    const container = running.get(attemptId);
+    if (!container) return;
+    void killNode(docker, container, attemptId).catch((error: unknown) =>
+      options.log(`node ${attemptId}: kill failed: ${error instanceof Error ? error.message : String(error)}`),
+    );
+  });
+}
+
+export async function killNode(docker: DockerClient, container: string, attemptId: string): Promise<void> {
+  await docker.exec(container, ["bash", "-c", KILL_SCRIPT, "_", attemptId], { user: POD_USER });
 }
 
 export async function runNode(link: AgentLink, docker: DockerClient, options: NodeRunnerOptions, run: Payload<"node.run">): Promise<void> {
@@ -57,7 +95,7 @@ export async function runNode(link: AgentLink, docker: DockerClient, options: No
     const writeFile = (path: string, content: string) =>
       execText(docker, container, ["bash", "-c", 'printf %s "$CLAUDERON_CONTENT" > "$1"', "_", path], { user: POD_USER, env: { CLAUDERON_CONTENT: content } });
 
-    const env: Record<string, string> = { ...run.env };
+    const env: Record<string, string> = { ...run.env, [ATTEMPT_ENV]: run.attemptId };
     const expectCommit = env[EXPECT_COMMIT_ENV] === "1";
     delete env[EXPECT_COMMIT_ENV];
     for (const key of FILE_ENV) {

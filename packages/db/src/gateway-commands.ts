@@ -13,11 +13,13 @@ export type GatewayCommand =
   /** Remove a deleted Pod's container and Workspace volume; its row is already gone. */
   | { type: "pod.delete"; podId: string }
   /** Run the Slot scheduler for a Pod after Runs were queued. */
-  | { type: "schedule"; podId: string };
+  | { type: "schedule"; podId: string }
+  /** A Run was cancelled: kill its cancelled Attempts on the Pod, then schedule (RUN-8). */
+  | { type: "run.cancel"; podId: string; runId: string; attemptIds: string[] };
 
 export type CommandPublish = (command: GatewayCommand) => Promise<void>;
 
-const TYPES = new Set(["pod.create", "pod.start", "pod.stop", "pod.checkLogins", "pod.delete", "schedule"]);
+const TYPES = new Set(["pod.create", "pod.start", "pod.stop", "pod.checkLogins", "pod.delete", "schedule", "run.cancel"]);
 
 export function notifyGatewayCommand(db: Db): CommandPublish {
   return async (command) => {
@@ -27,8 +29,13 @@ export function notifyGatewayCommand(db: Db): CommandPublish {
 
 export function parseGatewayCommand(payload: string): GatewayCommand | null {
   try {
-    const value = JSON.parse(payload) as { type?: unknown; podId?: unknown };
+    const value = JSON.parse(payload) as { type?: unknown; podId?: unknown; runId?: unknown; attemptIds?: unknown };
     if (typeof value.type !== "string" || !TYPES.has(value.type) || typeof value.podId !== "string") return null;
+    if (value.type === "run.cancel") {
+      const { runId, attemptIds } = value;
+      if (typeof runId !== "string" || !Array.isArray(attemptIds) || !attemptIds.every((a) => typeof a === "string")) return null;
+      return { type: "run.cancel", podId: value.podId, runId, attemptIds: attemptIds as string[] };
+    }
     return { type: value.type, podId: value.podId } as GatewayCommand;
   } catch {
     return null;

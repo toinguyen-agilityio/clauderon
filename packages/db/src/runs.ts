@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, gt, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { FlowSnapshot, OutputValue, RunState } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
-import { attempt, batch, flow, logChunk, member, output, pod, project, run, ticket } from "./schema";
+import { attempt, batch, flow, humanRequest, logChunk, member, output, pod, project, run, ticket } from "./schema";
 
 // Batches, Runs, Attempts, Outputs and logs (spec M1 §4, §5). The Gateway's
 // Run engine writes them; the web app reads them.
@@ -123,6 +123,39 @@ export async function moveRun(db: Db, runId: string, from: RunState, patch: Part
     .where(and(eq(run.id, runId), eq(run.state, from)))
     .returning({ id: run.id });
   return rows.length > 0;
+}
+
+export type CancelRunResult =
+  | { ok: true; podId: string | null; from: RunState; cancelledAttemptIds: string[] }
+  | { ok: false; reason: "not-found" | "ended" };
+
+/**
+ * Cancel (RUN-8, spec M3 §5): ends any Active Run as `cancelled` at once, with
+ * its running or waiting Attempt, and closes an open `human_request`. The
+ * Gateway kills the cancelled Attempts afterwards without waiting for them.
+ */
+export async function cancelRun(db: Db, runId: string, actorEmail: string, now: Date): Promise<CancelRunResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(runId)) return { ok: false, reason: "not-found" };
+  return db.transaction(async (tx) => {
+    const [current] = await tx.select({ state: run.state, podId: run.podId }).from(run).where(eq(run.id, runId)).for("update");
+    if (!current) return { ok: false, reason: "not-found" } as const;
+    if (current.state === "succeeded" || current.state === "cancelled") return { ok: false, reason: "ended" } as const;
+    await tx.update(run).set({ state: "cancelled", endedAt: now }).where(eq(run.id, runId));
+    const cancelled = await tx
+      .update(attempt)
+      .set({ state: "cancelled", endedAt: now, error: "Cancelled" })
+      .where(and(eq(attempt.runId, runId), inArray(attempt.state, ["running", "waiting_for_human"])))
+      .returning({ id: attempt.id });
+    const cancelledAttemptIds = cancelled.map((a) => a.id);
+    if (cancelledAttemptIds.length > 0) {
+      await tx
+        .update(humanRequest)
+        .set({ respondedByEmail: actorEmail, respondedAt: now, response: { cancelled: true } })
+        .where(and(inArray(humanRequest.attemptId, cancelledAttemptIds), isNull(humanRequest.respondedAt)));
+    }
+    await recordAudit(tx, { actorEmail, action: "run.cancel", subjectType: "run", subjectId: runId, detail: { from: current.state } });
+    return { ok: true, podId: current.podId, from: current.state, cancelledAttemptIds } as const;
+  });
 }
 
 export type AttemptWithOutputs = Attempt & { outputs: (typeof output.$inferSelect)[] };

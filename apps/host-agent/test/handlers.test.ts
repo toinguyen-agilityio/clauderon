@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Payload } from "@clauderon/protocol";
+import { settle } from "@clauderon/testing";
 import { parseClaudeLine } from "../src/claude";
 import { registerNodeHandlers } from "../src/nodes";
 import { registerPodHandlers } from "../src/pods";
@@ -145,6 +146,7 @@ describe("Command Nodes (RUN-10)", () => {
     const command = docker.execs.find((e) => e.argv[2] === "npm test")!;
     expect(command.options).toMatchObject({ user: "pod", workdir: "/workspace/runs/run-1" });
     expect(command.options.env).toEqual({
+      CLAUDERON_ATTEMPT_ID: "att-1",
       CLAUDERON_BRANCH: "b",
       CLAUDERON_SUMMARY_FILE: "/workspace/projects/acme/web/.git/worktrees/run-1/clauderon-att-1-clauderon_summary",
     });
@@ -181,6 +183,32 @@ describe("Command Nodes (RUN-10)", () => {
     const text = link.of("node.log").map((l) => l.text);
     expect(text).toEqual(["token •••", "secret •••", "plain stderr"]);
     expect(JSON.stringify(link.sent)).not.toMatch(/ghp_|host-secret-value|gho_/);
+  });
+});
+
+describe("node.kill (RUN-8)", () => {
+  it("signals every process carrying the Attempt's id in the Node's container; an ended or unknown Attempt is a no-op", async () => {
+    scriptGit(["h1", "h1"]);
+    const original = docker.exec.bind(docker);
+    let release: (() => void) | undefined;
+    docker.exec = async (container, argv, options, onOutput) => {
+      const code = await original(container, argv, options, onOutput);
+      if (argv[2] === "sleep 100") await new Promise<void>((resolve) => (release = resolve));
+      return code;
+    };
+    await link.deliver("node.run", nodeRun({ kind: "command", command: "sleep 100" }));
+    await link.deliver("node.kill", { attemptId: "other" });
+    await link.deliver("node.kill", { attemptId: "att-1" });
+
+    const kills = docker.execs.filter((e) => e.argv[0] === "bash" && e.argv[1] === "-c" && e.argv.at(-1) === "att-1");
+    expect(kills).toHaveLength(1);
+    expect(kills[0]).toMatchObject({ container: CONTAINER, options: { user: "pod" } });
+    expect(kills[0]!.argv[2]).toContain('grep -qxF "CLAUDERON_ATTEMPT_ID=$1"');
+
+    release!();
+    await settle();
+    await link.deliver("node.kill", { attemptId: "att-1" });
+    expect(docker.execs.filter((e) => e.argv.at(-1) === "att-1")).toHaveLength(1);
   });
 });
 

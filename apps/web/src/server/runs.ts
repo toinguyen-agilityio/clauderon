@@ -1,11 +1,11 @@
 import { RUN_STATES, snapshotFlow, ticketKeys, topologicalOrder, type RunState } from "@clauderon/core";
-import { getRunView, listFlows, listPods, listProjects, listRuns, runStateCounts, type RunFilters } from "@clauderon/db";
-import type { AppDeps } from "./deps";
+import { cancelRun, getRunView, listFlows, listPods, listProjects, listRuns, runStateCounts, type RunFilters } from "@clauderon/db";
+import type { AppDeps, Viewer } from "./deps";
 import { refreshPullRequest } from "./projects";
 
 // The Run page and the Runs list (spec M1 §5).
 
-export type NodeState = "queued" | "running" | "succeeded" | "failed" | "not reached";
+export type NodeState = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "not reached";
 
 const isUuid = (v: string | undefined) => !!v && /^[0-9a-f-]{36}$/i.test(v);
 
@@ -38,6 +38,19 @@ export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number)
   };
 }
 
+export type CancelOutcome = { ok: true } | { ok: false; reason: "ended" } | "not-found";
+
+/**
+ * Cancel (RUN-8, MEM-2): any Member ends any Active Run as `cancelled` at
+ * once; the Gateway then kills the running Attempt and frees the Slot.
+ */
+export async function cancelRunAs(deps: AppDeps, viewer: Viewer, runId: string): Promise<CancelOutcome> {
+  const result = await cancelRun(deps.db, runId, viewer.email, deps.clock.now());
+  if (!result.ok) return result.reason === "not-found" ? "not-found" : { ok: false, reason: "ended" };
+  if (result.podId) await deps.command({ type: "run.cancel", podId: result.podId, runId, attemptIds: result.cancelledAttemptIds });
+  return { ok: true };
+}
+
 /** The Run page (TRK-1, TRK-2): Ticket, Flow, Starter, Pod, state, and a Node timeline in topological order. */
 export async function viewRun(deps: AppDeps, runId: string) {
   await refreshPullRequest(deps, runId);
@@ -52,7 +65,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
     const attempts = run.attempts.filter((a) => a.flowNodeId === id);
     const last = attempts.at(-1);
     const state: NodeState = last
-      ? last.state === "succeeded" || last.state === "failed" || last.state === "running"
+      ? last.state === "succeeded" || last.state === "failed" || last.state === "running" || last.state === "cancelled"
         ? last.state
         : "failed"
       : ended

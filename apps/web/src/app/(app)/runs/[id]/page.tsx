@@ -1,3 +1,4 @@
+import { isActive } from "@clauderon/core";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Avatar } from "../../../../components/brand";
@@ -6,6 +7,7 @@ import { Icon } from "../../../../components/icons";
 import { StatePill } from "../../../../components/state-pill";
 import { viewRun } from "../../../../server/runs";
 import { deps, gatewayUrl, requireMember } from "../../../../server/runtime";
+import { CancelRun } from "./cancel-run";
 import { RunLive } from "./run-live";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +23,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const podLabel = run.podName ?? `${podOwner}'s Pod`;
   const failedAt = run.timeline.find((n) => n.state === "failed");
   const runningAt = run.timeline.find((n) => n.state === "running");
+  const active = isActive(r.state);
 
   return (
     <>
@@ -56,6 +59,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               </span>
             </div>
           </div>
+          {active && <CancelRun runId={r.id} running={r.state === "running"} />}
         </div>
       </div>
 
@@ -65,7 +69,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
             <p>
               <b>Failed{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
             </p>
-            <p className="small">The Run stays Active and keeps its worktree, but frees its Slot. Retry and Cancel arrive in M3.</p>
+            <p className="small">The Run stays Active and keeps its worktree, but frees its Slot. Cancel it to end it for good; Retry arrives in M3.</p>
           </div>
         </div>
       )}
@@ -82,6 +86,15 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
       {r.state === "running" && !r.branch && (
         <div className="banner info" role="status">
           <div className="grow small">Checking the Pod&apos;s logins and preparing the worktree…</div>
+        </div>
+      )}
+      {r.state === "cancelled" && (
+        <div className="banner" role="status">
+          <div className="grow">
+            <p>
+              <b>Cancelled</b>
+            </p>
+          </div>
         </div>
       )}
       {r.state === "succeeded" && (

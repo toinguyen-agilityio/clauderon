@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ticketStatus } from "@clauderon/core";
-import { attemptsOfRun, getRun, listTicketsWithRuns, logChunksOf, schema, sql, type Db } from "@clauderon/db";
+import { attemptsOfRun, cancelRun, getRun, listTicketsWithRuns, logChunksOf, schema, sql, type Db } from "@clauderon/db";
 import type { FakeHostAgent } from "@clauderon/testing";
 import {
   createTestDatabase,
@@ -213,6 +213,59 @@ describe("Run engine", () => {
     agent.send("pod.status", { podId: pod.id, status: "running", containerId: "c1", imageDigest: "sha256:1" });
     await flush();
     expect((await getRun(db, runId))!.state).toBe("succeeded");
+  });
+});
+
+describe("Cancel (RUN-8, spec M3 §5)", () => {
+  it("T3-8: cancelling a running Run ends it at once, sends node.kill and frees the Slot; a late result is ignored", async () => {
+    const { member, pod, tickets, gateway, agent, clock, flush } = await setup(1, 2);
+    succeedEverything(agent);
+    const held: { attemptId: string }[] = [];
+    agent.respond("node.run", (run) => held.push(run));
+    const start = await startSampleBatch(db, member, pod.id, tickets.map((t) => t.id), clock.now());
+    if (!start.ok) throw new Error("start failed");
+    await gateway.engine.schedule(pod.id);
+    await flush();
+    const [first, second] = start.runIds as [string, string];
+    expect((await getRun(db, second))!.state).toBe("queued");
+
+    const cancelled = await cancelRun(db, first, member.email, clock.now());
+    if (!cancelled.ok) throw new Error("cancel failed");
+    expect(cancelled.cancelledAttemptIds).toEqual([held[0]!.attemptId]);
+    expect((await getRun(db, first))!.state).toBe("cancelled");
+
+    await gateway.pods.command({ type: "run.cancel", podId: pod.id, runId: first, attemptIds: cancelled.cancelledAttemptIds });
+    await flush();
+    expect(agent.of("node.kill")).toEqual([{ attemptId: held[0]!.attemptId }]);
+    expect((await getRun(db, second))!.state).toBe("running");
+
+    // The killed Node reports back late: nothing moves.
+    agent.send("node.result", { attemptId: held[0]!.attemptId, exitCode: 143, error: "Command exited 143" });
+    await flush();
+    expect(await getRun(db, first)).toMatchObject({ state: "cancelled", failureReason: null });
+    expect((await attemptsOfRun(db, first)).at(-1)).toMatchObject({ state: "cancelled" });
+    const [audit] = await db.select().from(schema.auditEntry).where(sql`action = 'run.cancel'`);
+    expect(audit).toMatchObject({ actorEmail: member.email, subjectId: first, detail: { from: "running" } });
+  });
+
+  it("T3-8: queued and failed Runs end cancelled; an ended Run cannot be cancelled", async () => {
+    const { member, pod, tickets, agent, clock, flush } = await setup(1, 2);
+    succeedEverything(agent);
+    agent.respond("node.run", (run, a) => a.send("node.result", { attemptId: run.attemptId, exitCode: 1, error: "Command exited 1" }));
+    await db.update(schema.pod).set({ status: "stopped" });
+    const start = await startSampleBatch(db, member, pod.id, tickets.map((t) => t.id), clock.now());
+    if (!start.ok) throw new Error("start failed");
+    const [queued, failing] = start.runIds as [string, string];
+
+    expect(await cancelRun(db, queued, member.email, clock.now())).toMatchObject({ ok: true, from: "queued", cancelledAttemptIds: [] });
+    agent.send("pod.status", { podId: pod.id, status: "running", containerId: "c1", imageDigest: "sha256:1" });
+    await flush();
+    expect((await getRun(db, failing))!.state).toBe("failed");
+
+    expect(await cancelRun(db, failing, member.email, clock.now())).toMatchObject({ ok: true, from: "failed" });
+    expect((await getRun(db, failing))!.state).toBe("cancelled");
+    expect(await cancelRun(db, failing, member.email, clock.now())).toEqual({ ok: false, reason: "ended" });
+    expect(await cancelRun(db, "00000000-0000-0000-0000-000000000000", member.email, clock.now())).toEqual({ ok: false, reason: "not-found" });
   });
 });
 

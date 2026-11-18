@@ -97,6 +97,17 @@ export class RunEngine {
     return (await runsOfPod(this.opts.db, podId, ["running"])).filter((r) => r.mode === "real" && r.branch === null);
   }
 
+  /**
+   * The web app cancelled a Run (RUN-8): it already ended the Run and its
+   * Attempts, so only kill what still executes, then free the Slot.
+   */
+  cancelled({ podId, runId, attemptIds }: { podId: string; runId: string; attemptIds: readonly string[] }): Promise<void> {
+    return this.serial(async () => {
+      for (const attemptId of attemptIds) this.opts.link.send("node.kill", { attemptId });
+      await this.ended(runId, podId);
+    });
+  }
+
   /** After a `pod.logins`: fail or prepare the Runs that waited for it. */
   loginsChecked(pod: Pod): Promise<void> {
     return this.serial(async () => {
