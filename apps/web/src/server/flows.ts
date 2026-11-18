@@ -1,4 +1,4 @@
-import { validateFlow, type LibraryNode } from "@clauderon/core";
+import { topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
 import {
   cloneFlow,
   deleteFlow,
@@ -17,12 +17,25 @@ import type { AppDeps, Viewer } from "./deps";
 // The Flows page (spec M2 §2, FLW-7 … FLW-9) as plain functions over the
 // database, so tests drive them directly and pages and actions stay thin.
 
+/** A Flow's placements in execution order; a Flow with a cycle falls back to canvas order (top to bottom, then left to right). */
+function executionOrder(graph: Flow) {
+  const canvas = [...graph.nodes].sort((a, b) => a.y - b.y || a.x - b.x);
+  try {
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    return topologicalOrder(graph).flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  } catch {
+    return canvas;
+  }
+}
+
 export type FlowView = {
   id: string;
   name: string;
   isSample: boolean;
   nodeCount: number;
   problems: number;
+  /** The Nodes of the Flow in the order a Run executes them (canvas order if the Flow has a cycle). */
+  nodes: { name: string; kind: NodeKind }[];
   updatedByEmail: string;
   updatedAt: Date;
   lock: FlowLock | null;
@@ -36,6 +49,7 @@ export async function viewFlows(deps: AppDeps) {
     rows.map((r) => r.id),
   );
   const flows: FlowView[] = [];
+  const libraryById = new Map(library.map((n) => [n.id, n]));
   for (const r of rows) {
     const graph = await loadFlow(deps.db, r.id);
     flows.push({
@@ -44,6 +58,10 @@ export async function viewFlows(deps: AppDeps) {
       isSample: r.isSample,
       nodeCount: r.nodeCount,
       problems: validateFlow(graph, library).length,
+      nodes: executionOrder(graph).flatMap((n) => {
+        const lib = libraryById.get(n.nodeId);
+        return lib ? [{ name: lib.name, kind: lib.kind }] : [];
+      }),
       updatedByEmail: r.updatedByEmail,
       updatedAt: r.updatedAt,
       lock: locks.get(r.id) ?? null,
