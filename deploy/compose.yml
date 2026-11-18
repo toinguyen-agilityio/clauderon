@@ -1,0 +1,76 @@
+# The self-hosted Clauderon stack on the Pod Host (ADR 0005).
+# Run from the repo root:
+#   docker compose -f deploy/compose.yml --env-file deploy/.env.production up -d --build
+# Web and Gateway listen on localhost only; Tailscale Serve publishes them
+# to the tailnet with HTTPS (see deploy/README.md). Postgres is never published.
+name: clauderon
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://clauderon:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/clauderon
+  SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+  OPERATOR_EMAILS: ${OPERATOR_EMAILS:?set OPERATOR_EMAILS}
+  GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+  POD_IMAGE: ${POD_IMAGE:?set POD_IMAGE}
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clauderon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: clauderon
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clauderon -d clauderon"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Deploy order (spec M4 §5.1): migrations first, then the Gateway, then the web app.
+  migrate:
+    build: { context: .., dockerfile: deploy/Dockerfile, target: gateway }
+    image: clauderon-gateway
+    command: ["pnpm", "db:migrate"]
+    environment:
+      DATABASE_URL: postgres://clauderon:${POSTGRES_PASSWORD}@postgres:5432/clauderon
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  gateway:
+    image: clauderon-gateway
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      HOST_AGENT_SECRET: ${HOST_AGENT_SECRET:?set HOST_AGENT_SECRET}
+      GATEWAY_PORT: "4000"
+    ports:
+      - "127.0.0.1:${GATEWAY_HOST_PORT:-4000}:4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build: { context: .., dockerfile: deploy/Dockerfile, target: web }
+    image: clauderon-web
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?set GOOGLE_CLIENT_SECRET}
+      AUTH_URL: ${PUBLIC_URL:?set PUBLIC_URL}
+      # The browser's WebSocket origin of the Gateway, through Tailscale Serve.
+      GATEWAY_URL: ${PUBLIC_GATEWAY_URL:?set PUBLIC_GATEWAY_URL}
+      POD_LIMIT_CEILING: ${POD_LIMIT_CEILING:-slots=2,cpus=2,memoryMb=2048}
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
+    depends_on:
+      gateway: { condition: service_healthy }
+
+volumes:
+  pgdata:

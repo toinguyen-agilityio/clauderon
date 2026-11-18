@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import {
   retryLogLines,
   snapshotFlow,
@@ -398,6 +398,12 @@ export async function setAttemptUsage(db: Db, attemptId: string, usage: { inputT
 
 export async function appendLogChunk(db: Db, chunk: { attemptId: string; seq: number; stream: LogStream; text: string; at: Date }): Promise<void> {
   await db.insert(logChunk).values(chunk);
+}
+
+/** Deletes Log chunks written before `cutoff` (NFR-5); returns how many went. */
+export async function deleteLogChunksBefore(db: Db, cutoff: Date): Promise<number> {
+  const deleted = await db.delete(logChunk).where(lt(logChunk.at, cutoff)).returning({ id: logChunk.id });
+  return deleted.length;
 }
 
 export async function logChunksOf(db: Db, attemptId: string, afterSeq = -1) {

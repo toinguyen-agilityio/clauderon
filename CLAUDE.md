@@ -28,10 +28,10 @@ pnpm --filter @clauderon/db generate                        # new migration afte
 
 ## Architecture
 
-Three deployables and four internal packages, all TypeScript ESM. Packages export source (`./src/index.ts`), with no build step.
+Three deployables and four internal packages, all TypeScript ESM. Packages export source (`./src/index.ts`), with no build step. Web, Gateway and Postgres are self-hosted on the Pod Host as one Docker Compose stack behind Tailscale (ADR 0005, `deploy/README.md`); the Host Agent runs there as a service.
 
-- `apps/web`: Next.js (Vercel) UI and ordinary API, Auth.js with Google sign-in. Everything needing a long-lived connection is delegated to the Gateway.
-- `apps/gateway`: always-on Node service (Railway/Fly). Holds the Host Agent WebSocket and the browser terminals, watches the heartbeat and runs the **Run engine** (`run-engine.ts`), which executes a Flow's Nodes one at a time. Web and Gateway share one Postgres and talk through `GATEWAY_INTERNAL_URL` plus DB command rows (`packages/db/src/gateway-commands.ts`).
+- `apps/web`: Next.js UI and ordinary API, Auth.js with Google sign-in. Everything needing a long-lived connection is delegated to the Gateway.
+- `apps/gateway`: always-on Node service. Holds the Host Agent WebSocket and the browser terminals, watches the heartbeat and runs the **Run engine** (`run-engine.ts`), which executes a Flow's Nodes one at a time. Web and Gateway share one Postgres and talk through DB command rows (`packages/db/src/gateway-commands.ts`).
 - `apps/host-agent`: runs on the single Pod Host, connects **out** to the Gateway (no inbound ports) and drives Docker via dockerode: create/start/stop/recreate Pods, exec Nodes, stream logs. Runs `claude -p` inside the Pod.
 - `packages/protocol`: zod schemas for the Gateway ⇄ Host Agent and Gateway ⇄ browser messages. This is the contract between the deploy targets, so change it carefully.
 - `packages/core`: pure domain logic with no I/O (Flow typing and validation, Run state, Ticket Status, runner/simulation for Dry-run, limits, secret `mask`).
@@ -43,7 +43,7 @@ Rules that shape the code (details in the ADRs):
 - Everything that writes to GitHub happens inside the Starter's Pod under their own `gh` login; the app holds only a read-only token (ADR 0001).
 - Each Run executes on its Starter's Pod, under that Member's own Claude Code login. Never read, store or forward Claude/OAuth tokens; the Host Agent only checks login status (`apps/host-agent/src/pods.ts`).
 - No secrets in the database; configuration comes from the environment (NFR-1). Mask known token patterns before any log line is stored or streamed.
-- Web and Gateway are deployed separately, so protocol and schema changes must stay compatible with both.
+- Web and Gateway restart separately, so protocol and schema changes must stay compatible with both.
 
 ## Next.js
 

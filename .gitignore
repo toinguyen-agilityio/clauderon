@@ -10,3 +10,5 @@ coverage/
 .DS_Store
 next-env.d.ts
 .dev/
+!.env.*.example
+deploy/backups/
