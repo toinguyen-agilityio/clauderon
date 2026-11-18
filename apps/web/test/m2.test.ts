@@ -61,6 +61,8 @@ describe("Flows page (spec M2 §2)", () => {
     expect(flows).toEqual([]);
     expect(samples.map((f) => [f.name, f.isSample, f.problems, f.nodeCount, f.lock])).toEqual([[expect.any(String), true, 0, expect.any(Number), null], [expect.any(String), true, 0, expect.any(Number), null]]);
     expect(samples.every((f) => f.nodeCount > 0)).toBe(true);
+    // each Flow lists its Nodes for the row preview, the entry Ticket first
+    expect(samples.every((f) => f.nodes.length === f.nodeCount && f.nodes[0]?.kind === "ticket")).toBe(true);
   });
 
   it("T2-7: clone copies the placements and edges into an editable Flow named '<name> (copy)'; samples cannot be deleted", async () => {

@@ -566,3 +566,34 @@ details[open] > summary.small { margin-bottom: 12px; }
   .nf-delete { margin-left: 0; }
   .nf-dl-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Flows list: one card per Flow, with its Nodes in order */
+.flow-list { display: flex; flex-direction: column; gap: 28px; }
+.flow-section { display: flex; flex-direction: column; gap: 10px; }
+.flow-section-h { display: flex; align-items: center; gap: 10px; margin: 0 0 2px; padding: 0 2px 10px; border-bottom: 1px solid var(--line-strong); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg2); }
+.flow-section-note { flex: 1; min-width: 0; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--fg3); font-size: 12.5px; }
+.flow-section-h .n { font-variant-numeric: tabular-nums; color: var(--fg3); }
+.flow-pin { width: 14px; height: 14px; flex: none; color: var(--accent-text); }
+.flow-none { padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--r); text-align: center; }
+.flow-card { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 14px 18px; }
+.flow-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1 1 420px; }
+.flow-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.flow-name { color: var(--fg); font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+.flow-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.flow-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex: none; }
+.flow-pipe { display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: center; list-style: none; margin: 0; padding: 0; }
+.flow-pipe li { display: inline-flex; align-items: center; gap: 4px; }
+.flow-arrow { color: var(--fg3); }
+.flow-node { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--sunk); font-size: 12px; white-space: nowrap; }
+.flow-node::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--fg3); }
+.flow-node.k-agent::before { background: var(--accent-text); }
+.flow-node.k-command::before { background: var(--run); }
+.flow-node.k-approve::before { background: var(--wait); }
+.flow-node.k-grill::before { background: var(--intr); }
+.flow-node.k-ticket::before { background: var(--mute); }
+.flow-node.more { color: var(--fg3); }
+.flow-node.more::before { display: none; }
+
+@media (max-width: 860px) {
+  .flow-actions { align-items: flex-start; }
+}
