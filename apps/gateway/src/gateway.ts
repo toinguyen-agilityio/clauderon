@@ -4,6 +4,7 @@ import { BrowserHub } from "./browser-hub";
 import { HostLink } from "./host-link";
 import { HostWatch } from "./host-watch";
 import { LiveHub } from "./live-hub";
+import { LogRetention } from "./log-retention";
 import { PodService } from "./pods";
 import { RunEngine } from "./run-engine";
 import { TerminalHub } from "./terminals";
@@ -45,6 +46,7 @@ export function createGateway(opts: GatewayOptions) {
   const watch = new HostWatch({ link, engine, clock, timeoutMs: opts.heartbeatTimeoutMs });
   const pods = new PodService({ db, link, engine, log });
   const terminals = new TerminalHub({ db, hub, link, clock });
+  const retention = new LogRetention({ db, clock, log });
 
   link.on("pod.status", (p) => pods.status(p));
   link.on("pod.logins", (p) => pods.logins(p));
@@ -57,7 +59,7 @@ export function createGateway(opts: GatewayOptions) {
   link.on("terminal.closed", (p) => terminals.closed(p));
   link.onHeartbeat((p) => pods.heartbeat(p));
 
-  return { link, hub, live, engine, pods, terminals, watch };
+  return { link, hub, live, engine, pods, terminals, watch, retention };
 }
 
 export type Gateway = ReturnType<typeof createGateway>;
