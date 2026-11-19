@@ -93,7 +93,7 @@ describe("Pairing (ADR 0006)", () => {
   it("pairing a second computer replaces the token and resets the link but keeps the Machine and its Slots", async () => {
     const first = await approvePairing(db, ann, (await started("old")).code, now);
     if (!first.ok) throw new Error("not paired");
-    await db.update(schema.machine).set({ slots: 4, connected: true, lastSentId: 7, lastReceivedId: 3, claudeLoggedIn: true, ghLoggedIn: true });
+    await db.update(schema.machine).set({ slots: 4, connected: true, lastSentId: 7, lastReceivedId: 3, claudeLoggedIn: true, ghLoggedIn: true, claudeAccount: "ann@example.com", claudePlan: "pro" });
 
     const second = await approvePairing(db, ann, (await started("new", "ann-desktop")).code, later(1000));
     expect(second).toMatchObject({ ok: true, replaced: true });
@@ -106,6 +106,9 @@ describe("Pairing (ADR 0006)", () => {
       lastReceivedId: 0,
       claudeLoggedIn: false,
       ghLoggedIn: false,
+      // The new computer may use another Claude account: unknown until checked.
+      claudeAccount: null,
+      claudePlan: null,
     });
     expect(await machineOfTokenHash(db, hashToken("old"))).toBeNull();
     expect((await machineOfTokenHash(db, hashToken("new")))?.id).toBe(first.machine.id);

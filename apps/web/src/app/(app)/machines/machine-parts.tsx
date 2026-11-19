@@ -18,6 +18,14 @@ export const machineName = (machine: { name: string | null; owner: { name: strin
 /** Pairing from a checkout of this repository, for those who run the Agent by hand (ADR 0006). */
 export const pairCommand = (webUrl: string) => `pnpm --filter @clauderon/host-agent pair ${webUrl}`;
 
+/** The Claude account Runs use, as one short label: "ann · Pro" (the full email goes in a tooltip). */
+export function claudeAccountLabel(machine: { claudeLoggedIn: boolean; claudeAccount: string | null; claudePlan: string | null }): string | null {
+  if (!machine.claudeLoggedIn || !machine.claudeAccount) return null;
+  const name = machine.claudeAccount.split("@")[0] || machine.claudeAccount;
+  const plan = machine.claudePlan ? machine.claudePlan.charAt(0).toUpperCase() + machine.claudePlan.slice(1) : null;
+  return plan ? `${name} · ${plan}` : name;
+}
+
 const OS_LABEL: Record<string, string> = { darwin: "macOS", linux: "Linux", win32: "Windows" };
 
 /** `darwin` → macOS, with the architecture: "macOS arm64". */

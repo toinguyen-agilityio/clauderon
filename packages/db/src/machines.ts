@@ -54,7 +54,16 @@ export async function listMachines(db: Db): Promise<MachineRow[]> {
   return rows.map((r) => ({ ...r.machine, owner: r.owner, ...counts.get(r.machine.id)! }));
 }
 
-export type MachineLogins = { machineId: string; claude: boolean; gh: boolean; ghAccount: string | null; tokenRepos: string[]; checkedAt: Date };
+export type MachineLogins = {
+  machineId: string;
+  claude: boolean;
+  gh: boolean;
+  ghAccount: string | null;
+  claudeAccount?: string | null;
+  claudePlan?: string | null;
+  tokenRepos: string[];
+  checkedAt: Date;
+};
 
 /** Applies a `machine.logins` from the Agent (POD-5). */
 export async function applyMachineLogins(db: Db, logins: MachineLogins): Promise<Machine | null> {
@@ -64,6 +73,8 @@ export async function applyMachineLogins(db: Db, logins: MachineLogins): Promise
       claudeLoggedIn: logins.claude,
       ghLoggedIn: logins.gh,
       ghAccount: logins.ghAccount,
+      claudeAccount: logins.claude ? (logins.claudeAccount ?? null) : null,
+      claudePlan: logins.claude ? (logins.claudePlan ?? null) : null,
       ghTokenScope: { tokenRepos: logins.tokenRepos },
       loginsCheckedAt: logins.checkedAt,
     })

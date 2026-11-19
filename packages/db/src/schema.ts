@@ -131,6 +131,9 @@ export const machine = pgTable("machine", {
   claudeLoggedIn: boolean("claude_logged_in").notNull().default(false),
   ghLoggedIn: boolean("gh_logged_in").notNull().default(false),
   ghAccount: text("gh_account"),
+  /** The Claude account's email and plan (e.g. `pro`) as Claude Code reports them; never a token. */
+  claudeAccount: text("claude_account"),
+  claudePlan: text("claude_plan"),
   /** `{ tokenRepos }`: the Projects' repositories the gh login reaches (POD-4). */
   ghTokenScope: jsonb("gh_token_scope").$type<{ tokenRepos: string[] }>(),
   loginsCheckedAt: ts("logins_checked_at"),

@@ -99,7 +99,7 @@ describe("Machines (ADR 0006)", () => {
 
   it("the Machines page shows owner, Machine Ready, Slots in use and queue", async () => {
     const ann = await memberRow(db, "ann@example.com", "Ann");
-    const machine = await machineRow(db, ann.id, { ghTokenScope: { tokenRepos: ["acme/web"] }, ghAccount: "ann-gh" });
+    const machine = await machineRow(db, ann.id, { ghTokenScope: { tokenRepos: ["acme/web"] }, ghAccount: "ann-gh", claudeAccount: "ann@example.com", claudePlan: "pro" });
     const project = await projectRow(db);
     const t1 = await ticketRow(db, project.id, 1);
     const t2 = await ticketRow(db, project.id, 2);
@@ -107,7 +107,7 @@ describe("Machines (ADR 0006)", () => {
     await db.update(schema.run).set({ state: "running" }).where(sql`ticket_id = ${t1.id}`);
 
     const view = await viewMachines(deps, ann);
-    expect(view.mine).toMatchObject({ id: machine.id, paired: true, ready: true, inUse: 1, queued: 1, ghAccount: "ann-gh", tokenRepos: ["acme/web"], owner: { name: "Ann" } });
+    expect(view.mine).toMatchObject({ id: machine.id, paired: true, ready: true, inUse: 1, queued: 1, ghAccount: "ann-gh", claudeAccount: "ann@example.com", claudePlan: "pro", tokenRepos: ["acme/web"], owner: { name: "Ann" } });
 
     await db.update(schema.machine).set({ connected: false });
     expect((await viewMachines(deps, ann)).mine).toMatchObject({ ready: false });

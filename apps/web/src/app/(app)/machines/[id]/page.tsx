@@ -8,7 +8,7 @@ import { viewMachine } from "../../../../server/machines";
 import { deps, requireMember } from "../../../../server/runtime";
 import { AutoRefresh } from "../auto-refresh";
 import { CheckLogins, RemoveMachine, UnpairMachine } from "../machine-actions";
-import { defaultMachineName, formatGb, machineName, MachineStatusChip, osLabel, ReadyChip, SlotBar, SlotChips } from "../machine-parts";
+import { claudeAccountLabel, defaultMachineName, formatGb, machineName, MachineStatusChip, osLabel, ReadyChip, SlotBar, SlotChips } from "../machine-parts";
 import { MachineSettings } from "../machine-settings";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const checks: [ok: boolean, label: string, chip: ReactNode][] = [
     [machine.paired, "Paired", machine.paired ? <span className="pill ok">Paired</span> : <span className="pill fail">Not paired</span>],
     [machine.connected, "Agent", machine.connected ? <span className="pill ok">Connected</span> : <span className="pill fail">Offline</span>],
-    [machine.claudeLoggedIn, "Claude Code", loginChip(machine.claudeLoggedIn, "Logged in")],
+    [machine.claudeLoggedIn, "Claude Code", loginChip(machine.claudeLoggedIn, claudeAccountLabel(machine) ?? "Logged in")],
     [machine.ghLoggedIn, "gh", loginChip(machine.ghLoggedIn, machine.ghAccount ?? "Logged in")],
   ];
   const facts: [label: string, value: ReactNode][] = [

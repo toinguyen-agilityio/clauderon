@@ -21,22 +21,43 @@ beforeEach(() => {
 });
 
 describe("Logins (POD-5)", () => {
-  it("machine.checkLogins reports both logins, the gh account and the repositories it reaches", async () => {
+  const claudeStatus = (status: object) => ({ stdout: `${JSON.stringify(status, null, 2)}\n` });
+
+  it("machine.checkLogins reports both logins, the Claude account and plan, the gh account and the repositories it reaches", async () => {
     system.script(({ argv }) => {
+      if (argv.join(" ") === "claude auth status") return claudeStatus({ loggedIn: true, authMethod: "claude.ai", email: "ann@example.com", subscriptionType: "max" });
       if (argv.includes(".login")) return { stdout: "octocat\n" };
       if (argv.includes(".[].full_name")) return { stdout: "acme/web\nacme/api\n" };
       return undefined;
     });
     await link.deliver("machine.checkLogins", {});
     expect(link.of("machine.logins")).toEqual([
-      { claude: true, gh: true, ghAccount: "octocat", tokenRepos: ["acme/web", "acme/api"], checkedAt: expect.any(String) },
+      {
+        claude: true,
+        claudeAccount: "ann@example.com",
+        claudePlan: "max",
+        gh: true,
+        ghAccount: "octocat",
+        tokenRepos: ["acme/web", "acme/api"],
+        checkedAt: expect.any(String),
+      },
     ]);
   });
 
   it("a logged-out gh or Claude Code reads as false, with no account", async () => {
-    system.script(({ argv, script }) => (argv.join(" ") === "gh auth status" || script.includes("claude auth status") ? { exitCode: 1 } : undefined));
+    system.script(({ argv }) => {
+      if (argv.join(" ") === "claude auth status") return { exitCode: 1, ...claudeStatus({ loggedIn: false }) };
+      return argv.join(" ") === "gh auth status" ? { exitCode: 1 } : undefined;
+    });
     await link.deliver("machine.checkLogins", {});
-    expect(link.of("machine.logins")[0]).toMatchObject({ claude: false, gh: false, ghAccount: null, tokenRepos: [] });
+    expect(link.of("machine.logins")[0]).toMatchObject({ claude: false, claudeAccount: null, gh: false, ghAccount: null, tokenRepos: [] });
+  });
+
+  it("an older Claude Code without a JSON status falls back to the exit code, with no account", async () => {
+    system.script(({ argv }) => (argv.join(" ") === "claude auth status" ? { stdout: "Logged in\n" } : undefined));
+    await link.deliver("machine.checkLogins", {});
+    expect(link.of("machine.logins")[0]).toMatchObject({ claude: true, claudeAccount: null, claudePlan: null });
+    expect(system.execs.some((e) => e.script.includes(".credentials.json"))).toBe(true);
   });
 });
 

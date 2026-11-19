@@ -28,6 +28,9 @@ export const messageSchemas = {
     claude: z.boolean(),
     gh: z.boolean(),
     ghAccount: z.string().nullable(),
+    /** The Claude account's email and plan, when Claude Code says (optional: older Agents do not send them). */
+    claudeAccount: z.string().nullable().optional(),
+    claudePlan: z.string().nullable().optional(),
     tokenRepos: z.array(z.string()),
     checkedAt: z.string(),
   }),

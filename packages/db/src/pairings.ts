@@ -90,7 +90,7 @@ export async function approvePairing(db: Db, approver: { id: string; email: stri
       // A new computer has not checked its logins yet.
       const [updated] = await tx
         .update(machine)
-        .set({ ...paired, connected: false, lastReceivedId: 0, lastSentId: 0, claudeLoggedIn: false, ghLoggedIn: false, loginsCheckedAt: null })
+        .set({ ...paired, connected: false, lastReceivedId: 0, lastSentId: 0, claudeLoggedIn: false, ghLoggedIn: false, claudeAccount: null, claudePlan: null, loginsCheckedAt: null })
         .where(eq(machine.id, existing.id))
         .returning();
       saved = updated!;

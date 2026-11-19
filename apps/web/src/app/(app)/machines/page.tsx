@@ -5,7 +5,7 @@ import { installCommandPs1, installCommandSh } from "../../../server/agent-insta
 import { lookUpPairing, viewMachines, type MachineView } from "../../../server/machines";
 import { deps, pageWebUrl, requireMember } from "../../../server/runtime";
 import { CmdBox } from "./cmd-box";
-import { LoginChip, MachineStatusChip, ReadyChip, SlotBar, SlotChips, machineName, osLabel, pairCommand } from "./machine-parts";
+import { claudeAccountLabel, LoginChip, MachineStatusChip, ReadyChip, SlotBar, SlotChips, machineName, osLabel, pairCommand } from "./machine-parts";
 import { PairMachine } from "./pair-machine";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +125,11 @@ function MachineTile({ machine, now }: { machine: MachineView; now: Date }) {
           <LoginChip ok={machine.claudeLoggedIn} label="Claude Code" />
           <LoginChip ok={machine.ghLoggedIn} label="gh" account={machine.ghAccount} />
         </div>
+        {claudeAccountLabel(machine) && (
+          <div className="small clip" title={`Runs use this Claude account: ${machine.claudeAccount}`} data-testid="claude-account">
+            Claude <span className="mono">{claudeAccountLabel(machine)}</span>
+          </div>
+        )}
         <div className="small faint">
           <span className="mono">{machine.hostname ?? "—"}</span> · {osLabel(machine.os, machine.arch) || "unknown"} · checked{" "}
           {ago(machine.loginsCheckedAt, now)}
