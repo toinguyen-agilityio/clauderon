@@ -18,7 +18,8 @@ export type PairOptions = {
   openUrl?: (url: string) => void;
 };
 
-export type Paired = { gatewayUrl: string; token: string };
+/** `webUrl` is known when pairing started from the web app's address; the Agent updates itself from it. */
+export type Paired = { gatewayUrl: string; token: string; webUrl?: string };
 
 /** The Gateway's HTTP base for a `ws://` or `wss://` link URL. */
 export function httpBase(url: string): string {
@@ -80,7 +81,7 @@ export async function pair(opts: PairOptions): Promise<Paired> {
     } catch {
       continue; // the Gateway is briefly unreachable: keep waiting
     }
-    if (status === "approved") return { gatewayUrl, token };
+    if (status === "approved") return webUrl ? { gatewayUrl, token, webUrl } : { gatewayUrl, token };
     if (status === "expired") throw new Error("the pairing code expired; run pair again");
   }
 }

@@ -66,7 +66,8 @@ describe("pair (ADR 0006)", () => {
     const gateway = fakeGateway(["approved"]);
     const opened: string[] = [];
     const result = pair({ url: "https://app.test/", machine, clock, print: () => {}, fetch: gateway.fetch, newToken: () => "tok", openUrl: (u) => void opened.push(u) });
-    expect(await waitFor(clock, result, 2)).toEqual({ gatewayUrl: "wss://gw.app.test", token: "tok" });
+    // The web app's URL is kept: the Agent updates itself from it (ADR 0007).
+    expect(await waitFor(clock, result, 2)).toEqual({ gatewayUrl: "wss://gw.app.test", token: "tok", webUrl: "https://app.test" });
     expect(gateway.calls.map((c) => c.url)).toEqual(["https://app.test/api/agent-config", "https://gw.app.test/pair", "https://gw.app.test/pair/p-1"]);
     expect(opened).toEqual(["https://app.test/pair?code=ABCDEFGH"]);
   });

@@ -84,14 +84,16 @@ Serve only reaches devices in the tailnet; do not use `tailscale funnel`, which 
 
 ## 6. Members pair their Machines
 
-Nothing to install on the host. Each Member copies the one line the Machines page shows into a terminal on their own computer (it needs Node 22, git and gh; on Windows, Git for Windows):
+Nothing to install on the host. Each Member copies the one line the Machines page shows into a terminal on their own computer (it needs git and gh; on Windows, Git for Windows for Git Bash):
 
 ```sh
 curl -fsSL https://<host>.<tailnet>.ts.net/agent/install.sh | sh        # macOS, Linux
 irm https://<host>.<tailnet>.ts.net/agent/install.ps1 | iex             # Windows PowerShell
 ```
 
-It logs in to GitHub if needed, clones this repository with the Member's gh login into `~/.clauderon/app`, offers to log in to Claude Code, opens the browser on the Approve page, and installs a launchd agent, systemd user unit or logon Scheduled Task that runs the Agent whenever the Member is logged in (log: `~/.clauderon/agent.log`). The Agent keeps its token, clones and worktrees in `~/.clauderon`. Running it again updates the checkout; `uninstall-service` stops it. `AGENT_REPOSITORY` (web) names another repository, e.g. a fork, for the installer to clone.
+It installs into `~/.clauderon` only, with no sudo: the Agent's own Node 22 from nodejs.org and the Agent bundle the web app serves (`/agent/agent.mjs`, built into the web image), both checked against their SHA-256. When git or gh is missing it stops and prints the command that installs it on that OS. It logs in to GitHub if needed, offers to log in to Claude Code, opens the browser on the Approve page (or keeps a pairing that still works), installs a launchd agent, systemd user unit or logon Scheduled Task that runs the Agent whenever the Member is logged in (log: `~/.clauderon/agent.log`), and ends with the doctor, whose report also shows on the Machine page. Running it again repairs the install and replaces an old one (a `~/.clauderon/app` clone). Bundled Agents update themselves to the web app's bundle after each deploy. Why: [ADR 0007](../docs/adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md).
+
+On the computer: `~/.clauderon/node/bin/node ~/.clauderon/agent/agent.mjs doctor` checks it again; `… uninstall-service` stops the Agent.
 
 By hand, from a clone: `pnpm --filter @clauderon/host-agent pair https://<host>.<tailnet>.ts.net`, which pairs and then runs the Agent in that terminal.
 

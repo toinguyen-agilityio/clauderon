@@ -55,12 +55,23 @@ export async function checkLogins(system: System) {
   return { ...claude, gh, ghAccount, tokenRepos };
 }
 
-export function registerLoginHandlers(link: AgentLink, system: System): void {
+export type Logins = Awaited<ReturnType<typeof checkLogins>>;
+
+/** Runs before each check (e.g. asks the login shell for PATH again) and after it (e.g. the doctor). */
+export type LoginHooks = { before?: () => Promise<unknown>; after?: (logins: Logins) => Promise<void> };
+
+/** Checks the logins and reports them; also what the Agent does on its own at start. */
+export async function reportLogins(link: AgentLink, system: System, hooks: LoginHooks = {}): Promise<void> {
+  await hooks.before?.().catch(() => {});
+  // checkLogins never throws: each failed check reads as logged out.
+  const logins = await checkLogins(system);
+  link.send("machine.logins", { ...logins, checkedAt: new Date().toISOString() });
+  await hooks.after?.(logins).catch(() => {});
+}
+
+export function registerLoginHandlers(link: AgentLink, system: System, hooks: LoginHooks = {}): void {
   link.on(
     "machine.checkLogins",
-    detached(async () => {
-      // checkLogins never throws: each failed check reads as logged out.
-      link.send("machine.logins", { ...(await checkLogins(system)), checkedAt: new Date().toISOString() });
-    }),
+    detached(() => reportLogins(link, system, hooks)),
   );
 }

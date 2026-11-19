@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,17 +14,25 @@ export const SERVICE_LABEL = "com.clauderon.agent";
 const SYSTEMD_UNIT = "clauderon-agent.service";
 const WINDOWS_TASK = "Clauderon Agent";
 
-/** How the service starts the Agent: this Node, from this checkout, with this home. */
+/** How the service starts the Agent: this Node with these arguments, from this directory, with this home. */
 export type ServiceSpec = {
-  /** Absolute path of the Node binary. */
+  /** Absolute path of the Node binary: the Agent's own, under `<home>/node` (ADR 0007). */
   node: string;
-  /** The repository checkout the Agent runs from (its root). */
-  repo: string;
+  /** Node's arguments: `<home>/agent/agent.mjs run` for the bundle, `--import tsx …/main.ts run` from a checkout. */
+  args: string[];
+  /** The working directory. */
+  cwd: string;
   home: string;
+  /**
+   * The PATH of the shell that installs the service. A service starts with a
+   * bare system PATH; the Agent also asks the login shell (tool-path.ts), and
+   * this is the fallback when that fails.
+   */
+  path?: string;
 };
 
-/** The command line, run from the repository root: `node --import tsx apps/host-agent/src/main.ts run`. */
-export const serviceArgs = (spec: ServiceSpec) => [spec.node, "--import", "tsx", join(spec.repo, "apps", "host-agent", "src", "main.ts"), "run"];
+/** The service's command line. */
+export const serviceArgs = (spec: ServiceSpec) => [spec.node, ...spec.args];
 
 export const logFile = (spec: Pick<ServiceSpec, "home">) => join(spec.home, "agent.log");
 
@@ -48,11 +57,13 @@ export function launchdPlist(spec: ServiceSpec): string {
 ${args}
   </array>
   <key>WorkingDirectory</key>
-  <string>${xml(spec.repo)}</string>
+  <string>${xml(spec.cwd)}</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>CLAUDERON_HOME</key>
     <string>${xml(spec.home)}</string>
+    <key>CLAUDERON_SERVICE</key>
+    <string>1</string>${spec.path ? `\n    <key>PATH</key>\n    <string>${xml(spec.path)}</string>` : ""}
   </dict>
   <key>RunAtLoad</key>
   <true/>
@@ -81,9 +92,10 @@ Description=Clauderon Agent
 After=network-online.target
 
 [Service]
-WorkingDirectory=${spec.repo}
+WorkingDirectory=${systemdQuote(spec.cwd)}
 Environment=CLAUDERON_HOME=${systemdQuote(spec.home)}
-ExecStart=${serviceArgs(spec).map(systemdQuote).join(" ")}
+Environment=CLAUDERON_SERVICE=1
+${spec.path ? `Environment=PATH=${systemdQuote(spec.path)}\n` : ""}ExecStart=${serviceArgs(spec).map(systemdQuote).join(" ")}
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:${logFile(spec)}
@@ -94,11 +106,15 @@ WantedBy=default.target
 `;
 }
 
-/** A `cmd` line for the Scheduled Task: sets the home, then runs the Agent from the checkout, logging to a file. */
+/**
+ * A `cmd` line for the Scheduled Task: sets the home, then runs the Agent,
+ * logging to a file. A Scheduled Task does not restart a stopped program, so
+ * an updated Agent starts its successor itself (main.ts).
+ */
 export function windowsTaskCommand(spec: ServiceSpec): string {
   const quote = (a: string) => `"${a}"`;
   const run = serviceArgs(spec).map(quote).join(" ");
-  return `cmd /c "set CLAUDERON_HOME=${spec.home}&& cd /d ${quote(spec.repo)} && ${run} >> ${quote(logFile(spec))} 2>&1"`;
+  return `cmd /c "set CLAUDERON_HOME=${spec.home}&& set CLAUDERON_SERVICE=1&& cd /d ${quote(spec.cwd)} && ${run} >> ${quote(logFile(spec))} 2>&1"`;
 }
 
 export const launchdPath = () => join(homedir(), "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
@@ -135,6 +151,17 @@ export async function installService(spec: ServiceSpec, platform: NodeJS.Platfor
     throw new Error(`no service support for ${platform}: run the Agent with start instead`);
   }
   return logFile(spec);
+}
+
+/** Whether the service is installed; null on a platform without one. */
+export async function serviceInstalled(platform: NodeJS.Platform = process.platform, run: Exec = exec): Promise<boolean | null> {
+  if (platform === "darwin") return existsSync(launchdPath());
+  if (platform === "linux") return existsSync(systemdPath());
+  if (platform === "win32") return run("schtasks", ["/Query", "/TN", WINDOWS_TASK]).then(
+    () => true,
+    () => false,
+  );
+  return null;
 }
 
 /** Stops and removes the service; a missing one is fine. */

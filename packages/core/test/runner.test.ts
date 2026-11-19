@@ -47,6 +47,15 @@ describe("isMachineReady (POD-5)", () => {
     expect(isMachineReady({ connected: false, claudeLoggedIn: true, ghLoggedIn: true })).toBe(false);
     expect(isMachineReady({ connected: true, claudeLoggedIn: true, ghLoggedIn: false })).toBe(false);
   });
+
+  it("ADR 0007: a failed doctor check blocks it, a warning or a Gateway check does not", () => {
+    const ready = { connected: true, claudeLoggedIn: true, ghLoggedIn: true };
+    expect(isMachineReady({ ...ready, doctor: { checks: [{ id: "tool.git", status: "fail" }] } })).toBe(false);
+    expect(isMachineReady({ ...ready, doctor: { checks: [{ id: "disk", status: "warn" }] } })).toBe(true);
+    // The live connection says whether the Gateway is reachable, not an older report.
+    expect(isMachineReady({ ...ready, doctor: { checks: [{ id: "gateway.reachable", status: "fail" }] } })).toBe(true);
+    expect(isMachineReady({ ...ready, doctor: null })).toBe(true);
+  });
 });
 
 describe("buildAgentPrompt (RUN-10)", () => {

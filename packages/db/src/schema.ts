@@ -97,6 +97,12 @@ export const auditEntry = pgTable(
   (t) => [index("audit_entry_at_idx").on(t.at)],
 );
 
+/** What the Agent's doctor found (ADR 0007), as `machine.doctor` carries it. */
+export type MachineDoctor = {
+  checkedAt: string;
+  checks: { id: string; title: string; status: "ok" | "warn" | "fail"; detail?: string; fix?: string }[];
+};
+
 /**
  * One Member's Machine (ADR 0006): their own computer, paired with a token
  * whose SHA-256 hash is kept here. Pairing a new computer replaces the hash,
@@ -137,6 +143,8 @@ export const machine = pgTable("machine", {
   /** `{ tokenRepos }`: the Projects' repositories the gh login reaches (POD-4). */
   ghTokenScope: jsonb("gh_token_scope").$type<{ tokenRepos: string[] }>(),
   loginsCheckedAt: ts("logins_checked_at"),
+  /** The Agent's latest doctor report (ADR 0007); null from Agents that have none. */
+  doctor: jsonb("doctor").$type<MachineDoctor>(),
 });
 
 /** A pairing code an Agent is showing (ADR 0006); approving it pairs the approver's Machine. */

@@ -16,10 +16,11 @@ pnpm db:up                 # local Postgres 16 on port 54329 (docker compose)
 pnpm db:migrate            # apply Drizzle migrations; `pnpm db:seed` also seeds
 pnpm dev                   # web (Next.js) and gateway in watch mode
 pnpm --filter @clauderon/host-agent pair http://localhost:3000  # pair this computer as your Machine and run the Agent
+pnpm --filter @clauderon/host-agent build   # bundle the Agent into apps/host-agent/dist (served at /agent/agent.mjs)
 pnpm lint | typecheck | test | build
 ```
 
-Tests are Vitest and need `TEST_DATABASE_URL` (copy `.env.example` to `.env`; each test file creates and drops its own database, so the Postgres server from `db:up` is enough). CI runs lint, typecheck and test only.
+Tests are Vitest and need `TEST_DATABASE_URL` (copy `.env.example` to `.env`; each test file creates and drops its own database, so the Postgres server from `db:up` is enough). CI runs lint, typecheck and test, plus the Agent's tests and an install smoke test (`apps/web/scripts/agent-smoke.ts`) on macOS, Linux and Windows.
 
 ```sh
 pnpm --filter @clauderon/gateway test                       # one package
@@ -33,7 +34,7 @@ Three deployables and four internal packages, all TypeScript ESM. Packages expor
 
 - `apps/web`: Next.js UI and ordinary API, Auth.js with Google sign-in. Everything needing a long-lived connection is delegated to the Gateway.
 - `apps/gateway`: always-on Node service. Holds one WebSocket per paired Machine (token auth, `/agent`), serves Pairing (`/pair`) and the browser sockets, watches the heartbeats and runs the **Run engine** (`run-engine.ts`), which executes a Flow's Nodes one at a time. Web and Gateway share one Postgres and talk through DB command rows (`packages/db/src/gateway-commands.ts`).
-- `apps/host-agent`: the Agent on a Member's Machine. `pair` gets a code the Member approves on the Machines page (installed in one line from `/agent/install.sh`, run as a user service by `install-service`); `run` connects **out** to the Gateway (no inbound ports) and runs Nodes as local processes in bash (Git Bash on Windows), each Run in a worktree under `~/.clauderon`, behind the `System` seam (`src/system.ts`). Runs `claude -p` under the Member's own login.
+- `apps/host-agent`: the Agent on a Member's Machine, shipped as one esbuild bundle with its own Node and updating itself from the web app (ADR 0007). `pair` gets a code the Member approves on the Machines page (installed in one line from `/agent/install.sh`, run as a user service by `install-service`); `run` connects **out** to the Gateway (no inbound ports) and runs Nodes as local processes in bash (Git Bash on Windows), with the PATH of the Member's login shell (`src/tool-path.ts`), each Run in a worktree under `~/.clauderon`, behind the `System` seam (`src/system.ts`). `doctor` (`src/doctor.ts`) checks the Machine and reports to its page. Runs `claude -p` under the Member's own login.
 - `packages/protocol`: zod schemas for the Gateway ⇄ Agent, Pairing and Gateway ⇄ browser messages. This is the contract between the deploy targets, so change it carefully.
 - `packages/core`: pure domain logic with no I/O (Flow typing and validation, Run state, Ticket Status, runner/simulation for Dry-run, limits, secret `mask`).
 - `packages/db`: Drizzle schema, migrations and per-feature query modules; `@clauderon/db/testing` provides the per-test database helper.

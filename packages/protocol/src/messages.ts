@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { doctorReport } from "./agent-dist";
 
 // Gateway <-> Agent messages (spec M0 §4.2, ADR 0006). Each Agent connects
 // with its Machine's own token, so no message names its Machine.
@@ -34,6 +35,8 @@ export const messageSchemas = {
     tokenRepos: z.array(z.string()),
     checkedAt: z.string(),
   }),
+  /** The Agent's doctor (ADR 0007): at start and with every login check. Older Agents never send it. */
+  "machine.doctor": doctorReport,
 
   // Workspaces and Nodes (M1, M3, M4)
   "workspace.prepare": z.object({

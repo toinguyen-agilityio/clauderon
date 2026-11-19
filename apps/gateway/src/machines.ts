@@ -1,4 +1,4 @@
-import { applyMachineLogins, listProjects, type Db, type GatewayCommand } from "@clauderon/db";
+import { applyMachineDoctor, applyMachineLogins, listProjects, type Db, type GatewayCommand } from "@clauderon/db";
 import type { Payload } from "@clauderon/protocol";
 import type { MachineLinks } from "./machine-link";
 import type { RunEngine } from "./run-engine";
@@ -7,7 +7,8 @@ export type MachineServiceOptions = { db: Db; links: MachineLinks; engine: RunEn
 
 /**
  * Machines on the Gateway side (ADR 0006): turns the web app's commands into
- * Agent messages and Run engine calls, and records `machine.logins`.
+ * Agent messages and Run engine calls, and records `machine.logins` and
+ * `machine.doctor`.
  */
 export class MachineService {
   constructor(private readonly opts: MachineServiceOptions) {}
@@ -40,5 +41,10 @@ export class MachineService {
       checkedAt: new Date(logins.checkedAt),
     });
     if (machine) await this.opts.engine.loginsChecked(machine);
+  }
+
+  /** Keeps the doctor's report for the Machine page (ADR 0007). */
+  async doctor(report: Payload<"machine.doctor">, machineId: string): Promise<void> {
+    await applyMachineDoctor(this.opts.db, machineId, report);
   }
 }

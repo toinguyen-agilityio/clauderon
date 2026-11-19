@@ -5,3 +5,4 @@ export * from "./resume";
 export * from "./socket";
 export * from "./ticket";
 export * from "./browser";
+export * from "./agent-dist";
