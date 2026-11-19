@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardMeta, deleteBlocker, filterNodes, groupCounts, kindGroupOf, saveBlocker, sameValue, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
+import { cardMeta, deleteBlocker, filterNodes, groupCounts, kindGroupOf, saveBlocker, saveOutcome, sameValue, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
 
 const node = (name: string, kind: "agent" | "command" | "approve", over: { instructions?: string; command?: string | null } = {}) => ({
   name,
@@ -88,5 +88,25 @@ describe("Node form (ticket #71)", () => {
   it("tells unsaved changes from a saved form", () => {
     expect(sameValue(form(), form())).toBe(true);
     expect(sameValue(form(), form({ name: "Other" }))).toBe(false);
+  });
+});
+
+describe("New Node modal after saving (issue #90)", () => {
+  it("closes the dialog when a Node is created", () => {
+    const o = saveOutcome({ ok: true, flows: 0, withProblems: 0 }, true);
+    expect(o.close).toBe(true);
+    expect(o.message.kind).toBe("ok");
+  });
+
+  it("stays open and shows the error when creating fails", () => {
+    const o = saveOutcome({ ok: false, error: "Name already used" }, true);
+    expect(o.close).toBe(false);
+    expect(o.message).toEqual({ kind: "error", text: "Name already used" });
+  });
+
+  it("keeps an edited Node open and says how many Flows changed", () => {
+    const o = saveOutcome({ ok: true, flows: 2, withProblems: 1 }, false);
+    expect(o.close).toBe(false);
+    expect(o.message.text).toBe("Saved. It changed 2 Flows; 1 now has problems.");
   });
 });

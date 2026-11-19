@@ -102,3 +102,18 @@ export function deleteBlocker(usedBy: readonly LibraryUse[]): string | null {
 }
 
 export const sameValue = (a: NodeFormValue, b: NodeFormValue) => JSON.stringify(a) === JSON.stringify(b);
+
+export type SaveResult = { ok: true; flows: number; withProblems: number } | { ok: false; error: string };
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** What the form does after a save: a created Node closes the dialog, a failure keeps it open with the error. */
+export function saveOutcome(
+  result: SaveResult,
+  isNew: boolean,
+): { close: boolean; message: { kind: "ok" | "error"; text: string } } {
+  if (!result.ok) return { close: false, message: { kind: "error", text: result.error } };
+  if (isNew) return { close: true, message: { kind: "ok", text: "Created." } };
+  const problems = result.withProblems > 0 ? `; ${result.withProblems} now ${result.withProblems === 1 ? "has" : "have"} problems` : "";
+  return { close: false, message: { kind: "ok", text: `Saved. It changed ${plural(result.flows, "Flow")}${problems}.` } };
+}

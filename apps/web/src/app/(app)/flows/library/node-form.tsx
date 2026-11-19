@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CREATABLE_KINDS, NODE_KINDS, OUTPUT_TYPES, type NodeInput, type NodeOutput } from "@clauderon/core";
 import { deleteNodeAction, saveNodeAction } from "./actions";
-import { INSTRUCTIONS_MAX, KIND_HELP, TYPE_HELP, deleteBlocker, sameValue, saveBlocker, type LibraryUse, type NodeFormValue } from "./library-view";
+import { INSTRUCTIONS_MAX, KIND_HELP, TYPE_HELP, deleteBlocker, sameValue, saveBlocker, saveOutcome, type LibraryUse, type NodeFormValue } from "./library-view";
 
 export type { NodeFormValue } from "./library-view";
 
@@ -52,18 +52,14 @@ export function NodeForm({
     setPending(true);
     const result = await saveNodeAction(value.id, { ...value, command: value.kind === "command" ? (value.command ?? "") : null });
     setPending(false);
-    if (!result.ok) return setMessage({ kind: "error", text: result.error });
-    if (isNew) {
+    const outcome = saveOutcome(result, isNew);
+    if (outcome.close && onClose) return onClose();
+    if (outcome.close) {
+      // No dialog to close (used outside one): reset the form for the next Node.
       setValue(EMPTY_NODE);
       setBaseline(EMPTY_NODE);
-      setMessage({ kind: "ok", text: "Created." });
-      return;
-    }
-    setBaseline(value);
-    setMessage({
-      kind: "ok",
-      text: `Saved. It changed ${plural(result.flows, "Flow")}${result.withProblems > 0 ? `; ${result.withProblems} now ${result.withProblems === 1 ? "has" : "have"} problems` : ""}.`,
-    });
+    } else if (outcome.message.kind === "ok") setBaseline(value);
+    setMessage(outcome.message);
   };
 
   const remove = async () => {
