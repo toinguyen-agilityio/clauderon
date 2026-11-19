@@ -3,7 +3,7 @@
 #
 #   deploy/deploy.sh           create the env file if missing, then build, start,
 #                              publish over Tailscale Serve and check everything
-#   deploy/deploy.sh status    what is running, the URL and the Host Agent link
+#   deploy/deploy.sh status    what is running and the URL
 #   deploy/deploy.sh down      stop the stack and the Serve routes (data is kept)
 #
 # Safe to run again: unchanged services are left running.
@@ -11,7 +11,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT/deploy/.env.production}"
-REQUIRED=(POSTGRES_PASSWORD SESSION_SECRET HOST_AGENT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET PUBLIC_URL PUBLIC_GATEWAY_URL OPERATOR_EMAILS POD_IMAGE)
+REQUIRED=(POSTGRES_PASSWORD SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET PUBLIC_URL PUBLIC_GATEWAY_URL OPERATOR_EMAILS)
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -38,7 +38,7 @@ init_env() {
   [ -n "$host" ] || die "Tailscale is not running here, or its tailnet has no HTTPS certificates (enable them in the admin console)"
   say "Creating $ENV_FILE"
   (umask 077; cp "$ROOT/deploy/.env.production.example" "$ENV_FILE")
-  for key in POSTGRES_PASSWORD SESSION_SECRET HOST_AGENT_SECRET; do
+  for key in POSTGRES_PASSWORD SESSION_SECRET; do
     env_set "$key" "$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-40)"
   done
   # 3100/4100 keep clear of a dev server on 3000/4000.
@@ -67,14 +67,6 @@ preflight() {
   local host want; host="$(tailnet_host)"; want="$(env_get PUBLIC_URL)"; want="${want#https://}"
   [ -n "$host" ] || die "Tailscale is not connected (run: tailscale up, or tailscale switch <tailnet>)"
   [ "$host" = "$want" ] || die "this machine is $host in the current tailnet but PUBLIC_URL is https://$want (switch tailnet with: tailscale switch --list)"
-
-  local image; image="$(env_get POD_IMAGE)"
-  if ! docker image inspect "$image" >/dev/null 2>&1; then
-    case "$image" in
-      */*) say "Pulling Pod image $image"; docker pull "$image" ;;
-      *) say "Building Pod image $image"; docker build -t "$image" "$ROOT/images/pod" ;;
-    esac
-  fi
 }
 
 wait_for() {
@@ -85,8 +77,6 @@ wait_for() {
   done
   return 1
 }
-
-host_agent_connected() { curl -fsS --max-time 3 "http://127.0.0.1:$(gateway_port)/health" 2>/dev/null | grep -q '"hostAgentConnected":true'; }
 
 up() {
   preflight
@@ -99,15 +89,6 @@ up() {
   tailscale serve --bg --https=8443 "http://127.0.0.1:$(gateway_port)" >/dev/null
   wait_for "$(env_get PUBLIC_URL)/sign-in" 15 || warn "$(env_get PUBLIC_URL) does not answer yet; the first HTTPS certificate can take a minute"
 
-  say "Checking the Host Agent"
-  for _ in $(seq 10); do host_agent_connected && break; sleep 3; done
-  if host_agent_connected; then
-    echo "  connected"
-  else
-    warn "the Host Agent is not connected. Install it once (needs your password):"
-    echo "  sudo env GATEWAY_URL=ws://127.0.0.1:$(gateway_port) HOST_AGENT_SECRET=\"\$(grep '^HOST_AGENT_SECRET=' '$ENV_FILE' | cut -d= -f2-)\" '$ROOT/scripts/install-host-agent.sh'"
-  fi
-
   if [ "$(uname -s)" = Darwin ] && ! launchctl print "gui/$(id -u)/com.clauderon.backup" >/dev/null 2>&1; then
     warn "daily backups are not installed: run deploy/backup.sh install"
   fi
@@ -118,13 +99,13 @@ status_line() {
   echo
   printf '\033[1mClauderon:\033[0m %s\n' "$(env_get PUBLIC_URL)"
   echo "Members must be in this tailnet, and an Operator adds their email to the allowlist."
+  echo "Each Member then pairs their own computer from the Machines page."
 }
 
 status() {
   [ -f "$ENV_FILE" ] || die "no $ENV_FILE yet: run deploy/deploy.sh"
   compose ps -a --format 'table {{.Service}}\t{{.Status}}'
   echo; tailscale serve status 2>/dev/null || true
-  echo; if host_agent_connected; then echo "Host Agent: connected"; else echo "Host Agent: not connected"; fi
   status_line
 }
 
