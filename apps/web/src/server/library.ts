@@ -1,6 +1,7 @@
 import { checkNodeDefinition, validateFlow } from "@clauderon/core";
 import { createNode, deleteNode, listLibraryRows, loadFlow, loadLibrary, recordAudit, updateNode, type ChangeNodeResult } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
+import { copyName } from "../app/(app)/flows/library/library-view";
 
 // The Node library page (spec M2 §4, FLW-1, FLW-9, FLW-10) as plain functions
 // over the database, so tests drive them directly and pages stay thin.
@@ -70,4 +71,23 @@ export async function deleteMyNode(deps: AppDeps, viewer: Viewer, nodeId: string
   if (!result.ok) return { ok: false, error: refusal(result) };
   await recordAudit(deps.db, { actorEmail: viewer.email, action: "node.delete", subjectType: "node", subjectId: nodeId, detail: { name } });
   return { ok: true, flows: 0, withProblems: 0 };
+}
+
+export type CloneNodeOutcome = { ok: true; id: string; name: string } | { ok: false; error: string };
+
+/**
+ * Clone a sample Node into a new editable one (same Kind, instructions, command, Inputs and
+ * Outputs) named "Copy of <name>". The sample and the Flows using it are untouched. Audit `node.create`.
+ */
+export async function cloneMyNode(deps: AppDeps, viewer: Viewer, nodeId: string): Promise<CloneNodeOutcome> {
+  const rows = await listLibraryRows(deps.db);
+  const source = rows.find((n) => n.id === nodeId);
+  if (!source) return { ok: false, error: "That Node no longer exists." };
+  if (!source.isSample) return { ok: false, error: "Only sample Nodes can be cloned." };
+  const name = copyName(source.name, rows.map((n) => n.name));
+  const checked = checkNodeDefinition({ name, kind: source.kind, instructions: source.instructions, command: source.command, inputs: source.inputs, outputs: source.outputs });
+  if (!checked.ok) return checked;
+  const created = await createNode(deps.db, checked.definition, viewer.email, deps.clock.now());
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "node.create", subjectType: "node", subjectId: created.id, detail: { name, clonedFrom: nodeId } });
+  return { ok: true, id: created.id, name };
 }

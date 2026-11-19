@@ -15,7 +15,7 @@ import {
 import type { AppDeps } from "../src/server/deps";
 import { cloneMyFlow, deleteMyFlow, editorData, saveMyFlow, viewFlows } from "../src/server/flows";
 import { startDialog } from "../src/server/start";
-import { createMyNode, deleteMyNode, updateMyNode, viewLibrary } from "../src/server/library";
+import { cloneMyNode, createMyNode, deleteMyNode, updateMyNode, viewLibrary } from "../src/server/library";
 
 let test: TestDatabase;
 let db: Db;
@@ -277,6 +277,32 @@ describe("Node library (spec M2 §4)", () => {
     expect(await createMyNode(deps, ann, lint({ command: "" }))).toEqual({ ok: false, error: "A Command Node needs a command." });
     expect((await viewLibrary(deps)).find((n) => n.name === "Lint")).toMatchObject({ isSample: false, kind: "command", usedBy: [] });
     expect(await actions()).toEqual(["node.create"]);
+  });
+
+  it("issue #94: cloning a sample Node makes an editable copy, avoids a name clash and leaves the sample alone", async () => {
+    await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const find = async (name: string) => (await viewLibrary(deps)).find((n) => n.name === name)!;
+    const sample = await find("Code a change");
+    expect(sample.isSample).toBe(true);
+
+    const first = await cloneMyNode(deps, ann, sample.id);
+    expect(first).toMatchObject({ ok: true, name: "Copy of Code a change" });
+    const copy = await find("Copy of Code a change");
+    expect(copy).toMatchObject({ isSample: false, kind: sample.kind, instructions: sample.instructions, command: sample.command, inputs: sample.inputs, outputs: sample.outputs, usedBy: [] });
+
+    // A second clone does not clash with the first.
+    expect(await cloneMyNode(deps, ann, sample.id)).toMatchObject({ ok: true, name: "Copy of Code a change (2)" });
+
+    // The sample is unchanged and its Flows still use it.
+    expect(await find("Code a change")).toEqual(sample);
+    expect(await actions()).toEqual(["node.create", "node.create"]);
+
+    // Only samples are cloned; the Ticket sample is refused.
+    expect(await cloneMyNode(deps, ann, copy.id)).toEqual({ ok: false, error: "Only sample Nodes can be cloned." });
+    const ticket = (await viewLibrary(deps)).find((n) => n.kind === "ticket")!;
+    expect(await cloneMyNode(deps, ann, ticket.id)).toMatchObject({ ok: false });
+    expect(await cloneMyNode(deps, ann, crypto.randomUUID())).toEqual({ ok: false, error: "That Node no longer exists." });
   });
 
   it("T2-6: editing an unlocked Node re-validates every Flow using it and says how many changed", async () => {
