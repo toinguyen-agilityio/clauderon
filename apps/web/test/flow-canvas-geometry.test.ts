@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ZOOM, MIN_ZOOM, boundsOf, centerOn, edgePath, fitBounds, screenToWorld, zoomAt } from "../src/app/(app)/flows/[id]/canvas-geometry";
+import { MAX_ZOOM, MIN_ZOOM, boundsOf, centerOn, edgePath, fitBounds, intersects, midpoint, rectFromPoints, screenToWorld, snap, stepPoints, zoomAt } from "../src/app/(app)/flows/[id]/canvas-geometry";
 
 describe("flow canvas geometry", () => {
   it("maps a screen point to the canvas and back through the viewport", () => {
@@ -49,9 +49,39 @@ describe("flow canvas geometry", () => {
     expect({ x: 100 * vp.k + vp.x, y: 50 * vp.k + vp.y }).toEqual({ x: 400, y: 200 });
   });
 
-  it("draws an edge from the source handle to the target handle", () => {
-    expect(edgePath(0, 0, 100, 40)).toBe("M0,0 C50,0 50,40 100,40");
-    // a target left of its source still bends smoothly rather than looping through the origin
-    expect(edgePath(200, 0, 0, 40)).toMatch(/^M200,0 C\d/);
+  it("draws a forward edge as a step that turns halfway, with rounded corners", () => {
+    expect(stepPoints(0, 0, 100, 40)).toEqual([
+      { x: 0, y: 0 },
+      { x: 50, y: 0 },
+      { x: 50, y: 40 },
+      { x: 100, y: 40 },
+    ]);
+    expect(edgePath(0, 0, 100, 40)).toBe("M0,0 L42,0 Q50,0 50,8 L50,32 Q50,40 58,40 L100,40");
+    // level handles give a straight line
+    expect(edgePath(0, 10, 100, 10)).toBe("M0,10 L100,10");
+  });
+
+  it("loops a backward edge around instead of crossing its Nodes", () => {
+    const points = stepPoints(200, 0, 0, 10);
+    expect(points[0]).toEqual({ x: 200, y: 0 });
+    expect(points[points.length - 1]).toEqual({ x: 0, y: 10 });
+    // it leaves to the right and enters from the left
+    expect(points[1]!.x).toBeGreaterThan(200);
+    expect(points[points.length - 2]!.x).toBeLessThan(0);
+    // and runs below both handles when they are level
+    expect(Math.max(...points.map((p) => p.y))).toBeGreaterThan(10);
+  });
+
+  it("finds the point halfway along an edge", () => {
+    expect(midpoint([{ x: 0, y: 0 }, { x: 100, y: 0 }])).toEqual({ x: 50, y: 0 });
+    expect(midpoint([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 30 }])).toEqual({ x: 10, y: 10 });
+  });
+
+  it("snaps to the grid and tests rectangles for overlap", () => {
+    expect(snap(13)).toBe(16);
+    expect(snap(-5)).toBe(-8);
+    expect(rectFromPoints({ x: 10, y: 50 }, { x: 0, y: 20 })).toEqual({ x: 0, y: 20, w: 10, h: 30 });
+    expect(intersects({ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 })).toBe(true);
+    expect(intersects({ x: 0, y: 0, w: 10, h: 10 }, { x: 20, y: 0, w: 10, h: 10 })).toBe(false);
   });
 });
