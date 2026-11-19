@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { LeaveDialog } from "../src/app/(app)/flows/[id]/leave-dialog";
 import { LAYOUT_GAP_X, layeredLayout } from "../src/app/(app)/flows/[id]/flow-layout";
 import { describeProblems } from "../src/app/(app)/flows/[id]/problem-hints";
 import { hasUnsavedChanges, leavesPage } from "../src/app/(app)/flows/[id]/unsaved";
@@ -167,5 +170,16 @@ describe("which link clicks leave the editor (issue #77)", () => {
 
   it("leaves another site to the browser's own prompt", () => {
     expect(leavesPage(plain, link("https://github.com/x"), here)).toBe(false);
+  });
+});
+
+describe("leave dialog (issue #77)", () => {
+  it("is our own dialog with a way to stay and a way to leave, closed until the guard stops a move", () => {
+    const html = renderToStaticMarkup(createElement(LeaveDialog, { pending: null, onStay: () => {}, onLeave: () => {} }));
+    expect(html).toContain("<dialog");
+    expect(html).not.toMatch(/<dialog[^>]* open/);
+    expect(html).toContain("Leave without saving?");
+    expect(html).toContain("Keep editing");
+    expect(html).toContain("Leave without saving</button>");
   });
 });
