@@ -122,14 +122,10 @@ function MachineTile({ machine, now }: { machine: MachineView; now: Date }) {
 
       <div className="stack" style={{ gap: 6 }}>
         <div className="chips-row">
-          <LoginChip ok={machine.claudeLoggedIn} label="Claude Code" />
+          {/* The account Runs use, in the login chip itself: "Claude phamhuyqn92 · Pro". */}
+          <LoginChip ok={machine.claudeLoggedIn} label={claudeAccountLabel(machine) ? "Claude" : "Claude Code"} account={claudeAccountLabel(machine)} />
           <LoginChip ok={machine.ghLoggedIn} label="gh" account={machine.ghAccount} />
         </div>
-        {claudeAccountLabel(machine) && (
-          <div className="small clip" title={`Runs use this Claude account: ${machine.claudeAccount}`} data-testid="claude-account">
-            Claude <span className="mono">{claudeAccountLabel(machine)}</span>
-          </div>
-        )}
         <div className="small faint">
           <span className="mono">{machine.hostname ?? "—"}</span> · {osLabel(machine.os, machine.arch) || "unknown"} · checked{" "}
           {ago(machine.loginsCheckedAt, now)}
