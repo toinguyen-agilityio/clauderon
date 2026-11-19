@@ -334,6 +334,8 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .md-bar button { height: 22px; padding: 0 8px; border-radius: 11px; border: 1px solid var(--line); background: var(--panel); font-size: 11px; font-weight: 600; color: var(--fg2); cursor: pointer; }
 .md-bar button.on { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-weak); }
 .md.outv { white-space: normal; max-height: 420px; line-height: 1.55; }
+.md.outv.collapsed { max-height: 180px; overflow: hidden; }
+.md.outv.full { max-height: none; overflow: visible; border: 0; padding: 0; background: none; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md h1, .md h2, .md h3, .md h4 { margin: 14px 0 6px; line-height: 1.25; }
