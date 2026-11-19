@@ -1,21 +1,21 @@
 # Clauderon
 
-A shared web app for one team to run GitHub issues through Flows on each Member's Pod, and to track the resulting Runs and their outputs.
+A shared web app for one team to run GitHub issues through Flows on each Member's own Machine, and to track the resulting Runs and their outputs.
 
 ## Language
 
 ### People
 
 **Member**:
-A person who signs in with a Google account whose email is on the app's allowlist, identified by that email, with at most one Pod; any Member can respond to or cancel any Run, and their email is kept for audit.
+A person who signs in with a Google account whose email is on the app's allowlist, identified by that email, with at most one Machine; any Member can respond to or cancel any Run, and their email is kept for audit.
 _Avoid_: User, account, admin, username
 
 **Operator**:
-Whoever runs the app: holds its configuration and secrets, and is the only one who manages the allowlist; Operator emails are set in the app's configuration and are always allowed.
+Whoever runs the app: holds its configuration and secrets, and is the only one who manages the allowlist on the Members page, where they can also remove any Member's Machine; removing a Member's email removes their Machine too. Operator emails are set in the app's configuration and are always allowed.
 _Avoid_: Admin, superuser, owner
 
 **Starter**:
-The Member who started a Run; the Run executes on the Starter's Pod under their Claude Code and GitHub logins.
+The Member who started a Run; the Run executes on the Starter's Machine under their Claude Code and GitHub logins.
 _Avoid_: Owner, requester, author
 
 ### Work
@@ -35,31 +35,31 @@ _Avoid_: Ticket state, column
 ### Execution
 
 **Gateway**:
-The always-on part of the app that holds the Host Agent's connection and the web terminals, watches the heartbeat and runs the Runs; the web app hands it everything that needs a long-lived connection.
+The always-on part of the app that holds each Machine's connection, watches their heartbeats and runs the Runs; the web app hands it everything that needs a long-lived connection.
 _Avoid_: Backend, server, worker, socket service
 
-**Pod Host**:
-The one team machine running Docker where every Pod lives.
-_Avoid_: Server, Docker host, workstation, VM
+**Machine**:
+One Member's own computer, paired to this app, where every Run they start executes directly on its operating system under that Member's Claude Code and gh logins; a Member has at most one.
+_Avoid_: Pod, Pod Host, VM, server, runner, worker
 
-**Host Agent**:
-The process on the Pod Host that connects out to this app and creates, runs and reports on Pods and their Runs.
-_Avoid_: Pod Daemon, agent, runner, client
+**Agent**:
+The process on a Machine that connects out to this app, runs its Member's Runs and reports on them.
+_Avoid_: Host Agent, daemon, runner, client
 
-**Pod**:
-One Member's Docker container on the Pod Host, holding that Member's Claude Code and gh logins, where every Run they start executes.
-_Avoid_: VM, server, machine, runner, worker
+**Pairing**:
+Linking a Machine to its Member: the Agent shows a short-lived code that the Member approves in the web app, after which the Machine connects with its own token; a new Pairing replaces the Member's previous Machine.
+_Avoid_: Registration, enrolment, login
 
 **Workspace**:
-A Pod's persistent storage, kept across Stop and Recreate: the owner's logins, a clone of each Project and a worktree per Run.
-_Avoid_: Volume, home, disk
+The Agent's own directory on a Machine: a clone of each Project and a worktree per Run.
+_Avoid_: Volume, home, checkout
 
-**Pod Ready**:
-The state of a Pod that is running with both Claude Code and gh logged in.
+**Machine Ready**:
+The state of a Machine that is connected with both Claude Code and gh logged in.
 _Avoid_: Online, healthy
 
 **Slot**:
-One unit of a Pod's capacity; each Run that is running or waiting for a human occupies one Slot, and Runs beyond a Pod's Slots wait in its queue.
+One unit of a Machine's capacity, set by its Member; each Run that is running or waiting for a human occupies one Slot, and Runs beyond a Machine's Slots wait in its queue.
 _Avoid_: Worker, concurrency
 
 ### Flows
@@ -77,10 +77,10 @@ The one entry Node of every Flow; it emits the Ticket's `issue` to any Node that
 _Avoid_: Start node, trigger
 
 **Agent Node**:
-A Node that gives instructions to Claude Code on a Pod and ends with a structured result naming its Outputs.
+A Node that gives instructions to Claude Code on a Machine and ends with a structured result naming its Outputs.
 
 **Command Node**:
-A Node that runs a shell command on a Pod; exit code 0 means success.
+A Node that runs a bash command on a Machine; exit code 0 means success.
 _Avoid_: Script step
 
 **Human Node**:
@@ -102,11 +102,11 @@ _Avoid_: Artifact type, data type
 ### Runs
 
 **Run**:
-One execution of one Flow for exactly one Ticket on its Starter's Pod, in its own worktree and branch.
+One execution of one Flow for exactly one Ticket on its Starter's Machine, in its own worktree and branch.
 _Avoid_: Execution, job, build
 
 **Batch**:
-The set of Runs started together in one action, one per selected Ticket, on the Starter's Pod; a grouping for viewing only.
+The set of Runs started together in one action, one per selected Ticket, on the Starter's Machine; a grouping for viewing only.
 _Avoid_: Bulk run, group run
 
 **Attempt**:
@@ -117,7 +117,7 @@ _Avoid_: RunStep, try, execution
 A Run that has not ended as Succeeded or Cancelled, including a Failed or Interrupted one; a Ticket has at most one Active Run, and a Flow cannot be edited while an Active Run uses it.
 
 **Interrupted**:
-The state of a Run whose Pod stopped, or whose Host Agent sent no heartbeat for 30 seconds or restarted, mid-Node; only a Retry continues it. A shorter drop, or a restart of the Gateway, does not interrupt a Run.
+The state of a Run whose Machine's Agent sent no heartbeat for 30 seconds or restarted, mid-Node; only a Retry continues it. A shorter drop, or a restart of the Gateway, does not interrupt a Run.
 _Avoid_: Crashed, lost, orphaned
 
 **Retry**:

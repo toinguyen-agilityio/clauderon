@@ -1,18 +1,20 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ticketStatus } from "@clauderon/core";
 import { attemptsOfRun, cancelRun, getRun, listTicketsWithRuns, logChunksOf, schema, sql, type Db } from "@clauderon/db";
-import type { FakeHostAgent } from "@clauderon/testing";
+import type { FakeAgent } from "@clauderon/testing";
 import {
   createTestDatabase,
   memberRow,
   memorySocketPair,
-  podRow,
+  machineRow,
   projectRow,
   startSampleBatch,
   ticketRow,
   type TestDatabase,
 } from "@clauderon/testing";
 import { startGateway } from "./harness";
+
+const TOKEN = "ann-machine-token";
 
 let test: TestDatabase;
 let db: Db;
@@ -23,13 +25,13 @@ beforeAll(async () => {
 });
 afterAll(() => test.drop());
 beforeEach(async () => {
-  await db.execute(sql`truncate member, pod, project, ticket, batch, run, attempt, output, log_chunk, audit_entry, pod_host cascade`);
+  await db.execute(sql`truncate member, machine, pairing, project, ticket, batch, run, attempt, output, log_chunk, audit_entry cascade`);
 });
 
-/** A Host Agent that logs in, prepares workspaces and runs every Node successfully. */
-function succeedEverything(agent: FakeHostAgent, options: { pullRequest?: boolean } = {}) {
-  agent.respond("pod.checkLogins", ({ podId }, a) =>
-    a.send("pod.logins", { podId, claude: true, gh: true, ghAccount: "octocat", tokenRepos: ["acme/web", "other/x"], checkedAt: new Date().toISOString() }),
+/** An Agent that logs in, prepares workspaces and runs every Node successfully. */
+function succeedEverything(agent: FakeAgent, options: { pullRequest?: boolean } = {}) {
+  agent.respond("machine.checkLogins", (_, a) =>
+    a.send("machine.logins", { claude: true, gh: true, ghAccount: "octocat", tokenRepos: ["acme/web", "other/x"], checkedAt: new Date().toISOString() }),
   );
   agent.respond("workspace.prepare", ({ runId }, a) => a.send("workspace.ready", { runId, worktreePath: `/workspace/runs/${runId}` }));
   agent.respond("node.run", (run, a) => {
@@ -46,23 +48,23 @@ function succeedEverything(agent: FakeHostAgent, options: { pullRequest?: boolea
   });
 }
 
-async function setup(slots = 2, ticketCount = 1, extra: Parameters<typeof startGateway>[2] = {}) {
+async function setup(slots = 2, ticketCount = 1, extra: Parameters<typeof startGateway>[3] = {}) {
   const member = await memberRow(db, "ann@example.com", "Ann");
-  const pod = await podRow(db, member.id, { slots });
+  const machine = await machineRow(db, member.id, { slots, token: TOKEN });
   const project = await projectRow(db);
   const tickets = [];
   for (let n = 1; n <= ticketCount; n++) tickets.push(await ticketRow(db, project.id, 410 + n, { title: `Fix: Ledger totals ${n}!` }));
-  const ctx = await startGateway(db, [], extra);
-  return { member, pod, project, tickets, ...ctx };
+  const ctx = await startGateway(db, TOKEN, [], extra);
+  return { member, machine, project, tickets, ...ctx };
 }
 
 describe("Run engine", () => {
   it("T1-11: Basic ticket delivery ends succeeded with the pull-request Output copied to the Run", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup();
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
     succeedEverything(agent);
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now(), "Use small commits.");
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "Use small commits.");
     if (!start.ok) throw new Error("start failed");
-    await gateway.engine.schedule(pod.id);
+    await gateway.engine.schedule(machine.id);
     await flush();
 
     const run = (await getRun(db, start.runIds[0]!))!;
@@ -80,8 +82,8 @@ describe("Run engine", () => {
     expect(attempts[0]!.outputs).toEqual([expect.objectContaining({ name: "issue", value: expect.objectContaining({ number: 411 }) })]);
     expect(attempts[1]).toMatchObject({ inputTokens: 100, outputTokens: 20, claudeSessionId: "s1" });
 
-    // Login check first, then the workspace, then the Nodes in order.
-    expect(agent.received.map((e) => e.type)).toEqual(["pod.checkLogins", "workspace.prepare", "node.run", "node.run", "node.run"]);
+    // The check for the newly connected Agent, the login check before the Run, then the workspace, then the Nodes in order.
+    expect(agent.received.map((e) => e.type)).toEqual(["machine.checkLogins", "machine.checkLogins", "workspace.prepare", "node.run", "node.run", "node.run"]);
     const [code, tests, pr] = agent.of("node.run");
     expect(code!.prompt).toContain("Use small commits.");
     expect(code!.prompt).toContain("## issue");
@@ -97,15 +99,15 @@ describe("Run engine", () => {
     });
 
     // Only the Projects' repositories are kept from the login check.
-    const [stored] = await db.select().from(schema.pod);
+    const [stored] = await db.select().from(schema.machine);
     expect(stored!.ghTokenScope).toEqual({ tokenRepos: ["acme/web"] });
   });
 
   it("T1-13: no pull request printed: the Run succeeds and the Ticket stays Open", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup();
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
     succeedEverything(agent, { pullRequest: false });
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now());
-    await gateway.engine.schedule(pod.id);
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now());
+    await gateway.engine.schedule(machine.id);
     await flush();
 
     expect(await getRun(db, start.ok ? start.runIds[0]! : "")).toMatchObject({ state: "succeeded", pullRequestNumber: null });
@@ -114,11 +116,11 @@ describe("Run engine", () => {
   });
 
   it("T1-12: an Agent result missing a required Output fails the Attempt and the Run with that reason", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup();
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
     succeedEverything(agent);
     agent.respond("node.run", (run, a) => a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { outputs: {} } }));
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now());
-    await gateway.engine.schedule(pod.id);
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now());
+    await gateway.engine.schedule(machine.id);
     await flush();
 
     const runId = start.ok ? start.runIds[0]! : "";
@@ -128,31 +130,31 @@ describe("Run engine", () => {
     expect(agent.of("node.run")).toHaveLength(1);
   });
 
-  it("a Host Agent error fails the Run with it, e.g. no commit on the branch", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup();
+  it("an Agent error fails the Run with it, e.g. no commit on the branch", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
     succeedEverything(agent);
     agent.respond("node.run", (run, a) => a.send("node.result", { attemptId: run.attemptId, exitCode: 0, error: "no commit on the branch" }));
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now());
-    await gateway.engine.schedule(pod.id);
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now());
+    await gateway.engine.schedule(machine.id);
     await flush();
     expect(await getRun(db, start.ok ? start.runIds[0]! : "")).toMatchObject({ state: "failed", failureReason: "no commit on the branch" });
   });
 
   it("POD-5: a failed login check right before the Run fails it without starting a Node", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup();
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
     succeedEverything(agent);
-    agent.respond("pod.checkLogins", ({ podId }, a) =>
-      a.send("pod.logins", { podId, claude: true, gh: false, ghAccount: null, tokenRepos: [], checkedAt: new Date().toISOString() }),
+    agent.respond("machine.checkLogins", (_, a) =>
+      a.send("machine.logins", { claude: true, gh: false, ghAccount: null, tokenRepos: [], checkedAt: new Date().toISOString() }),
     );
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now());
-    await gateway.engine.schedule(pod.id);
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now());
+    await gateway.engine.schedule(machine.id);
     await flush();
     expect(await getRun(db, start.ok ? start.runIds[0]! : "")).toMatchObject({ state: "failed", failureReason: "gh not logged in" });
     expect(agent.of("workspace.prepare")).toHaveLength(0);
   });
 
-  it("T1-10: a Batch of 3 Tickets on a 2-Slot Pod starts 2 Runs; the third starts when one ends", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup(2, 3);
+  it("T1-10: a Batch of 3 Tickets on a 2-Slot Machine starts 2 Runs; the third starts when one ends", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup(2, 3);
     succeedEverything(agent);
     // Hold the first Node of every Run until the test releases it.
     const held: { attemptId: string }[] = [];
@@ -160,12 +162,12 @@ describe("Run engine", () => {
     const start = await startSampleBatch(
       db,
       member,
-      pod.id,
+      machine.id,
       tickets.map((t) => t.id),
       clock.now(),
     );
     if (!start.ok) throw new Error("start failed");
-    await gateway.engine.schedule(pod.id);
+    await gateway.engine.schedule(machine.id);
     await flush();
 
     const states = async () => Promise.all(start.runIds.map(async (id) => (await getRun(db, id))!.state));
@@ -177,14 +179,14 @@ describe("Run engine", () => {
   });
 
   it("T1-15: a log line holding ghp_… is stored and streamed masked", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup();
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
     succeedEverything(agent);
     const lines: string[] = [];
     agent.respond("node.run", (run, a) => {
       a.send("node.log", { attemptId: run.attemptId, seq: 0, stream: "stdout", text: "token ghp_abcdefghijklmnopqrstuvwxyz0123 and app-secret-value" });
     });
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now());
-    await gateway.engine.schedule(pod.id);
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now());
+    await gateway.engine.schedule(machine.id);
     await flush();
     const runId = start.ok ? start.runIds[0]! : "";
     const attempt = (await attemptsOfRun(db, runId)).at(-1)!;
@@ -200,31 +202,45 @@ describe("Run engine", () => {
     expect(lines).toEqual(["token ••• and •••", "again •••"]);
   });
 
-  it("a stopped Pod starts nothing until it runs again", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup();
+  it("a disconnected Machine starts nothing until its Agent says hello again", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush, gatewaySide, reconnect } = await setup();
     succeedEverything(agent);
-    await db.update(schema.pod).set({ status: "stopped" });
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now());
-    await gateway.engine.schedule(pod.id);
+    gatewaySide.cut();
+    await flush();
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now());
+    await gateway.engine.schedule(machine.id);
     await flush();
     const runId = start.ok ? start.runIds[0]! : "";
     expect((await getRun(db, runId))!.state).toBe("queued");
 
-    agent.send("pod.status", { podId: pod.id, status: "running", containerId: "c1", imageDigest: "sha256:1" });
+    reconnect();
     await flush();
     expect((await getRun(db, runId))!.state).toBe("succeeded");
   });
 });
 
+describe("Logins (POD-5)", () => {
+  it("a new Agent process gets a login check at hello; a reconnect of the same process does not", async () => {
+    const { agent, flush, gatewaySide, reconnect } = await setup();
+    expect(agent.of("machine.checkLogins")).toHaveLength(1);
+
+    gatewaySide.cut();
+    await flush();
+    reconnect();
+    await flush();
+    expect(agent.of("machine.checkLogins")).toHaveLength(1);
+  });
+});
+
 describe("Cancel (RUN-8, spec M3 §5)", () => {
   it("T3-8: cancelling a running Run ends it at once, sends node.kill and frees the Slot; a late result is ignored", async () => {
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup(1, 2);
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup(1, 2);
     succeedEverything(agent);
     const held: { attemptId: string }[] = [];
     agent.respond("node.run", (run) => held.push(run));
-    const start = await startSampleBatch(db, member, pod.id, tickets.map((t) => t.id), clock.now());
+    const start = await startSampleBatch(db, member, machine.id, tickets.map((t) => t.id), clock.now());
     if (!start.ok) throw new Error("start failed");
-    await gateway.engine.schedule(pod.id);
+    await gateway.engine.schedule(machine.id);
     await flush();
     const [first, second] = start.runIds as [string, string];
     expect((await getRun(db, second))!.state).toBe("queued");
@@ -234,7 +250,7 @@ describe("Cancel (RUN-8, spec M3 §5)", () => {
     expect(cancelled.cancelledAttemptIds).toEqual([held[0]!.attemptId]);
     expect((await getRun(db, first))!.state).toBe("cancelled");
 
-    await gateway.pods.command({ type: "run.cancel", podId: pod.id, runId: first, attemptIds: cancelled.cancelledAttemptIds });
+    await gateway.machines.command({ type: "run.cancel", machineId: machine.id, runId: first, attemptIds: cancelled.cancelledAttemptIds });
     await flush();
     expect(agent.of("node.kill")).toEqual([{ attemptId: held[0]!.attemptId }]);
     expect((await getRun(db, second))!.state).toBe("running");
@@ -249,16 +265,15 @@ describe("Cancel (RUN-8, spec M3 §5)", () => {
   });
 
   it("T3-8: queued and failed Runs end cancelled; an ended Run cannot be cancelled", async () => {
-    const { member, pod, tickets, agent, clock, flush } = await setup(1, 2);
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup(1, 2);
     succeedEverything(agent);
     agent.respond("node.run", (run, a) => a.send("node.result", { attemptId: run.attemptId, exitCode: 1, error: "Command exited 1" }));
-    await db.update(schema.pod).set({ status: "stopped" });
-    const start = await startSampleBatch(db, member, pod.id, tickets.map((t) => t.id), clock.now());
+    const start = await startSampleBatch(db, member, machine.id, tickets.map((t) => t.id), clock.now());
     if (!start.ok) throw new Error("start failed");
     const [queued, failing] = start.runIds as [string, string];
 
     expect(await cancelRun(db, queued, member.email, clock.now())).toMatchObject({ ok: true, from: "queued", cancelledAttemptIds: [] });
-    agent.send("pod.status", { podId: pod.id, status: "running", containerId: "c1", imageDigest: "sha256:1" });
+    await gateway.engine.schedule(machine.id);
     await flush();
     expect((await getRun(db, failing))!.state).toBe("failed");
 
@@ -284,14 +299,15 @@ describe("Dry-run (spec M2 §7)", () => {
 
   it("T2-2: never sends workspace.prepare, node.run or a login check, and succeeds with fake Outputs", async () => {
     // random() = 0: every optional Output is made, so the pull request is there to see.
-    const { member, pod, tickets, gateway, agent, clock, flush } = await setup(2, 1, { random: () => 0 });
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now(), "", "dry");
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup(2, 1, { random: () => 0 });
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "", "dry");
     if (!start.ok) throw new Error("start failed");
-    await gateway.engine.schedule(pod.id);
+    await gateway.engine.schedule(machine.id);
     await flush();
     await runToTheEnd(db, clock, flush, 2);
 
-    expect(agent.received.map((e) => e.type)).toEqual([]);
+    // Only the check every newly connected Agent gets.
+    expect(agent.received.map((e) => e.type)).toEqual(["machine.checkLogins"]);
     const run = (await getRun(db, start.runIds[0]!))!;
     expect(run).toMatchObject({ state: "succeeded", mode: "dry", branch: null });
     const attempts = await attemptsOfRun(db, run.id);
@@ -302,18 +318,18 @@ describe("Dry-run (spec M2 §7)", () => {
   });
 
   it("T2-3: a Ticket with an Active Dry-run Run can still start a Real Run", async () => {
-    const { member, pod, tickets, clock } = await setup();
-    const dry = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now(), "", "dry");
+    const { member, machine, tickets, clock } = await setup();
+    const dry = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "", "dry");
     expect(dry.ok).toBe(true);
-    const real = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now(), "", "real");
+    const real = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "", "real");
     expect(real.ok).toBe(true);
   });
 
   it("T2-1 (A2): 10 Tickets as a Dry-run Batch on 2 Slots never run more than 2 at once, and all succeed", async () => {
-    const { member, pod, tickets, gateway, clock, flush } = await setup(2, 10);
-    const start = await startSampleBatch(db, member, pod.id, tickets.map((t) => t.id), clock.now(), "", "dry");
+    const { member, machine, tickets, gateway, clock, flush } = await setup(2, 10);
+    const start = await startSampleBatch(db, member, machine.id, tickets.map((t) => t.id), clock.now(), "", "dry");
     if (!start.ok) throw new Error("start failed");
-    await gateway.engine.schedule(pod.id);
+    await gateway.engine.schedule(machine.id);
     await flush();
 
     const first = await db.select().from(schema.run);
@@ -335,10 +351,10 @@ describe("Dry-run (spec M2 §7)", () => {
   });
 
   it("a Node fails with the configured rate, ending the Run", async () => {
-    const { member, pod, tickets, gateway, clock, flush } = await setup(2, 1, { dryRunFailureRate: 1 });
-    const start = await startSampleBatch(db, member, pod.id, [tickets[0]!.id], clock.now(), "", "dry");
+    const { member, machine, tickets, gateway, clock, flush } = await setup(2, 1, { dryRunFailureRate: 1 });
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "", "dry");
     if (!start.ok) throw new Error("start failed");
-    await gateway.engine.schedule(pod.id);
+    await gateway.engine.schedule(machine.id);
     await flush();
     await runToTheEnd(db, clock, flush, 2);
     expect(await getRun(db, start.runIds[0]!)).toMatchObject({ state: "failed", failureReason: expect.stringContaining("simulated failure") });

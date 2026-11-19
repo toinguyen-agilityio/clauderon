@@ -1,10 +1,12 @@
 import { signIn } from "../../auth";
 import { Brand } from "../../components/brand";
 import { GoogleLogo } from "../../components/icons";
+import { safeReturnPath } from "../../server/runtime";
 
 export const dynamic = "force-dynamic";
 
-export default function SignInPage() {
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const redirectTo = safeReturnPath((await searchParams).next) ?? "/";
   return (
     <div className="signin">
       <div className="card signin-card">
@@ -19,7 +21,7 @@ export default function SignInPage() {
         <form
           action={async () => {
             "use server";
-            await signIn("google", { redirectTo: "/" });
+            await signIn("google", { redirectTo });
           }}
         >
           <button className="btn lg block" type="submit">

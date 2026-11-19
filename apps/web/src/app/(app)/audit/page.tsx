@@ -11,7 +11,7 @@ type Search = { member?: string; action?: string; page?: string };
 
 const SUBJECT_LINK: Record<string, (id: string) => string> = {
   run: (id) => `/runs/${id}`,
-  pod: (id) => `/pods/${id}`,
+  machine: (id) => `/machines/${id}`,
   flow: (id) => `/flows/${id}`,
 };
 
@@ -40,7 +40,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       <div className="page-head">
         <div>
           <h1>Audit log</h1>
-          <p className="sub">Every action on Runs, Pods, terminals, Flows, Nodes and the allowlist, with who did it and when.</p>
+          <p className="sub">Every action on Runs, Machines, Flows, Nodes and the allowlist, with who did it and when.</p>
         </div>
       </div>
 

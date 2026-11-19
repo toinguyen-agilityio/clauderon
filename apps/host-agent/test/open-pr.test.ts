@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-// `clauderon-open-pr` from the Pod image (spec M1 §4.5), run against a real
+// `clauderon-open-pr`, the Agent's own tool on every Node's PATH (spec M1 §4.5), run against a real
 // git repository with a local "origin" and a fake `gh` that records its calls.
 
-const SCRIPT = resolve(__dirname, "../../../images/pod/clauderon-open-pr");
+const SCRIPT = resolve(__dirname, "../bin/clauderon-open-pr");
 
 let dir: string;
 let work: string;

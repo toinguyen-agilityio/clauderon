@@ -19,7 +19,7 @@ import {
   humanRequestsOfRun,
   listAudit,
   listFlows,
-  listPods,
+  listMachines,
   listProjects,
   listPullRequests,
   listRuns,
@@ -45,31 +45,31 @@ export type NodeState = "queued" | "running" | "waiting_for_human" | "succeeded"
 const isUuid = (v: string | undefined) => !!v && /^[0-9a-f-]{36}$/i.test(v);
 
 /** Filters from a URL, keeping only valid values. */
-export function parseRunFilters(params: { state?: string; flow?: string; pod?: string }): RunFilters {
+export function parseRunFilters(params: { state?: string; flow?: string; machine?: string }): RunFilters {
   return {
     state: (RUN_STATES as readonly string[]).includes(params.state ?? "") ? (params.state as RunState) : undefined,
     flowId: isUuid(params.flow) ? params.flow : undefined,
-    podId: isUuid(params.pod) ? params.pod : undefined,
+    machineId: isUuid(params.machine) ? params.machine : undefined,
   };
 }
 
 /** The Runs list (TRK-7): filters combine; newest first; paginated. */
 export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number) {
-  const [result, projects, flows, pods, counts] = await Promise.all([
+  const [result, projects, flows, machines, counts] = await Promise.all([
     listRuns(deps.db, filters, page),
     listProjects(deps.db),
     listFlows(deps.db),
-    listPods(deps.db),
+    listMachines(deps.db),
     runStateCounts(deps.db),
   ]);
   const keyOf = ticketKeys(projects);
-  const podLabel = new Map(pods.map((p) => [p.id, p.name ?? `${p.owner.name ?? p.owner.email}'s Pod`]));
+  const machineLabel = new Map(machines.map((p) => [p.id, p.name ?? `${p.owner.name ?? p.owner.email}'s Machine`]));
   return {
     ...result,
-    rows: result.rows.map((r) => ({ ...r, key: keyOf(r.projectId, r.ticketNumber), pod: (r.podId && podLabel.get(r.podId)) ?? "Pod removed" })),
+    rows: result.rows.map((r) => ({ ...r, key: keyOf(r.projectId, r.ticketNumber), machine: (r.machineId && machineLabel.get(r.machineId)) ?? "Machine removed" })),
     counts,
     flows: flows.map((f) => ({ id: f.id, name: f.name })),
-    pods: pods.map((p) => ({ id: p.id, label: p.name ?? `${p.owner.name ?? p.owner.email}'s Pod` })),
+    machines: machines.map((p) => ({ id: p.id, label: p.name ?? `${p.owner.name ?? p.owner.email}'s Machine` })),
   };
 }
 
@@ -88,17 +88,17 @@ export async function viewPullRequests(deps: AppDeps, state: PullRequestFilter |
   const first = await listPullRequests(deps.db, state, page);
   const open = first.rows.filter((r) => r.pullRequestState === "open");
   await Promise.all(open.map((r) => refreshPullRequest(deps, r.id)));
-  const [result, counts, projects, pods] = await Promise.all([
+  const [result, counts, projects, machines] = await Promise.all([
     open.length > 0 ? listPullRequests(deps.db, state, page) : first,
     pullRequestCounts(deps.db),
     listProjects(deps.db),
-    listPods(deps.db),
+    listMachines(deps.db),
   ]);
   const keyOf = ticketKeys(projects);
-  const podLabel = new Map(pods.map((p) => [p.id, p.name ?? `${p.owner.name ?? p.owner.email}'s Pod`]));
+  const machineLabel = new Map(machines.map((p) => [p.id, p.name ?? `${p.owner.name ?? p.owner.email}'s Machine`]));
   return {
     ...result,
-    rows: result.rows.map((r) => ({ ...r, key: keyOf(r.projectId, r.ticketNumber), pod: (r.podId && podLabel.get(r.podId)) ?? "Pod removed" })),
+    rows: result.rows.map((r) => ({ ...r, key: keyOf(r.projectId, r.ticketNumber), machine: (r.machineId && machineLabel.get(r.machineId)) ?? "Machine removed" })),
     counts,
   };
 }
@@ -112,7 +112,7 @@ export type CancelOutcome = { ok: true } | { ok: false; reason: "ended" } | "not
 export async function cancelRunAs(deps: AppDeps, viewer: Viewer, runId: string): Promise<CancelOutcome> {
   const result = await cancelRun(deps.db, runId, viewer.email, deps.clock.now());
   if (!result.ok) return result.reason === "not-found" ? "not-found" : { ok: false, reason: "ended" };
-  if (result.podId) await deps.command({ type: "run.cancel", podId: result.podId, runId, attemptIds: result.cancelledAttemptIds });
+  if (result.machineId) await deps.command({ type: "run.cancel", machineId: result.machineId, runId, attemptIds: result.cancelledAttemptIds });
   return { ok: true };
 }
 
@@ -130,9 +130,9 @@ export async function respondAs(deps: AppDeps, viewer: Viewer, requestId: string
     if (result.reason === "invalid") return { ok: false, error: result.error };
     return { ok: false, error: result.cancelled ? "The Run was cancelled meanwhile." : `Already answered by ${result.by}.` };
   }
-  if (result.podId) {
+  if (result.machineId) {
     await deps.command(
-      result.decision === "reject" ? { type: "schedule", podId: result.podId } : { type: "run.resume", podId: result.podId, runId: result.runId },
+      result.decision === "reject" ? { type: "schedule", machineId: result.machineId } : { type: "run.resume", machineId: result.machineId, runId: result.runId },
     );
   }
   return { ok: true };
@@ -142,7 +142,7 @@ export type RetryOutcome = { ok: true } | { ok: false; error: string } | "not-fo
 
 /**
  * Retry from a Node (RUN-7, MEM-2): any Member, a Failed or Interrupted Run.
- * The Run joins the end of its Pod's queue; the Gateway schedules it.
+ * The Run joins the end of its Machine's queue; the Gateway schedules it.
  */
 export async function retryAs(deps: AppDeps, viewer: Viewer, runId: string, flowNodeId: string, note: string): Promise<RetryOutcome> {
   const result = await retryRun(deps.db, runId, flowNodeId, note.slice(0, 4000), viewer.email, deps.clock.now());
@@ -152,11 +152,11 @@ export async function retryAs(deps: AppDeps, viewer: Viewer, runId: string, flow
       "not-retryable": "Only a Failed or Interrupted Run can be retried.",
       "unknown-node": "That Node is not part of this Run.",
       "after-failure": "Retry from the Node that failed or an earlier one: a Retry cannot skip a Node that did not succeed.",
-      "no-pod": "This Run's Pod was removed.",
+      "no-machine": "This Run's Machine was removed.",
     } as const;
     return { ok: false, error: errors[result.reason] };
   }
-  await deps.command({ type: "schedule", podId: result.podId });
+  await deps.command({ type: "schedule", machineId: result.machineId });
   return { ok: true };
 }
 
@@ -199,7 +199,7 @@ export async function viewAudit(deps: AppDeps, params: { member?: string; action
   return { ...(await listAudit(deps.db, filters, page)), page, filters };
 }
 
-/** The Run page (TRK-1, TRK-2, spec M3 §8): Ticket, Flow, Starter, Pod, state, a Node timeline, rounds, history. */
+/** The Run page (TRK-1, TRK-2, spec M3 §8): Ticket, Flow, Starter, Machine, state, a Node timeline, rounds, history. */
 export async function viewRun(deps: AppDeps, runId: string) {
   await refreshPullRequest(deps, runId);
   const run = await getRunView(deps.db, runId);

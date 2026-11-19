@@ -29,9 +29,13 @@ export function EnableForm() {
 
   const placeholder = repos === null ? "Loading repositories…" : loadError ? "Cannot list repositories" : repos.length === 0 ? "No repository left to enable" : "Pick a repository…";
   return (
-    <form action={action} className="card-pad row" style={{ borderTop: "1px solid var(--line)", alignItems: "flex-end" }}>
-      <div className="field grow" style={{ minWidth: 220 }}>
-        <label htmlFor="pj-repo">Enable a repository</label>
+    <form action={action} className="proj-add">
+      <div className="proj-add-head">
+        <h2>Enable a repository</h2>
+        <p className="hint">Pick one the app&apos;s token can read. Its open issues become Tickets on the first Sync.</p>
+      </div>
+      <div className="field proj-add-repo">
+        <label htmlFor="pj-repo">Repository</label>
         <select id="pj-repo" className="select" style={{ width: "100%" }} name="repository" value={selected} onChange={(e) => setSelected(e.target.value)} required disabled={!repos?.length}>
           <option value="">{placeholder}</option>
           {repos?.map((r) => (
@@ -41,7 +45,7 @@ export function EnableForm() {
           ))}
         </select>
       </div>
-      <div className="field" style={{ width: 180 }}>
+      <div className="field proj-add-branch">
         <label htmlFor="pj-base">Base branch</label>
         <select id="pj-base" className="select" style={{ width: "100%" }} name="baseBranch" key={selected} defaultValue={repo?.defaultBranch} required disabled={!repo}>
           {!repo && <option value="">—</option>}
@@ -53,7 +57,7 @@ export function EnableForm() {
         Enable Project
       </button>
       {(state.error ?? loadError) && (
-        <p className="err-text" role="alert" style={{ flexBasis: "100%" }}>
+        <p className="err-text" role="alert">
           {state.error ?? loadError}
         </p>
       )}
@@ -62,11 +66,11 @@ export function EnableForm() {
 }
 
 export function SyncForm({ projectId }: { projectId: string }) {
-  const [state, action, pending] = useActionState<SyncState, FormData>(syncAction, { message: null, error: null });
+  // The row shows the outcome (summary or error) once the page revalidates.
+  const [, action, pending] = useActionState<SyncState, FormData>(syncAction, { message: null, error: null });
   return (
-    <form action={action} className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap" }}>
+    <form action={action}>
       <input type="hidden" name="projectId" value={projectId} />
-      {state.message && <span className="faint small nowrap">{state.message}</span>}
       <button className="btn sm" type="submit" disabled={pending}>
         <span className={pending ? "spin" : undefined} style={{ display: "inline-flex" }}>
           {Icon.sync}

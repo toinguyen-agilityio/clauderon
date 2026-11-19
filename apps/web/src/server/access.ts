@@ -2,16 +2,12 @@ import type { Clock } from "@clauderon/core";
 import {
   addAllowlistEntry,
   isOperator,
-  listAllowlist,
   loadSession,
-  removeAllowlistEntry,
   signIn,
   type AddResult,
-  type AllowlistRow,
   type Db,
   type Member,
   type Publish,
-  type RemoveResult,
 } from "@clauderon/db";
 
 // The app's access rules as plain functions over the database, so tests drive
@@ -47,20 +43,8 @@ export async function memberFromCookies(deps: Pick<AccessDeps, "db" | "operators
   return null;
 }
 
-export type AllowlistView = { rows: AllowlistRow[] } | "not-found";
-
-/** The Allowlist page is the Operator's; anyone else gets 404 (MEM-4). */
-export async function viewAllowlist(deps: AccessDeps, viewer: Member): Promise<AllowlistView> {
-  if (!isOperator(viewer.email, deps.operators)) return "not-found";
-  return { rows: await listAllowlist(deps.db, deps.operators) };
-}
-
+/** Adding an email is the Operator's (MEM-4); removing one is `removeMember`, which also removes the Machine. */
 export async function addToAllowlist(deps: AccessDeps, actor: Member, email: string): Promise<AddResult | "not-found"> {
   if (!isOperator(actor.email, deps.operators)) return "not-found";
   return addAllowlistEntry(deps.db, actor.email, email, deps.operators);
-}
-
-export async function removeFromAllowlist(deps: AccessDeps, actor: Member, email: string): Promise<RemoveResult | "not-found"> {
-  if (!isOperator(actor.email, deps.operators)) return "not-found";
-  return removeAllowlistEntry(deps.db, actor.email, email, deps.operators, deps.publish, deps.clock.now());
 }

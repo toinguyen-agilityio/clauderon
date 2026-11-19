@@ -159,7 +159,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
   const [flowId, setFlowId] = useState("");
   const [extra, setExtra] = useState("");
   const [mode, setMode] = useState<"real" | "dry">("real");
-  const [error, setError] = useState<{ text: string; terminal?: string } | null>(null);
+  const [error, setError] = useState<{ text: string; machinePage?: string } | null>(null);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
@@ -176,14 +176,14 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
     const result = await startAction({ flowId, ticketIds, extraInstructions: extra, mode });
     setPending(false);
     if (!result.ok) {
-      setError({ text: result.error, terminal: result.terminal });
+      setError({ text: result.error, machinePage: result.machinePage });
       return;
     }
     onStarted();
     router.push(result.runIds.length === 1 ? `/runs/${result.runIds[0]}` : "/runs");
   };
 
-  const pod = dialog?.pod;
+  const machine = dialog?.machine;
   const warned = new Map(dialog?.warnings.map((w) => [w.ticketId, w.authorAssociation]));
   return (
     <dialog ref={ref} {...closeOnBackdrop} className="modal wide" aria-labelledby="sd-title" onClose={onClose}>
@@ -192,7 +192,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
           <div>
             <h2 id="sd-title">Start Runs</h2>
             <p className="muted small" style={{ marginTop: 4 }}>
-              One Run per Ticket, grouped as a Batch on your Pod.
+              One Run per Ticket, grouped as a Batch on your Machine.
             </p>
           </div>
           <button type="button" className="btn ghost sm" aria-label="Close" onClick={() => ref.current?.close()}>
@@ -224,38 +224,38 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
             </div>
 
             <div className="field">
-              <label>Pod</label>
-              {!pod ? (
+              <label>Machine</label>
+              {!machine?.paired ? (
                 <div className="banner fail">
                   <div className="grow small">
-                    <b>You have no Pod yet.</b> Runs always run on the Starter&apos;s Pod.
+                    <b>You have no paired Machine yet.</b> Runs always run on the Starter&apos;s own computer.
                   </div>
-                  <Link className="btn sm primary" href="/pods">
-                    Create my Pod
+                  <Link className="btn sm primary" href="/machines">
+                    Pair my computer
                   </Link>
                 </div>
-              ) : mode === "real" && !pod.ready && pod.status === "running" ? (
+              ) : mode === "real" && machine.connected && !machine.ready ? (
                 <div className="banner fail">
                   <div className="grow small">
-                    <b>Your Pod is not logged in to Claude Code and gh.</b> Open its terminal and log in with your own accounts.
+                    <b>Your Machine is not logged in to Claude Code and gh.</b> Log in on it in your own terminal, then check logins on its page.
                   </div>
-                  <Link className="btn sm" href={`/pods/${pod.id}/terminal`}>
-                    Open terminal
+                  <Link className="btn sm" href={`/machines/${machine.id}`}>
+                    Open my Machine
                   </Link>
                 </div>
               ) : (
                 <div className="opt-card on" style={{ cursor: "default" }}>
-                  {Icon.cube}
+                  {Icon.host}
                   <div className="grow">
-                    <b>My Pod</b> <span className="faint small">· {pod.status}</span>
+                    <b>My Machine</b> <span className="faint small">· {machine.connected ? "online" : "offline"}</span>
                     <div className="faint small num">
-                      {pod.inUse}/{pod.slots} Slots busy · {pod.queued} queued
+                      {machine.inUse}/{machine.slots} Slots busy · {machine.queued} queued
                     </div>
                   </div>
                 </div>
               )}
-              {pod && pod.status !== "running" && <span className="hint">Your Pod is {pod.status}. Runs wait in its queue until it runs again.</span>}
-              {pod && dialog && (
+              {machine?.paired && !machine.connected && <span className="hint">Your Machine is offline. Runs wait in its queue until its Agent connects.</span>}
+              {machine && dialog && (
                 <span className="hint" data-testid="queue-hint">
                   {(() => {
                     const now = dialog.positions.filter((p) => p === 0).length;
@@ -279,7 +279,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
               </div>
               <span className="hint">
                 {mode === "real"
-                  ? "Claude Code runs on your Pod and a real pull request is opened under your gh account."
+                  ? "Claude Code runs on your Machine and a real pull request is opened under your gh account."
                   : "Simulated Nodes with fake Outputs. It takes a Slot but never calls Claude or GitHub, and needs no logins."}
               </span>
             </div>
@@ -321,9 +321,9 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
             {error && (
               <div className="banner fail" role="alert">
                 <div className="grow small">{error.text}</div>
-                {error.terminal && (
-                  <Link className="btn sm" href={error.terminal}>
-                    Open terminal
+                {error.machinePage && (
+                  <Link className="btn sm" href={error.machinePage}>
+                    Open Machines
                   </Link>
                 )}
               </div>
@@ -335,7 +335,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
           <button type="button" className="btn" onClick={() => ref.current?.close()}>
             Cancel
           </button>
-          <button type="button" className="btn primary" disabled={!dialog || pending || !flowId || !pod} onClick={() => void start()}>
+          <button type="button" className="btn primary" disabled={!dialog || pending || !flowId || !machine?.paired} onClick={() => void start()}>
             {Icon.play}
             {pending ? "Starting…" : `Start ${ticketIds.length} Run${ticketIds.length === 1 ? "" : "s"}`}
           </button>

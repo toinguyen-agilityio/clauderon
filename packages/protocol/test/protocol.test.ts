@@ -21,11 +21,12 @@ describe("gateway ticket", () => {
 const hello = {
   agentVersion: "0.1.0",
   processId: "p-1",
+  os: "darwin",
   arch: "arm64",
+  hostname: "ann-mac",
   cpus: 8,
   memoryMb: 16384,
   diskGb: 500,
-  dockerRunning: true,
   lastReceivedId: 0,
   liveAttempts: [],
 };
@@ -40,8 +41,8 @@ describe("parseEnvelope", () => {
   });
 
   it("accepts an unknown type as known: false instead of failing (R10)", () => {
-    const parsed = parseEnvelope(JSON.stringify({ id: 3, type: "pod.teleport", payload: { anything: 1 } }));
-    expect(parsed).toEqual({ ok: true, known: false, envelope: { id: 3, type: "pod.teleport", payload: { anything: 1 } } });
+    const parsed = parseEnvelope(JSON.stringify({ id: 3, type: "machine.teleport", payload: { anything: 1 } }));
+    expect(parsed).toEqual({ ok: true, known: false, envelope: { id: 3, type: "machine.teleport", payload: { anything: 1 } } });
   });
 
   it("rejects text that is not an envelope", () => {
@@ -60,7 +61,7 @@ describe("parseEnvelope", () => {
 describe("ResumeBuffer", () => {
   it("numbers messages from 1 and keeps them until acknowledged", () => {
     const buffer = new ResumeBuffer();
-    const sent = [1, 2, 3].map((n) => buffer.next("pod.checkLogins", { podId: `p${n}` }));
+    const sent = [1, 2, 3].map((n) => buffer.next("node.kill", { attemptId: `a${n}` }));
     expect(sent.map((e) => e.id)).toEqual([1, 2, 3]);
     buffer.acknowledge(2);
     expect(buffer.unacked(0).map((e) => e.id)).toEqual([3]);
@@ -68,14 +69,14 @@ describe("ResumeBuffer", () => {
 
   it("resends only what the other side has not received", () => {
     const buffer = new ResumeBuffer();
-    for (let n = 1; n <= 5; n++) buffer.next("pod.checkLogins", { podId: `p${n}` });
+    for (let n = 1; n <= 5; n++) buffer.next("node.kill", { attemptId: `a${n}` });
     buffer.acknowledge(3);
     expect(buffer.unacked(4).map((e) => e.id)).toEqual([5]);
   });
 
   it("delivers each received id once and in order", () => {
     const buffer = new ResumeBuffer();
-    const env = (id: number) => ({ id, type: "pod.status", payload: {} });
+    const env = (id: number) => ({ id, type: "node.kill", payload: {} });
     expect(buffer.accept(env(1))).toBe("deliver");
     expect(buffer.accept(env(1))).toBe("duplicate");
     expect(buffer.accept(env(2))).toBe("deliver");
@@ -84,7 +85,7 @@ describe("ResumeBuffer", () => {
 
   it("delivers past a gap a restarted sender can no longer fill, so the link never stalls", () => {
     const buffer = new ResumeBuffer({ lastReceivedId: 4 });
-    const env = (id: number) => ({ id, type: "pod.status", payload: {} });
+    const env = (id: number) => ({ id, type: "node.kill", payload: {} });
     expect(buffer.accept(env(9))).toBe("gap");
     expect(buffer.lastReceivedId).toBe(9);
     expect(buffer.accept(env(10))).toBe("deliver");

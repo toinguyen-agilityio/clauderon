@@ -1,5 +1,7 @@
 # The whole app is self-hosted on the Pod Host and reached over Tailscale
 
+The Tailscale part is superseded by [ADR 0006](0006-each-member-runs-on-their-own-machine.md).
+
 Supersedes the hosting part of [ADR 0004](0004-web-app-on-vercel-with-an-always-on-gateway.md); the split into a web app and an always-on Gateway stays.
 
 The team wants to use Clauderon without paying for hosting, and the Pod Host is already a machine that must stay on and run Docker. So the web app, the Gateway and Postgres run there as one Docker Compose stack (`deploy/compose.yml`), next to the Host Agent and the Pods. Web and Gateway listen on localhost only; Tailscale Serve publishes them to the team's tailnet with HTTPS (the web app on port 443, the Gateway's WebSockets on 8443). Members join the tailnet to reach the app; Google sign-in and the email allowlist still decide who gets in. Postgres is never published, and the Host Agent reaches the Gateway on localhost.

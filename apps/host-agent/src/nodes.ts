@@ -1,58 +1,21 @@
+import { join } from "node:path";
 import { mask, tailLines } from "@clauderon/core";
 import type { Payload } from "@clauderon/protocol";
 import { ClaudeErrorWatch, claudeCommand, claudeResult, parseClaudeLine } from "./claude";
-import { CONTAINER_PREFIX, POD_USER, containerName, execText, type DockerClient } from "./docker";
-import type { AgentLink, Log } from "./pods";
+import { errorText, type AgentLink, type Log } from "./link";
+import { runText, type ProcessHandle, type System } from "./system";
 
 /** Inputs passed as files: the Gateway sends the text, the Node gets `<NAME>_FILE`. */
 export const FILE_ENV = ["CLAUDERON_SUMMARY", "CLAUDERON_TEST_RESULT", "CLAUDERON_RETRY_CONTEXT"] as const;
 /** Set by the Gateway when the Node must produce a `branch`: HEAD has to move. */
 export const EXPECT_COMMIT_ENV = "CLAUDERON_EXPECT_COMMIT";
 export const TAIL_LINES = 200;
-/** Set on every Node process, and inherited by its children, so `node.kill` can find them all. */
+/** Set on every Node process, and inherited by its children. */
 export const ATTEMPT_ENV = "CLAUDERON_ATTEMPT_ID";
-/** Seconds between SIGTERM and SIGKILL when a Node is killed. */
-export const KILL_GRACE_SECONDS = 10;
-
-/**
- * Signals every process in the container whose environment holds
- * `CLAUDERON_ATTEMPT_ID=$1`: SIGTERM first, SIGKILL after the grace period.
- * The id travels as an argument, so this script never matches itself.
- */
-const KILL_SCRIPT = `
-signal_all() {
-  for f in /proc/[0-9]*/environ; do
-    if tr '\\0' '\\n' 2>/dev/null < "$f" | grep -qxF "${ATTEMPT_ENV}=$1"; then
-      pid=\${f#/proc/}; kill -"$2" "\${pid%/environ}" 2>/dev/null
-    fi
-  done
-}
-signal_all "$1" TERM
-sleep ${KILL_GRACE_SECONDS}
-signal_all "$1" KILL
-true`;
-
-/**
- * Kills every Node process in the container that carries a
- * `CLAUDERON_ATTEMPT_ID` this Host Agent holds no handle for (orphans, RUN-12).
- * The ids to keep travel as arguments.
- */
-const ORPHAN_SCRIPT = `
-orphans() {
-  for f in /proc/[0-9]*/environ; do
-    id=$(tr '\\0' '\\n' 2>/dev/null < "$f" | sed -n 's/^${ATTEMPT_ENV}=//p' | head -n 1)
-    [ -n "$id" ] || continue
-    keep=0
-    for k in "$@"; do [ "$k" = "$id" ] && keep=1; done
-    if [ "$keep" = 0 ]; then pid=\${f#/proc/}; echo "\${pid%/environ}"; fi
-  done
-}
-pids=$(orphans "$@")
-[ -n "$pids" ] || exit 0
-kill -TERM $pids 2>/dev/null
-sleep ${KILL_GRACE_SECONDS}
-kill -KILL $pids 2>/dev/null
-true`;
+/** Between SIGTERM and SIGKILL when a Node is killed. */
+export const KILL_GRACE_MS = 10_000;
+/** A pid file whose boot time differs by more than this is from an earlier boot: its pid means nothing now. */
+const SAME_BOOT_MS = 120_000;
 
 /** Terminal colour and cursor codes (CSI sequences). */
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
@@ -75,80 +38,122 @@ class Lines {
   }
 }
 
-export type NodeRunnerOptions = { log: Log; knownSecrets: readonly string[] };
+export type NodeRunnerOptions = {
+  log: Log;
+  knownSecrets: readonly string[];
+  /** The Agent's directory: pid files of running Nodes live in `<home>/nodes`. */
+  home: string;
+  killGraceMs?: number;
+};
 
-/** The Host Agent's handle on its Nodes: what runs, and the orphan sweep (spec M3 §6). */
+/** The Agent's handle on its Nodes: what runs, and the orphan sweep (spec M3 §6). */
 export type NodeHandles = {
   running(): string[];
   killOrphans(): Promise<void>;
 };
 
+/** One Node in flight: its process once started, and whether a kill came first. */
+type Running = { process: ProcessHandle | null; killed: boolean };
+
+type PidFile = { pid: number; bootAt: string };
+
+const pidFile = (home: string, attemptId: string) => join(home, "nodes", `${attemptId}.json`);
+
+/** SIGTERM now, SIGKILL after the grace period, to a whole process group. */
+function terminate(kill: (signal: "TERM" | "KILL") => void, graceMs: number): void {
+  kill("TERM");
+  setTimeout(() => kill("KILL"), graceMs).unref?.();
+}
+
 /**
- * `node.run` (spec M1 §4.3, §4.4): runs a Command or Agent Node as `pod` in
- * the Run's worktree, streams masked log lines, and reports one `node.result`.
- * Runs in the background so the link keeps serving terminals and other Pods.
+ * `node.run` (spec M1 §4.3, §4.4): runs a Command or Agent Node in the Run's
+ * worktree under the Member's own logins, streams masked log lines, and
+ * reports one `node.result`. Runs in the background so other Runs go on.
  */
-export function registerNodeHandlers(link: AgentLink, docker: DockerClient, options: NodeRunnerOptions): NodeHandles {
-  // The container of every Node still running here, by Attempt.
-  const running = new Map<string, string>();
+export function registerNodeHandlers(link: AgentLink, system: System, options: NodeRunnerOptions): NodeHandles {
+  const graceMs = options.killGraceMs ?? KILL_GRACE_MS;
+  const running = new Map<string, Running>();
   // Log line numbers go on across a Grill Attempt's rounds, so none repeats.
   const seqs = new Map<string, { next: number }>();
   let sweep: Promise<void> = Promise.resolve();
+
   link.on("node.run", (payload) => {
-    running.set(payload.attemptId, containerName(payload.podId));
+    const entry: Running = { process: null, killed: false };
+    running.set(payload.attemptId, entry);
     const seq = seqs.get(payload.attemptId) ?? { next: 0 };
     seqs.set(payload.attemptId, seq);
+    const started = async (proc: ProcessHandle) => {
+      entry.process = proc;
+      if (entry.killed) terminate((signal) => proc.kill(signal), graceMs);
+      // Recorded so a later Agent process can kill it if this one dies first.
+      if (proc.pid !== undefined) {
+        const record: PidFile = { pid: proc.pid, bootAt: system.bootTime().toISOString() };
+        await system.writeFile(pidFile(options.home, payload.attemptId), JSON.stringify(record)).catch(() => {});
+      }
+    };
     // After an orphan sweep, so the sweep never mistakes this Node for an orphan.
-    void sweep.then(() => runNode(link, docker, options, payload, seq)).finally(() => running.delete(payload.attemptId));
+    void sweep
+      .then(() => runNode(link, system, options, payload, seq, started))
+      .finally(async () => {
+        running.delete(payload.attemptId);
+        await system.remove(pidFile(options.home, payload.attemptId)).catch(() => {});
+      });
   });
+
   // A cancelled Run (RUN-8): the Gateway already ended the Attempt, so its
   // late `node.result` is ignored; an unknown Attempt has nothing to kill.
   link.on("node.kill", ({ attemptId }) => {
-    const container = running.get(attemptId);
-    if (!container) return;
-    void killNode(docker, container, attemptId).catch((error: unknown) =>
-      options.log(`node ${attemptId}: kill failed: ${error instanceof Error ? error.message : String(error)}`),
-    );
+    const entry = running.get(attemptId);
+    if (!entry || entry.killed) return;
+    entry.killed = true;
+    if (entry.process) { const proc = entry.process; terminate((signal) => proc.kill(signal), graceMs); }
   });
 
   return {
     running: () => [...running.keys()],
+    /** Kills Node process groups that an earlier Agent process left behind (RUN-12). */
     killOrphans() {
-      const keep = [...running.keys()];
-      sweep = sweep.then(async () => {
-        for (const container of await docker.listContainers(CONTAINER_PREFIX)) {
-          if (!container.running) continue;
-          await docker
-            .exec(container.name, ["bash", "-c", ORPHAN_SCRIPT, "_", ...keep], { user: POD_USER })
-            .catch((error: unknown) => options.log(`orphans in ${container.name}: ${error instanceof Error ? error.message : String(error)}`));
-        }
-      }).catch((error: unknown) => options.log(`orphan sweep: ${String(error)}`));
+      sweep = sweep
+        .then(async () => {
+          const dir = join(options.home, "nodes");
+          const boot = system.bootTime().getTime();
+          for (const name of await system.list(dir)) {
+            const attemptId = name.replace(/\.json$/, "");
+            if (running.has(attemptId)) continue;
+            const path = join(dir, name);
+            try {
+              const record = JSON.parse((await system.readFile(path)) ?? "null") as PidFile | null;
+              if (record && Number.isInteger(record.pid) && Math.abs(new Date(record.bootAt).getTime() - boot) < SAME_BOOT_MS) {
+                options.log(`killing orphaned Node ${attemptId} (process group ${record.pid})`);
+                terminate((signal) => system.killGroup(record.pid, signal), graceMs);
+              }
+            } catch (error) {
+              options.log(`orphan ${attemptId}: ${errorText(error)}`);
+            }
+            await system.remove(path).catch(() => {});
+          }
+        })
+        .catch((error: unknown) => options.log(`orphan sweep: ${String(error)}`));
       return sweep;
     },
   };
 }
 
-/** Each Pod container's state for a heartbeat (spec M3 §6). */
-export async function podStatuses(docker: DockerClient) {
-  return (await docker.listContainers(CONTAINER_PREFIX)).map((c) => ({
-    podId: c.name.slice(CONTAINER_PREFIX.length),
-    status: c.running ? ("running" as const) : ("stopped" as const),
-  }));
-}
-
-export async function killNode(docker: DockerClient, container: string, attemptId: string): Promise<void> {
-  await docker.exec(container, ["bash", "-c", KILL_SCRIPT, "_", attemptId], { user: POD_USER });
-}
-
 export async function runNode(
   link: AgentLink,
-  docker: DockerClient,
-  options: NodeRunnerOptions,
+  system: System,
+  options: Pick<NodeRunnerOptions, "log" | "knownSecrets">,
   run: Payload<"node.run">,
   counter: { next: number } = { next: 0 },
+  started: (process: ProcessHandle) => void | Promise<void> = () => {},
 ): Promise<void> {
-  const container = containerName(run.podId);
-  const inWorktree = { user: POD_USER, workdir: run.worktreePath };
+  const inWorktree = { cwd: run.worktreePath };
+  /** Starts the Node's own process: the one `node.kill` stops. */
+  const start = async (script: string, env: Record<string, string>, onOutput: Parameters<System["start"]>[3]) => {
+    const proc = system.start(script, [], { ...inWorktree, env }, onOutput);
+    await started(proc);
+    return proc.exit;
+  };
   const secrets = [...options.knownSecrets];
   const hide = (text: string) => mask(text, secrets);
   const log = (stream: "stdout" | "stderr" | "system", text: string) =>
@@ -156,14 +161,13 @@ export async function runNode(
 
   try {
     // The owner's own gh token is a secret too (NFR-1).
-    const token = (await execText(docker, container, ["gh", "auth", "token"], { user: POD_USER }).catch(() => "")).trim();
+    const token = (await runText(system, ["gh", "auth", "token"]).catch(() => "")).trim();
     if (token) secrets.push(token);
 
-    const git = async (...args: string[]) => (await execText(docker, container, ["git", ...args], inWorktree)).trim();
+    const git = async (...args: string[]) => (await runText(system, ["git", ...args], inWorktree)).trim();
     const gitDir = await git("rev-parse", "--absolute-git-dir");
     const headBefore = await git("rev-parse", "HEAD");
-    const writeFile = (path: string, content: string) =>
-      execText(docker, container, ["bash", "-c", 'printf %s "$CLAUDERON_CONTENT" > "$1"', "_", path], { user: POD_USER, env: { CLAUDERON_CONTENT: content } });
+    const writeFile = (path: string, content: string) => system.writeFile(path, content);
 
     const env: Record<string, string> = { ...run.env, [ATTEMPT_ENV]: run.attemptId };
     const expectCommit = env[EXPECT_COMMIT_ENV] === "1";
@@ -206,7 +210,7 @@ export async function runNode(
           log("stderr", line);
         })),
       };
-      exitCode = await docker.exec(container, ["bash", "-lc", run.command ?? "true"], { ...inWorktree, env }, (stream, text) => streams[stream].push(text));
+      exitCode = await start(run.command ?? "true", env, (stream, text) => streams[stream].push(text));
       streams.stdout.flush();
       streams.stderr.flush();
       result = { tail: hide(tailLines(output.join("\n"), TAIL_LINES)), ...(pullRequest ? { pullRequest } : {}) };
@@ -236,11 +240,8 @@ export async function runNode(
         errors.stderr(line);
         log("stderr", line);
       });
-      exitCode = await docker.exec(
-        container,
-        ["bash", "-lc", claudeCommand(run.resumeSessionId)],
-        { ...inWorktree, env: { ...env, CLAUDERON_PROMPT_FILE: promptFile } },
-        (stream, text) => (stream === "stdout" ? stdout : stderr).push(text),
+      exitCode = await start(claudeCommand(run.resumeSessionId), { ...env, CLAUDERON_PROMPT_FILE: promptFile }, (stream, text) =>
+        (stream === "stdout" ? stdout : stderr).push(text),
       );
       stdout.flush();
       stderr.flush();
@@ -254,7 +255,7 @@ export async function runNode(
     if (!error && expectCommit && headCommit === headBefore) error = "no commit on the branch";
     link.send("node.result", { attemptId: run.attemptId, exitCode, result, sessionId, headCommit, ...(error ? { error } : {}) });
   } catch (failure) {
-    const text = hide(failure instanceof Error ? failure.message : String(failure));
+    const text = hide(errorText(failure));
     options.log(`node ${run.attemptId}: ${text}`);
     log("system", text);
     link.send("node.result", { attemptId: run.attemptId, exitCode: -1, error: text });

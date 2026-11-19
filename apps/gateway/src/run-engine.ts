@@ -28,30 +28,30 @@ import {
   createAttempt,
   finishAttempt,
   getAttempt,
-  getPod,
+  getMachine,
   getRunContext,
   interruptRun,
   latestAnsweredRound,
   markRetryLoginsChecked,
   moveRun,
-  podsWithQueuedRuns,
   runningAttemptIds,
   runningRuns,
-  runsOfPod,
+  runsOfMachine,
   setAttemptUsage,
   updateRun,
   type AttemptWithOutputs,
   type Db,
-  type Pod,
+  type Machine,
 } from "@clauderon/db";
 import type { MessageType, Payload } from "@clauderon/protocol";
 import type { LiveHub } from "./live-hub";
 
-export type Sender = { send<T extends MessageType>(type: T, payload: Payload<T>): unknown };
+/** Sends a numbered message to one Machine's Agent. */
+export type Sender = { send<T extends MessageType>(machineId: string, type: T, payload: Payload<T>): unknown };
 
 export type RunEngineOptions = {
   db: Db;
-  link: Sender;
+  links: Sender;
   clock: Clock;
   live: LiveHub;
   /** The app's own secrets, masked again before a log line is stored (NFR-1). */
@@ -61,25 +61,21 @@ export type RunEngineOptions = {
   /** Source of randomness for the Dry-run runner; default `Math.random`. */
   random?: () => number;
   log?: (message: string) => void;
-  /** Whether the Host Agent is connected; Queued Runs wait while it is not (spec M3 §6). */
-  hostConnected?: () => boolean;
 };
 
-/** What the Gateway learned from a `hello` (spec M3 §6). */
-export type HostBack = {
+/** What the Gateway learned from a Machine's `hello` (spec M3 §6). */
+export type MachineBack = {
   liveAttempts: readonly string[];
-  /** The Host Agent process changed, or this Gateway just booted: lost Attempts cannot report any more. */
+  /** The Agent process changed, or this Gateway just booted: lost Attempts cannot report any more. */
   checkLive: boolean;
-  /** Messages to and from the Gateway were lost too, so simulated Dry-run Nodes stopped. */
-  gatewayRestarted: boolean;
   reason: string;
 };
 
 type RunContext = NonNullable<Awaited<ReturnType<typeof getRunContext>>>;
 
 /**
- * The Run engine (spec M1 §4.2): the Gateway owns every Run; the Host Agent
- * only executes and reports. State lives in the database, so each step reads
+ * The Run engine (spec M1 §4.2): the Gateway owns every Run; each Machine's
+ * Agent only executes and reports. State lives in the database, so each step reads
  * it again; work is serialised so two triggers never start the same Slot.
  */
 export class RunEngine {
@@ -99,18 +95,17 @@ export class RunEngine {
     return this.queue;
   }
 
-  /** The Slot scheduler for one Pod (POD-3), after every change on it. */
-  schedule(podId: string): Promise<void> {
-    return this.serial(() => this.scheduleNow(podId));
+  /** The Slot scheduler for one Machine (POD-3), after every change on it. */
+  schedule(machineId: string): Promise<void> {
+    return this.serial(() => this.scheduleNow(machineId));
   }
 
-  private async scheduleNow(podId: string): Promise<void> {
-    // Queued Runs wait for the Pod Host (spec M3 §6); its next hello schedules every Pod.
-    if (this.opts.hostConnected && !this.opts.hostConnected()) return;
-    const pod = await getPod(this.opts.db, podId);
-    if (!pod) return;
-    const runs = await runsOfPod(this.opts.db, podId, ["queued", "running", "waiting_for_human"]);
-    for (const runId of schedule(pod, runs)) {
+  private async scheduleNow(machineId: string): Promise<void> {
+    // Queued Runs wait for their Machine (spec M3 §6); its next hello schedules it.
+    const machine = await getMachine(this.opts.db, machineId);
+    if (!machine) return;
+    const runs = await runsOfMachine(this.opts.db, machineId, ["queued", "running", "waiting_for_human"]);
+    for (const runId of schedule(machine, runs)) {
       const moved = await moveRun(this.opts.db, runId, "queued", { state: "running", startedAt: this.now() });
       if (!moved) continue;
       this.opts.live.runChanged(runId);
@@ -119,12 +114,12 @@ export class RunEngine {
     }
     // A login check right before each Run's first Node (POD-5); its answer
     // prepares the Workspace of every Run still waiting for it.
-    if (runs.length > 0 && (await this.waitingForLogins(podId)).length > 0) this.opts.link.send("pod.checkLogins", { podId });
+    if (runs.length > 0 && (await this.waitingForLogins(machineId)).length > 0) this.opts.links.send(machineId, "machine.checkLogins", {});
   }
 
   /** Real Runs waiting for their login check: new ones, and retried ones (spec M3 §4). */
-  private async waitingForLogins(podId: string) {
-    return (await runsOfPod(this.opts.db, podId, ["running"])).filter(
+  private async waitingForLogins(machineId: string) {
+    return (await runsOfMachine(this.opts.db, machineId, ["running"])).filter(
       (r) => r.mode === "real" && (r.branch === null || (r.pendingRetry !== null && !r.pendingRetry.loginsChecked)),
     );
   }
@@ -133,19 +128,19 @@ export class RunEngine {
    * The web app cancelled a Run (RUN-8): it already ended the Run and its
    * Attempts, so only kill what still executes, then free the Slot.
    */
-  cancelled({ podId, runId, attemptIds }: { podId: string; runId: string; attemptIds: readonly string[] }): Promise<void> {
+  cancelled({ machineId, runId, attemptIds }: { machineId: string; runId: string; attemptIds: readonly string[] }): Promise<void> {
     return this.serial(async () => {
-      for (const attemptId of attemptIds) this.opts.link.send("node.kill", { attemptId });
-      await this.ended(runId, podId);
+      for (const attemptId of attemptIds) this.opts.links.send(machineId, "node.kill", { attemptId });
+      await this.ended(runId, machineId);
     });
   }
 
-  /** After a `pod.logins`: fail or prepare the Runs that waited for it. */
-  loginsChecked(pod: Pod): Promise<void> {
+  /** After a `machine.logins`: fail or prepare the Runs that waited for it. */
+  loginsChecked(machine: Machine): Promise<void> {
     return this.serial(async () => {
-      for (const run of await this.waitingForLogins(pod.id)) {
-        if (!pod.claudeLoggedIn) await this.fail(run.id, "Claude Code not logged in");
-        else if (!pod.ghLoggedIn) await this.fail(run.id, "gh not logged in");
+      for (const run of await this.waitingForLogins(machine.id)) {
+        if (!machine.claudeLoggedIn) await this.fail(run.id, "Claude Code not logged in");
+        else if (!machine.ghLoggedIn) await this.fail(run.id, "gh not logged in");
         else if (run.pendingRetry) {
           // A retried Run keeps its worktree (RUN-7); one that never got it prepares it now.
           await markRetryLoginsChecked(this.opts.db, run.id);
@@ -158,13 +153,12 @@ export class RunEngine {
 
   private async prepare(runId: string): Promise<void> {
     const ctx = await getRunContext(this.opts.db, runId);
-    // Only an ended Run can have lost its Pod (POD-7); nothing drives it any more.
-    if (!ctx?.run.podId) return;
+    // Only an ended Run can have lost its Machine; nothing drives it any more.
+    if (!ctx?.run.machineId) return;
     const branch = branchName(ctx.ticket.number, ctx.ticket.title, runId);
     await updateRun(this.opts.db, runId, { branch });
-    this.opts.link.send("workspace.prepare", {
+    this.opts.links.send(ctx.run.machineId, "workspace.prepare", {
       runId,
-      podId: ctx.run.podId,
       owner: ctx.project.owner,
       repo: ctx.project.repo,
       baseBranch: ctx.project.baseBranch,
@@ -190,7 +184,8 @@ export class RunEngine {
    */
   private async advance(runId: string): Promise<void> {
     const ctx = await getRunContext(this.opts.db, runId);
-    if (!ctx?.run.podId || ctx.run.state !== "running") return;
+    const machineId = ctx?.run.machineId;
+    if (!ctx || !machineId || ctx.run.state !== "running") return;
     const all = await attemptsOfRun(this.opts.db, runId);
     const attempts = all.filter((a) => !a.superseded);
     if (attempts.some((a) => a.state === "running" || a.state === "waiting_for_human")) return;
@@ -198,7 +193,7 @@ export class RunEngine {
     const next = nextNode(snapshotFlow(ctx.snapshot), views);
 
     if (next === "done") {
-      if (await moveRun(this.opts.db, runId, "running", { state: "succeeded", endedAt: this.now() })) await this.ended(runId, ctx.run.podId);
+      if (await moveRun(this.opts.db, runId, "running", { state: "succeeded", endedAt: this.now() })) await this.ended(runId, machineId);
       return;
     }
 
@@ -235,7 +230,7 @@ export class RunEngine {
     if (ctx.run.mode === "dry") return this.simulate(runId, node, attempt.id);
 
     const retryContext = attempt.retryContext as RetryContext | null;
-    const base = { attemptId: attempt.id, runId, podId: ctx.run.podId, worktreePath: ctx.run.worktreePath ?? "" };
+    const base = { attemptId: attempt.id, runId, worktreePath: ctx.run.worktreePath ?? "" };
     if (node.kind === "agent" || node.kind === "grill") {
       const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs);
       const prompt = buildAgentPrompt({
@@ -247,12 +242,12 @@ export class RunEngine {
         grill: node.kind === "grill",
         retryContext,
       });
-      this.opts.link.send("node.run", { ...base, kind: "agent", prompt, env: this.agentEnv(node) });
+      this.opts.links.send(machineId, "node.run", { ...base, kind: "agent", prompt, env: this.agentEnv(node) });
     } else {
       const env = this.commandEnv(ctx, inputs);
       // The Host Agent turns it into $CLAUDERON_RETRY_CONTEXT_FILE (spec M3 §4).
       if (retryContext) env.CLAUDERON_RETRY_CONTEXT = renderRetryContext(retryContext);
-      this.opts.link.send("node.run", { ...base, kind: "command", command: node.command ?? "true", env });
+      this.opts.links.send(machineId, "node.run", { ...base, kind: "command", command: node.command ?? "true", env });
     }
   }
 
@@ -269,7 +264,8 @@ export class RunEngine {
   resume(runId: string): Promise<void> {
     return this.serial(async () => {
       const ctx = await getRunContext(this.opts.db, runId);
-      if (!ctx?.run.podId || ctx.run.state !== "running") return;
+      const machineId = ctx?.run.machineId;
+      if (!ctx || !machineId || ctx.run.state !== "running") return;
       const attempt = (await attemptsOfRun(this.opts.db, runId)).find((a) => !a.superseded && a.state === "running");
       if (!attempt) return this.advance(runId);
       const node = ctx.snapshot.nodes.find((n) => n.id === attempt.flowNodeId);
@@ -283,10 +279,9 @@ export class RunEngine {
       }
       const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs).map((o) => o.name);
       const answers = (round.response as { answers?: GrillAnswers } | null)?.answers ?? {};
-      this.opts.link.send("node.run", {
+      this.opts.links.send(machineId, "node.run", {
         attemptId: attempt.id,
         runId,
-        podId: ctx.run.podId,
         worktreePath: ctx.run.worktreePath ?? "",
         kind: "agent",
         prompt: buildGrillAnswerPrompt((round.questions ?? []) as GrillQuestion[], answers, outputs),
@@ -425,16 +420,16 @@ export class RunEngine {
 
   private async fail(runId: string, reason: string): Promise<void> {
     const ctx = await getRunContext(this.opts.db, runId);
-    if (!ctx?.run.podId) return;
+    if (!ctx?.run.machineId) return;
     if (await moveRun(this.opts.db, runId, "running", { state: "failed", endedAt: this.now(), failureReason: reason })) {
-      await this.ended(runId, ctx.run.podId);
+      await this.ended(runId, ctx.run.machineId);
     }
   }
 
   /** A Run ended: free its Slot for the next one (RUN-16, POD-3). */
-  private async ended(runId: string, podId: string): Promise<void> {
+  private async ended(runId: string, machineId: string): Promise<void> {
     this.opts.live.runChanged(runId);
-    await this.scheduleNow(podId);
+    await this.scheduleNow(machineId);
   }
 
   /**
@@ -443,52 +438,58 @@ export class RunEngine {
    */
   private async interrupt(runIds: readonly string[], reason: string): Promise<string[]> {
     const killed: string[] = [];
-    const pods = new Set<string>();
+    const machines = new Set<string>();
     for (const r of await runningRuns(this.opts.db)) {
       if (!runIds.includes(r.id)) continue;
       const attempts = await interruptRun(this.opts.db, r.id, reason, this.now());
       if (!attempts) continue;
       killed.push(...attempts);
-      if (r.podId) pods.add(r.podId);
+      if (r.machineId) machines.add(r.machineId);
       this.opts.live.runChanged(r.id);
     }
-    // Their Slots are free now; Queued Runs start if the Pod Host is there.
-    for (const podId of pods) await this.scheduleNow(podId);
+    // Their Slots are free now; Queued Runs start if their Machine is there.
+    for (const machineId of machines) await this.scheduleNow(machineId);
     return killed;
   }
 
-  /** No heartbeat for 30 s (spec M3 §6): every Real Running Run becomes Interrupted. */
-  hostLost(reason: string, includeDryRuns = false): Promise<void> {
+  /**
+   * The Gateway (re)started (spec M3 §6): Dry-run Nodes were simulated in the
+   * process that stopped, so their Runs are Interrupted; a Dry-run between
+   * Nodes goes on. Real Runs wait for their Machine's hello.
+   */
+  booted(): Promise<void> {
     return this.serial(async () => {
-      const runs = (await runningRuns(this.opts.db)).filter((r) => r.mode === "real" || includeDryRuns);
-      await this.interrupt(runs.map((r) => r.id), reason);
+      const dry = (await runningRuns(this.opts.db)).filter((r) => r.mode === "dry");
+      await this.interrupt(dry.filter((r) => r.attemptIds.length > 0).map((r) => r.id), "Lost while the Gateway restarted");
+      for (const r of dry) if (r.attemptIds.length === 0) await this.advance(r.id);
     });
   }
 
-  /** A Pod stopped or crashed (spec M3 §6): its Running Runs become Interrupted. */
-  podDown(podId: string, reason: string): Promise<void> {
+  /**
+   * A Machine is gone (spec M3 §6, ADR 0006): no heartbeat for 30 s, or it
+   * was paired anew. Its Real Running Runs become Interrupted.
+   */
+  machineLost(machineId: string, reason: string): Promise<void> {
     return this.serial(async () => {
-      const runs = await runningRuns(this.opts.db, podId);
+      const runs = (await runningRuns(this.opts.db, machineId)).filter((r) => r.mode === "real");
       await this.interrupt(runs.map((r) => r.id), reason);
     });
   }
 
   /**
-   * The Host Agent said hello (spec M3 §6). After a Host Agent restart or a
-   * Gateway restart, Running Runs whose Attempts are not live can never
-   * report and become Interrupted. Then every live Attempt that is not
+   * A Machine's Agent said hello (spec M3 §6). After an Agent restart or a
+   * Gateway restart, its Real Running Runs whose Attempts are not live can
+   * never report and become Interrupted. Then every live Attempt that is not
    * running in the database is killed, and Runs that lost a command go on.
    */
-  hostBack(back: HostBack): Promise<void> {
+  machineBack(machineId: string, back: MachineBack): Promise<void> {
     return this.serial(async () => {
       const live = new Set(back.liveAttempts);
       const lost: string[] = [];
       if (back.checkLive) {
-        for (const r of await runningRuns(this.opts.db)) {
-          if (r.mode === "dry") {
-            // Simulated in this Gateway: only a Gateway restart loses them.
-            if (back.gatewayRestarted && r.attemptIds.length > 0) lost.push(r.id);
-          } else if (r.attemptIds.length > 0 ? r.attemptIds.some((id) => !live.has(id)) : r.branch !== null && r.worktreePath === null) {
+        for (const r of await runningRuns(this.opts.db, machineId)) {
+          if (r.mode === "dry") continue;
+          if (r.attemptIds.length > 0 ? r.attemptIds.some((id) => !live.has(id)) : r.branch !== null && r.worktreePath === null) {
             // A Node, or a Workspace being prepared, that can no longer report.
             lost.push(r.id);
           }
@@ -497,22 +498,20 @@ export class RunEngine {
       const interrupted = await this.interrupt(lost, back.reason);
       const running = await runningAttemptIds(this.opts.db, back.liveAttempts);
       for (const attemptId of new Set([...back.liveAttempts.filter((id) => !running.has(id)), ...interrupted])) {
-        this.opts.link.send("node.kill", { attemptId });
+        this.opts.links.send(machineId, "node.kill", { attemptId });
       }
-      await this.reconcile();
+      await this.reconcile(machineId);
     });
   }
 
-  /** Re-drives Runs after a reconnect: a Run with no Node in flight goes on; every Pod schedules. */
-  private async reconcile(): Promise<void> {
-    const pods = new Set(await podsWithQueuedRuns(this.opts.db));
-    for (const r of await runningRuns(this.opts.db)) {
-      if (r.podId) pods.add(r.podId);
+  /** Re-drives a Machine's Runs after a reconnect: a Run with no Node in flight goes on, then it schedules. */
+  private async reconcile(machineId: string): Promise<void> {
+    for (const r of await runningRuns(this.opts.db, machineId)) {
       if (r.attemptIds.length > 0) continue;
       const waitingForLogins = r.mode === "real" && (r.branch === null || (r.pendingRetry !== null && !r.pendingRetry.loginsChecked));
       if (r.mode === "dry" || (!waitingForLogins && r.worktreePath !== null)) await this.advance(r.id);
     }
-    for (const podId of pods) await this.scheduleNow(podId);
+    await this.scheduleNow(machineId);
   }
 
   private hide(text: string): string {

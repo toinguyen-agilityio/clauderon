@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { controlMessage, parseEnvelope, serialize, type Envelope, type LinkSocket } from "@clauderon/protocol";
+import { CloseCode, controlMessage, parseEnvelope, serialize, type Envelope, type LinkSocket } from "@clauderon/protocol";
 import { FakeClock, memorySocketPair, settle, type MemorySocket } from "@clauderon/testing";
-import { HostAgent, type Connector, type HostFactsReader, type StateStore } from "../src/agent";
+import { Agent, type Connector, type MachineFactsReader, type StateStore } from "../src/agent";
 
-const facts: HostFactsReader = async () => ({ arch: "arm64", cpus: 10, memoryMb: 32768, diskGb: 994, dockerRunning: true });
+const facts: MachineFactsReader = async () => ({ os: "darwin", arch: "arm64", hostname: "ann-mac", cpus: 10, memoryMb: 32768, diskGb: 994 });
 
 class MemoryState implements StateStore {
   constructor(public lastReceivedId = 0) {}
@@ -24,8 +24,8 @@ class FakeGateway {
 
   connector: Connector = async (url, headers) => {
     this.attempts++;
-    expect(url).toBe("ws://gateway.test/host-agent");
-    expect(headers.authorization).toBe("Bearer s3cret");
+    expect(url).toBe("ws://gateway.test/agent");
+    expect(headers.authorization).toBe("Bearer machine-token");
     if (this.refuse) throw new Error("connection refused");
     const [agentSide, gatewaySide] = memorySocketPair();
     const inbox: Envelope[] = [];
@@ -47,22 +47,22 @@ class FakeGateway {
   }
 
   welcome(lastReceivedId = 0) {
-    this.socket.send(serialize(controlMessage("welcome", { lastReceivedId, podImage: "img" })));
+    this.socket.send(serialize(controlMessage("welcome", { lastReceivedId })));
   }
 }
 
 let clock: FakeClock;
 let gateway: FakeGateway;
 let state: MemoryState;
-let agent: HostAgent;
+let agent: Agent;
 
 beforeEach(() => {
   clock = new FakeClock();
   gateway = new FakeGateway();
   state = new MemoryState(7);
-  agent = new HostAgent({
+  agent = new Agent({
     url: "ws://gateway.test",
-    secret: "s3cret",
+    token: "machine-token",
     clock,
     connect: gateway.connector,
     facts,
@@ -73,8 +73,8 @@ beforeEach(() => {
   });
 });
 
-describe("HostAgent", () => {
-  it("sends hello with host facts and the stored last received id", async () => {
+describe("Agent", () => {
+  it("sends hello with the Machine's facts and the stored last received id", async () => {
     await agent.start();
     await settle();
     expect(gateway.received[0]).toEqual({
@@ -83,11 +83,12 @@ describe("HostAgent", () => {
       payload: {
         agentVersion: "0.1.0",
         processId: "proc-1",
+        os: "darwin",
         arch: "arm64",
+        hostname: "ann-mac",
         cpus: 10,
         memoryMb: 32768,
         diskGb: 994,
-        dockerRunning: true,
         lastReceivedId: 7,
         liveAttempts: [],
       },
@@ -105,18 +106,18 @@ describe("HostAgent", () => {
 
   it("delivers a numbered message once, acknowledges it and stores its id", async () => {
     const got: string[] = [];
-    agent.on("pod.checkLogins", (p) => {
-      got.push(p.podId);
+    agent.on("node.kill", (p) => {
+      got.push(p.attemptId);
     });
     await agent.start();
     await settle();
     gateway.welcome();
-    const msg = { id: 8, type: "pod.checkLogins", payload: { podId: "pod-1" } };
+    const msg = { id: 8, type: "node.kill", payload: { attemptId: "att-1" } };
     gateway.socket.send(JSON.stringify(msg));
     gateway.socket.send(JSON.stringify(msg));
     await settle();
 
-    expect(got).toEqual(["pod-1"]);
+    expect(got).toEqual(["att-1"]);
     expect(state.lastReceivedId).toBe(8);
     expect(gateway.received.filter((e) => e.type === "ack").map((e) => e.payload)).toEqual([{ upTo: 8 }, { upTo: 8 }]);
   });
@@ -125,7 +126,7 @@ describe("HostAgent", () => {
     await agent.start();
     await settle();
     gateway.welcome();
-    gateway.socket.send(JSON.stringify({ id: 8, type: "pod.teleport", payload: {} }));
+    gateway.socket.send(JSON.stringify({ id: 8, type: "machine.teleport", payload: {} }));
     await settle();
     expect(gateway.received.at(-1)).toEqual({ id: 0, type: "ack", payload: { upTo: 8 } });
   });
@@ -135,8 +136,8 @@ describe("HostAgent", () => {
     await settle();
     gateway.welcome();
     await settle();
-    agent.send("pod.status", { podId: "a", status: "running", containerId: null, imageDigest: null });
-    agent.send("pod.status", { podId: "b", status: "running", containerId: null, imageDigest: null });
+    agent.send("workspace.ready", { runId: "a", worktreePath: "/w/a" });
+    agent.send("workspace.ready", { runId: "b", worktreePath: "/w/b" });
     gateway.socket.cut();
     await settle();
 
@@ -187,10 +188,10 @@ describe("HostAgent", () => {
     expect(gateway.inbox.flat().filter((e) => e.type === "heartbeat").length).toBe(before);
   });
 
-  it("RUN-12: hello lists running Attempts and those with an unacknowledged result; heartbeats carry Pod states", async () => {
-    agent = new HostAgent({
+  it("RUN-12: hello lists running Attempts and those with an unacknowledged result", async () => {
+    agent = new Agent({
       url: "ws://gateway.test",
-      secret: "s3cret",
+      token: "machine-token",
       clock,
       connect: gateway.connector,
       facts,
@@ -199,15 +200,12 @@ describe("HostAgent", () => {
       version: "0.1.0",
       log: () => {},
       runningAttempts: () => ["att-running"],
-      podStatuses: async () => [{ podId: "pod-1", status: "stopped" }],
     });
     await agent.start();
     await settle();
     gateway.welcome();
     await settle();
     agent.send("node.result", { attemptId: "att-done", exitCode: 0 });
-    await clock.advance(10_000);
-    expect(gateway.received.find((e) => e.type === "heartbeat")!.payload).toMatchObject({ pods: [{ podId: "pod-1", status: "stopped" }] });
 
     gateway.socket.cut();
     await settle();
@@ -217,9 +215,9 @@ describe("HostAgent", () => {
 
   it("RUN-12: runs onWelcome after every welcome, e.g. the orphan sweep", async () => {
     let sweeps = 0;
-    agent = new HostAgent({
+    agent = new Agent({
       url: "ws://gateway.test",
-      secret: "s3cret",
+      token: "machine-token",
       clock,
       connect: gateway.connector,
       facts,
@@ -241,5 +239,31 @@ describe("HostAgent", () => {
     gateway.welcome();
     await settle();
     expect(sweeps).toBe(2);
+  });
+
+  it("ADR 0006: a refused or replaced token stops the Agent instead of reconnecting", async () => {
+    for (const code of [CloseCode.Unauthorized, CloseCode.Revoked]) {
+      const unpaired: number[] = [];
+      gateway = new FakeGateway();
+      agent = new Agent({
+        url: "ws://gateway.test",
+        token: "machine-token",
+        clock,
+        connect: gateway.connector,
+        facts,
+        state,
+        processId: "proc-1",
+        version: "0.1.0",
+        log: () => {},
+        onUnpaired: (c) => void unpaired.push(c),
+      });
+      await agent.start();
+      await settle();
+      gateway.socket.close(code);
+      await settle();
+      await clock.advance(60_000);
+      expect(unpaired).toEqual([code]);
+      expect(gateway.attempts).toBe(1);
+    }
   });
 });

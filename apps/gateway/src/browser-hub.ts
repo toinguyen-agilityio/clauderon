@@ -15,7 +15,7 @@ export type BrowserHubOptions = {
 /**
  * Browser sockets, grouped by Member. Each socket opens with a ticket from
  * the web app; the session behind it is loaded and the allowlist re-checked.
- * `revoke` is the hook of spec M0 §7.1: terminals and live log sockets are
+ * `revoke` is the hook of spec M0 §7.1: live log sockets are
  * registered here too, so removing an email closes them at once (A7).
  */
 export class BrowserHub {

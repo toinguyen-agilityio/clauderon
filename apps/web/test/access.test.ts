@@ -2,7 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { addAllowlistEntry, schema, signIn, sql, type Db, type Member } from "@clauderon/db";
 import { verifyGatewayTicket } from "@clauderon/protocol";
 import { FakeClock, createTestDatabase, type TestDatabase } from "@clauderon/testing";
-import { addToAllowlist, checkGoogleSignIn, removeFromAllowlist, viewAllowlist, type AccessDeps } from "../src/server/access";
+import { addToAllowlist, checkGoogleSignIn, type AccessDeps } from "../src/server/access";
+import type { AppDeps } from "../src/server/deps";
+import { removeMember, viewMembers } from "../src/server/members";
 import { clauderonAdapter } from "../src/server/auth-adapter";
 import { gatewayTicket } from "../src/server/gateway-ticket";
 
@@ -85,21 +87,25 @@ describe("Auth.js adapter", () => {
   });
 });
 
-describe("Allowlist page (T0-12)", () => {
-  it("a non-Operator gets 404 and cannot add or remove", async () => {
+// removeMember also removes a Machine, which needs the Gateway command seam.
+const app = () => ({ ...deps, command: async () => {} }) as unknown as AppDeps;
+
+describe("Members page (T0-12)", () => {
+  it("a non-Operator reads the team but cannot add or remove", async () => {
     const ann = await member("ann@example.com");
-    expect(await viewAllowlist(deps, ann)).toBe("not-found");
+    expect(await viewMembers(app(), ann)).toMatchObject({ canManage: false });
     expect(await addToAllowlist(deps, ann, "bob@example.com")).toBe("not-found");
-    expect(await removeFromAllowlist(deps, ann, "ann@example.com")).toBe("not-found");
+    expect(await removeMember(app(), ann, "ann@example.com")).toBe("not-found");
   });
 
   it("the Operator sees the list; add and remove write audit entries", async () => {
     const op = await member("op@example.com");
     expect(await addToAllowlist(deps, op, "bob@example.com")).toEqual({ ok: true, email: "bob@example.com" });
-    expect(await viewAllowlist(deps, op)).toEqual({
-      rows: [expect.objectContaining({ email: "op@example.com", fromConfiguration: true }), expect.objectContaining({ email: "bob@example.com" })],
+    expect(await viewMembers(app(), op)).toMatchObject({
+      canManage: true,
+      rows: [expect.objectContaining({ email: "op@example.com", operator: true }), expect.objectContaining({ email: "bob@example.com", operator: false })],
     });
-    expect(await removeFromAllowlist(deps, op, "bob@example.com")).toEqual({ ok: true });
+    expect(await removeMember(app(), op, "bob@example.com")).toEqual({ ok: true });
     const actions = (await db.select().from(schema.auditEntry)).map((a) => a.action).sort();
     expect(actions).toEqual(["allowlist.add", "allowlist.remove"]);
   });
@@ -114,7 +120,7 @@ describe("Removing an email (T0-11)", () => {
     expect(before.status).toBe(200);
     if (before.status === 200) expect(verifyGatewayTicket(before.ticket, clock.now(), "secret")).toEqual(expect.any(String));
 
-    await removeFromAllowlist(deps, op, "ann@example.com");
+    await removeMember(app(), op, "ann@example.com");
     expect(revoked).toEqual(["ann@example.com"]);
     expect(await gatewayTicket(deps, cookies(token), "secret")).toEqual({ status: 401, clearCookies: true });
   });

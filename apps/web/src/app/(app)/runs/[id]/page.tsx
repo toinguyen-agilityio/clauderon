@@ -7,7 +7,6 @@ import { Icon } from "../../../../components/icons";
 import { StatePill } from "../../../../components/state-pill";
 import { viewRun } from "../../../../server/runs";
 import { deps, gatewayUrl, requireMember } from "../../../../server/runtime";
-import { ConnectLogin } from "../../pods/connect-login";
 import { CancelRun } from "./cancel-run";
 import { RunLive } from "./run-live";
 
@@ -20,18 +19,18 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   if (run === "not-found") notFound();
   const r = run.run;
   const now = new Date();
-  const podOwner = run.podOwner ? (run.podOwner.name ?? run.podOwner.email) : null;
-  const podLabel = run.podName ?? `${podOwner}'s Pod`;
+  const machineOwner = run.machineOwner ? (run.machineOwner.name ?? run.machineOwner.email) : null;
+  const machineLabel = run.machineName ?? `${machineOwner}'s Machine`;
   const failedAt = run.timeline.find((n) => n.state === "failed" || n.state === "interrupted");
   const waitingAt = run.timeline.find((n) => n.openRequest);
   const runningAt = run.timeline.find((n) => n.state === "running");
   const active = isActive(r.state);
-  // A failed Agent Node may be out of Claude usage or logged out: its Pod's owner
-  // can sign in to another Claude account here, then Retry (the Pod page's login, POD-5).
+  // A failed Agent Node may be out of Claude usage or logged out: its Machine's
+  // owner can sign in to another Claude account on it, then Retry (POD-5).
   // Only when Claude Code itself failed (usage limit, logged out); not for
   // "no commit on the branch" or a missing result block.
   const claudeFailed = /^Claude Code exited/.test(r.failureReason ?? "");
-  const canSwitchClaude = r.state === "failed" && failedAt?.kind === "agent" && claudeFailed && run.podOwnerId === member.id && run.podStatus === "running";
+  const canSwitchClaude = r.state === "failed" && failedAt?.kind === "agent" && claudeFailed && run.machineOwnerId === member.id;
 
   return (
     <>
@@ -51,12 +50,12 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               <span className="faint">·</span>
               <span className="small">{run.snapshot.name}</span>
               <span className="faint">·</span>
-              {r.podId && podOwner ? (
-                <Link className="small" href={`/pods/${r.podId}`}>
-                  {podLabel}
+              {r.machineId && machineOwner ? (
+                <Link className="small" href={`/machines/${r.machineId}`}>
+                  {machineLabel}
                 </Link>
               ) : (
-                <span className="small faint">Pod removed</span>
+                <span className="small faint">Machine removed</span>
               )}
               <span className="faint">·</span>
               <span className="row" style={{ gap: 6 }}>
@@ -78,17 +77,11 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               <b>Failed{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
             </p>
             <p className="small">The Run stays Active and keeps its worktree, but frees its Slot. Pick a Node and use Retry from here, or Cancel it to end it for good.</p>
-            {canSwitchClaude && r.podId && (
-              <div className="stack" style={{ gap: 8, marginTop: 10 }} data-testid="switch-claude">
-                <span className="small muted">Out of Claude usage, or signed in to the wrong account? Sign in to another Claude account in your Pod, then Retry.</span>
-                <ConnectLogin
-                  gatewayUrl={gatewayUrl()}
-                  podId={r.podId}
-                  tool="claude"
-                  label="Switch Claude account"
-                  doneText="Signed in. Retry the Run from a Node below."
-                />
-              </div>
+            {canSwitchClaude && (
+              <p className="small muted" style={{ marginTop: 10 }} data-testid="switch-claude">
+                Out of Claude usage, or signed in to the wrong account? Run <span className="mono">claude</span> in your own terminal on your
+                Machine and sign in to another account, then Retry from a Node below.
+              </p>
             )}
           </div>
         </div>
@@ -117,16 +110,16 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
         <div className="banner" role="status">
           <div className="grow">
             <p>
-              <b>Queued on {podLabel}</b>
+              <b>Queued on {machineLabel}</b>
             </p>
-            <p className="small muted">Starts first-in, first-out when a Slot frees up and the Pod is running.</p>
+            <p className="small muted">Starts first-in, first-out when a Slot frees up and the Machine is online.</p>
           </div>
         </div>
       )}
       {/* A Dry-run needs no logins and no worktree, so it never gets a branch. */}
       {r.state === "running" && r.mode === "real" && !r.branch && (
         <div className="banner info" role="status">
-          <div className="grow small">Checking the Pod&apos;s logins and preparing the worktree…</div>
+          <div className="grow small">Checking the Machine&apos;s logins and preparing the worktree…</div>
         </div>
       )}
       {r.state === "cancelled" && (

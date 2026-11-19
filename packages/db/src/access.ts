@@ -203,6 +203,11 @@ export async function listenMemberRevoked(url: string, onRevoked: (email: string
   return () => client.end();
 }
 
+/** Every Member who ever signed in, allowed or not, for the Members page. */
+export async function listMembers(db: Db): Promise<Member[]> {
+  return db.select().from(member).orderBy(asc(member.email));
+}
+
 // Member lookups for the Auth.js adapter.
 
 export async function findMemberById(db: Db, id: string): Promise<Member | null> {

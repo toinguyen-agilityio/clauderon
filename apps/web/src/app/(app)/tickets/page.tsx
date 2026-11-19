@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getPodOfMember } from "@clauderon/db";
+import { getMachineOfMember } from "@clauderon/db";
 import { Icon } from "../../../components/icons";
 import { deps, requireMember } from "../../../server/runtime";
 import { viewTickets } from "../../../server/tickets";
@@ -14,9 +14,9 @@ type Search = { project?: string; q?: string; status?: string };
 export default async function TicketsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const member = await requireMember();
   const search = await searchParams;
-  const [{ projects, counts, total, rows }, pod, all] = await Promise.all([
+  const [{ projects, counts, total, rows }, machine, all] = await Promise.all([
     viewTickets(deps(), { projectId: search.project, q: search.q, status: search.status }),
-    getPodOfMember(deps().db, member.id),
+    getMachineOfMember(deps().db, member.id),
     viewTickets(deps(), {}),
   ]);
   const href = (change: Search) => {
@@ -39,14 +39,14 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
         </Link>
       </div>
 
-      {!(pod && pod.claudeLoggedIn && pod.ghLoggedIn) && (
+      {!(machine?.tokenHash && machine.claudeLoggedIn && machine.ghLoggedIn) && (
         <div className="banner wait">
           <div className="grow small">
-            <b>{pod ? "Log in to Claude Code and gh in your Pod" : "Create your Pod"} to start Runs.</b> Runs always run on your own Pod, with your own
-            accounts.
+            <b>{machine?.tokenHash ? "Log in to Claude Code and gh on your Machine" : "Pair your computer"} to start Runs.</b> Runs always run on your own
+            Machine, with your own accounts.
           </div>
-          <Link className="btn sm primary" href={pod && pod.status === "running" ? `/pods/${pod.id}/terminal` : "/pods"}>
-            {pod ? (pod.status === "running" ? "Open terminal" : "Open Pods") : "Create my Pod"}
+          <Link className="btn sm primary" href={machine?.tokenHash ? `/machines/${machine.id}` : "/machines"}>
+            {machine?.tokenHash ? "Open my Machine" : "Pair my computer"}
           </Link>
         </div>
       )}

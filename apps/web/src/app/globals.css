@@ -235,7 +235,7 @@ a.stat.on { border-color: var(--accent-text); }
 .pager { display: flex; gap: 8px; justify-content: flex-end; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
 
 /* dialogs */
-dialog.modal { text-align: left; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg); box-shadow: var(--shadow); width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
+dialog.modal { text-align: left; white-space: normal; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg); box-shadow: var(--shadow); width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
 dialog.modal.wide { width: min(860px, calc(100vw - 32px)); }
 dialog.modal::backdrop { background: var(--scrim); }
 .modal-in { display: flex; flex-direction: column; max-height: calc(100vh - 34px); }
@@ -950,4 +950,72 @@ dialog.modal.lib-dialog { width: min(980px, calc(100vw - 32px)); }
   .fe-notices { top: 108px; }
   .fe-problems { top: 108px; }
   .fe-shortcuts { bottom: 60px; }
+}
+
+/* Projects: one list of repositories under their shared owner, Enable as the last row */
+.proj-owner { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.proj-owner .avatar { width: 24px; height: 24px; font-size: 11px; }
+.proj-owner .faint { margin-left: auto; }
+.proj-rows { list-style: none; margin: 0; padding: 0; }
+.proj { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(190px, 1fr) minmax(180px, 1fr) auto; gap: 8px 24px; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--line); transition: background 250ms var(--ease); }
+.proj:hover { background: color-mix(in srgb, var(--hover) 55%, transparent); }
+.proj.has-err { box-shadow: inset 3px 0 0 var(--fail); }
+.proj-id { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.proj-name { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; color: var(--heading); overflow-wrap: anywhere; }
+.proj-name svg { width: 13px; height: 13px; flex: none; color: var(--fg3); opacity: 0; transition: opacity 250ms var(--ease); }
+.proj-name:hover, .proj-name:focus-visible { text-decoration: none; }
+.proj-name:hover svg, .proj-name:focus-visible svg { opacity: 1; }
+.proj-counts { display: flex; gap: 22px; }
+.proj-count { display: flex; flex-direction: column; color: var(--fg2); font-size: 12.5px; line-height: 1.3; }
+.proj-count b { font-family: var(--font-display); font-size: 1.35rem; font-weight: 600; color: var(--heading); font-variant-numeric: tabular-nums; }
+a.proj-count:hover { text-decoration: none; }
+a.proj-count:hover span { color: var(--accent-text); text-decoration: underline; }
+.proj-count:not(.live):not(a) b { color: var(--fg3); }
+.proj-count.live b { color: var(--run); }
+.proj-sync { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.proj-actions { justify-self: end; }
+.proj-err { grid-column: 1 / -1; padding: 8px 12px; border-radius: var(--r-sm); background: var(--fail-bg); color: var(--fail); font-size: 12.5px; overflow-wrap: anywhere; }
+.proj-err .faint { color: var(--fg2); }
+.proj-add { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; padding: 18px 20px 20px; background: var(--sunk); border-radius: 0 0 var(--r) var(--r); }
+.proj-add-head { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; }
+.proj-add-head h2 { font-size: 1rem; }
+.proj-add-repo { width: 280px; }
+.proj-add-branch { width: 160px; }
+.proj-add .err-text { flex-basis: 100%; }
+.proj-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 40px; padding: 0 4px; }
+.proj-notes h2 { font-size: 0.95rem; }
+.proj-notes ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 860px) {
+  .proj { grid-template-columns: minmax(0, 1fr) auto; padding: 16px; }
+  .proj-id { grid-column: 1; grid-row: 1; }
+  .proj-actions { grid-column: 2; grid-row: 1; align-self: start; }
+  .proj-counts, .proj-sync { grid-column: 1 / -1; }
+  .proj-sync { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+  .proj-owner, .proj-add { padding-left: 16px; padding-right: 16px; }
+  .proj-add-repo, .proj-add-branch { width: 100%; }
+  .proj-add .btn { width: 100%; justify-content: center; }
+  .proj-notes { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proj, .proj-name svg { transition: none; }
+}
+
+/* Members page */
+.members-add { width: 240px; }
+/* Keeps the add form on the right even when a password manager injects an element beside it. */
+.members-head > h2 { margin-right: auto; }
+.members-who { display: flex; align-items: center; gap: 10px; min-width: 240px; }
+.members-who .avatar { width: 32px; height: 32px; }
+.members-id { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.members-name { font-weight: 600; }
+.members-id .mono { font-size: 12px; overflow-wrap: anywhere; }
+.members-machine { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.members-machine-link:hover { text-decoration: none; }
+.members-runs { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid color-mix(in srgb, var(--run) 30%, transparent); background: var(--run-bg); color: var(--run); font-weight: 600; font-size: 12.5px; font-variant-numeric: tabular-nums; transition: background 250ms var(--ease), border-color 250ms var(--ease); }
+.members-runs svg { width: 14px; height: 14px; flex: none; }
+.members-runs:hover { text-decoration: none; background: color-mix(in srgb, var(--run) 20%, transparent); border-color: var(--run); }
+.members-actions { justify-content: flex-end; flex-wrap: nowrap; }
+.tbl tr.members-removed td { background: color-mix(in srgb, var(--fail-bg) 45%, transparent); }
+@media (max-width: 860px) {
+  .members-add { width: 100%; }
 }

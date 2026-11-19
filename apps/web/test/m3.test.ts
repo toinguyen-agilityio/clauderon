@@ -5,7 +5,9 @@ import {
   createAttempt,
   flowLocks,
   getRun,
-  podRunCounts,
+  createPairing,
+  hashToken,
+  machineRunCounts,
   schema,
   sql,
   type Db,
@@ -16,17 +18,18 @@ import {
   FakeGitHub,
   createTestDatabase,
   memberRow,
-  podRow,
+  machineRow,
   projectRow,
   startSampleBatch,
   ticketRow,
   type TestDatabase,
 } from "@clauderon/testing";
-import { addToAllowlist, removeFromAllowlist } from "../src/server/access";
+import { addToAllowlist } from "../src/server/access";
 import type { AppDeps } from "../src/server/deps";
 import { cloneMyFlow, deleteMyFlow, editorData, saveMyFlow } from "../src/server/flows";
 import { createMyNode, deleteMyNode, updateMyNode } from "../src/server/library";
-import { createMyPod, podAction, removePod } from "../src/server/pods";
+import { approveMyPairing, removeMachine, setMyMachineSettings, unpairMyMachine } from "../src/server/machines";
+import { removeMember } from "../src/server/members";
 import { cancelRunAs, needsYouCount, respondAs, retryAs, viewAudit, viewNeedsYou, viewRun } from "../src/server/runs";
 import { startRuns } from "../src/server/start";
 
@@ -44,7 +47,7 @@ beforeAll(async () => {
 });
 afterAll(() => test.drop());
 beforeEach(async () => {
-  await db.execute(sql`truncate member, pod, project, ticket, batch, run, attempt, output, log_chunk, human_request, audit_entry, pod_host, flow, node cascade`);
+  await db.execute(sql`truncate member, machine, pairing, project, ticket, batch, run, attempt, output, log_chunk, human_request, audit_entry, flow, node cascade`);
   commands = [];
   clock = new FakeClock();
   deps = {
@@ -54,8 +57,6 @@ beforeEach(async () => {
     publish: () => {},
     command: async (c) => void commands.push(c),
     github: new FakeGitHub(),
-    podImage: "ghcr.io/acme/clauderon-pod:test",
-    limitCeiling: { slots: 4, cpus: 4, memoryMb: 8192 },
   };
 });
 
@@ -64,16 +65,16 @@ const audit = async () => db.select().from(schema.auditEntry);
 async function fixture(ticketCount = 1, slots = 2) {
   const ann = await memberRow(db, "ann@example.com", "Ann");
   const bo = await memberRow(db, "bo@example.com", "Bo");
-  const pod = await podRow(db, ann.id, { slots });
+  const machine = await machineRow(db, ann.id, { slots });
   const project = await projectRow(db);
   const tickets = [];
   for (let n = 1; n <= ticketCount; n++) tickets.push(await ticketRow(db, project.id, n, { title: `Ticket ${n}` }));
-  return { ann, bo, pod, project, tickets };
+  return { ann, bo, machine, project, tickets };
 }
 
 /** A queued Run of *Plan and deliver*. */
 async function planRun(f: Awaited<ReturnType<typeof fixture>>, ticketIndex = 0) {
-  const started = await startSampleBatch(db, f.ann, f.pod.id, [f.tickets[ticketIndex]!.id], clock.now(), "", "real", "plan-and-deliver");
+  const started = await startSampleBatch(db, f.ann, f.machine.id, [f.tickets[ticketIndex]!.id], clock.now(), "", "real", "plan-and-deliver");
   if (!started.ok) throw new Error("start failed");
   const runId = started.runIds[0]!;
   const snapshot = (await getRun(db, runId))!.flowSnapshot as FlowSnapshot;
@@ -109,7 +110,7 @@ describe("Approve and Reject (spec M3 §2.1)", () => {
     expect(a).toMatchObject({ state: "succeeded" });
     const outputs = await db.select().from(schema.output);
     expect(outputs).toEqual([expect.objectContaining({ attemptId: attempt.id, name: "plan", type: "plan", value: "1. Fix totals" })]);
-    expect(commands).toEqual([{ type: "run.resume", podId: f.pod.id, runId }]);
+    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }]);
     expect((await audit()).find((e) => e.action === "run.approve")).toMatchObject({ actorEmail: "bo@example.com", subjectId: runId });
   });
 
@@ -117,15 +118,15 @@ describe("Approve and Reject (spec M3 §2.1)", () => {
     const f = await fixture();
     const { runId, nodeId } = await planRun(f);
     const { request } = await waitAt(runId, nodeId("Approve a plan"), "approve");
-    expect((await podRunCounts(db, [f.pod.id])).get(f.pod.id)!.inUse).toBe(1);
+    expect((await machineRunCounts(db, [f.machine.id])).get(f.machine.id)!.inUse).toBe(1);
 
     expect(await respondAs(deps, f.bo, request.id, { decision: "reject", feedback: " " })).toEqual({ ok: false, error: "Reject needs feedback for the next try." });
     expect(await respondAs(deps, f.bo, request.id, { decision: "reject", feedback: "Too broad." })).toEqual({ ok: true });
     expect(await getRun(db, runId)).toMatchObject({ state: "failed", failureReason: "Rejected at “Approve a plan”: Too broad." });
     const [stored] = await db.select().from(schema.humanRequest);
     expect(stored).toMatchObject({ response: { decision: "reject", feedback: "Too broad." }, respondedByEmail: "bo@example.com" });
-    expect(commands).toEqual([{ type: "schedule", podId: f.pod.id }]);
-    expect((await podRunCounts(db, [f.pod.id])).get(f.pod.id)!.inUse).toBe(0);
+    expect(commands).toEqual([{ type: "schedule", machineId: f.machine.id }]);
+    expect((await machineRunCounts(db, [f.machine.id])).get(f.machine.id)!.inUse).toBe(0);
   });
 
   it("an Approve request refuses answers, and a Grill request refuses Approve", async () => {
@@ -150,14 +151,14 @@ describe("Grill answers (spec M3 §2.2)", () => {
     expect((await getRun(db, runId))!.state).toBe("running");
     const [a] = await db.select().from(schema.attempt).where(sql`${schema.attempt.id} = ${attempt.id}`);
     expect(a).toMatchObject({ state: "running", claudeSessionId: "sess-1" });
-    expect(commands).toEqual([{ type: "run.resume", podId: f.pod.id, runId }]);
+    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }]);
     expect((await audit()).map((e) => e.action)).toContain("run.answer");
 
     // The Run page shows the round, its answers and who answered.
     const view = await viewRun(deps, runId);
     if (view === "not-found") throw new Error("no run");
-    // Who owns the Pod and its status: the Run page offers "Switch Claude account" to its owner.
-    expect(view).toMatchObject({ podOwnerId: f.ann.id, podStatus: f.pod.status });
+    // Who owns the Machine: the Run page tells its owner how to switch Claude accounts.
+    expect(view).toMatchObject({ machineOwnerId: f.ann.id, machineConnected: true });
     const grill = view.timeline.find((n) => n.name === "Grill a plan")!;
     expect(grill.attempts[0]!.rounds).toEqual([
       expect.objectContaining({ round: 1, respondedBy: "ann@example.com", response: { decision: "answer", answers: { q1: "/totals", q2: "Yes" } } }),
@@ -247,7 +248,7 @@ describe("Retry (RUN-7, RUN-9, spec M3 §4)", () => {
     const f = await fixture();
     const { runId } = await failedRun(f);
     const run = (await getRun(db, runId))!;
-    expect((await podRunCounts(db, [f.pod.id])).get(f.pod.id)!.inUse).toBe(0);
+    expect((await machineRunCounts(db, [f.machine.id])).get(f.machine.id)!.inUse).toBe(0);
     expect((await flowLocks(db, [run.flowId])).get(run.flowId)).toMatchObject({ runId, state: "failed" });
     const again = await startRuns(deps, f.ann, { flowId: run.flowId, ticketIds: [f.tickets[0]!.id], extraInstructions: "" });
     expect(again).toMatchObject({ ok: false, error: expect.stringContaining("already has an Active Run (failed)") });
@@ -272,7 +273,7 @@ describe("Retry (RUN-7, RUN-9, spec M3 §4)", () => {
       loginsChecked: false,
       context: { feedback: "Keep the old API.", note: "Mind the rounding.", retriedBy: "bo@example.com", failure: { node: "Approve a plan", exitCode: null } },
     });
-    expect(commands).toEqual([{ type: "schedule", podId: f.pod.id }]);
+    expect(commands).toEqual([{ type: "schedule", machineId: f.machine.id }]);
     expect((await audit()).find((e) => e.action === "run.retry")).toMatchObject({
       actorEmail: "bo@example.com",
       detail: { node: "Grill a plan", note: "Mind the rounding.", from: "failed" },
@@ -313,7 +314,7 @@ describe("Cancel from every Active state (T3-8, RUN-8)", () => {
     }
     expect(await cancelRunAs(deps, f.bo, runId)).toEqual({ ok: true });
     expect((await getRun(db, runId))!.state).toBe("cancelled");
-    expect(commands).toEqual([{ type: "run.cancel", podId: f.pod.id, runId, attemptIds: attemptId ? [attemptId] : [] }]);
+    expect(commands).toEqual([{ type: "run.cancel", machineId: f.machine.id, runId, attemptIds: attemptId ? [attemptId] : [] }]);
     if (from === "waiting_for_human") {
       const [request] = await db.select().from(schema.humanRequest);
       expect(request).toMatchObject({ response: { cancelled: true }, respondedByEmail: "bo@example.com" });
@@ -360,19 +361,19 @@ describe("Audit (T3-12, RUN-15, spec M3 §7)", () => {
     expect(await lastEntry("run.retry")).toMatchObject({ actorEmail: "bo@example.com", subjectId: b.runId, detail: { from: "interrupted" } });
   });
 
-  it("pod.create, pod.start, pod.stop, pod.delete", async () => {
+  it("machine.pair, machine.settings, machine.unpair, machine.remove", async () => {
     const cy = await memberRow(db, "cy@example.com");
-    const created = await createMyPod(deps, cy);
-    if (!created.ok) throw new Error("create failed");
-    await podAction(deps, cy, created.podId, "start");
-    await podAction(deps, cy, created.podId, "stop");
-    await removePod(deps, cy, created.podId);
-    for (const action of ["pod.create", "pod.start", "pod.stop", "pod.delete"]) {
-      expect(await lastEntry(action)).toMatchObject({ actorEmail: "cy@example.com", subjectType: "pod", subjectId: created.podId });
+    const pending = await createPairing(db, { tokenHash: hashToken("cy-token"), hostname: "cy-mac", os: "darwin", arch: "arm64" }, deps.clock.now());
+    if (!pending.ok) throw new Error("pairing failed");
+    const paired = await approveMyPairing(deps, cy, pending.pairing.code);
+    if (!paired.ok) throw new Error("approve failed");
+    await setMyMachineSettings(deps, cy, paired.machineId, { slots: 3 });
+    await unpairMyMachine(deps, cy, paired.machineId);
+    await removeMachine(deps, cy, paired.machineId);
+    for (const action of ["machine.pair", "machine.settings", "machine.unpair", "machine.remove"]) {
+      expect(await lastEntry(action)).toMatchObject({ actorEmail: "cy@example.com", subjectType: "machine", subjectId: paired.machineId });
     }
   });
-
-  it.todo("pod.recreate: Recreate arrives in M4 (POD-6), which audits it the same way");
 
   it("flow.create, flow.update, flow.delete", async () => {
     const f = await fixture();
@@ -410,7 +411,7 @@ describe("Audit (T3-12, RUN-15, spec M3 §7)", () => {
   it("allowlist.add and allowlist.remove", async () => {
     const op = await memberRow(db, "op@example.com");
     await addToAllowlist(deps, op, "dee@example.com");
-    await removeFromAllowlist(deps, op, "dee@example.com");
+    await removeMember(deps, op, "dee@example.com");
     expect(await lastEntry("allowlist.add")).toMatchObject({ actorEmail: "op@example.com", subjectId: "dee@example.com" });
     expect(await lastEntry("allowlist.remove")).toMatchObject({ actorEmail: "op@example.com", subjectId: "dee@example.com" });
   });

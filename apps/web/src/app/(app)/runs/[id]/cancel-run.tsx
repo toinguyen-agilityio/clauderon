@@ -26,7 +26,7 @@ export function CancelRun({ runId, running }: { runId: string; running: boolean 
           <div className="modal-b">
             <input type="hidden" name="runId" value={runId} />
             <p>The Run ends as Cancelled for good and frees its Slot. It cannot be retried.</p>
-            {running && <p className="small muted">The Node running now is stopped on the Pod.</p>}
+            {running && <p className="small muted">The Node running now is stopped on its Machine.</p>}
             {state.error && (
               <span className="err-text small" role="alert">
                 {state.error}

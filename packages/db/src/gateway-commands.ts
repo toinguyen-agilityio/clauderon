@@ -2,26 +2,27 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 import type { Db } from "./client";
 
-// The web app runs on Vercel and cannot hold the Host Agent link (ADR 0004).
+// The web app cannot hold the Agents' links (ADR 0004).
 // It writes its change to the database, then asks the Gateway to act through
 // Postgres NOTIFY, the same way `member.revoked` travels (spec M0 §7.1).
 
 export const GATEWAY_COMMAND_CHANNEL = "gateway_command";
 
 export type GatewayCommand =
-  | { type: "pod.create" | "pod.start" | "pod.stop" | "pod.checkLogins"; podId: string }
-  /** Remove a deleted Pod's container and Workspace volume; its row is already gone. */
-  | { type: "pod.delete"; podId: string }
-  /** Run the Slot scheduler for a Pod after Runs were queued. */
-  | { type: "schedule"; podId: string }
-  /** A Run was cancelled: kill its cancelled Attempts on the Pod, then schedule (RUN-8). */
-  | { type: "run.cancel"; podId: string; runId: string; attemptIds: string[] }
+  /** Check the Machine's Claude Code and gh logins now. */
+  | { type: "machine.checkLogins"; machineId: string }
+  /** The Machine was paired anew or unpaired: drop the connection of its old token (ADR 0006). */
+  | { type: "machine.repaired"; machineId: string }
+  /** Run the Slot scheduler for a Machine after Runs were queued. */
+  | { type: "schedule"; machineId: string }
+  /** A Run was cancelled: kill its cancelled Attempts on the Machine, then schedule (RUN-8). */
+  | { type: "run.cancel"; machineId: string; runId: string; attemptIds: string[] }
   /** A person approved or answered (spec M3 §2): continue the Run or resume its Grill session. */
-  | { type: "run.resume"; podId: string; runId: string };
+  | { type: "run.resume"; machineId: string; runId: string };
 
 export type CommandPublish = (command: GatewayCommand) => Promise<void>;
 
-const TYPES = new Set(["pod.create", "pod.start", "pod.stop", "pod.checkLogins", "pod.delete", "schedule", "run.cancel", "run.resume"]);
+const TYPES = new Set(["machine.checkLogins", "machine.repaired", "schedule", "run.cancel", "run.resume"]);
 
 export function notifyGatewayCommand(db: Db): CommandPublish {
   return async (command) => {
@@ -31,18 +32,18 @@ export function notifyGatewayCommand(db: Db): CommandPublish {
 
 export function parseGatewayCommand(payload: string): GatewayCommand | null {
   try {
-    const value = JSON.parse(payload) as { type?: unknown; podId?: unknown; runId?: unknown; attemptIds?: unknown };
-    if (typeof value.type !== "string" || !TYPES.has(value.type) || typeof value.podId !== "string") return null;
+    const value = JSON.parse(payload) as { type?: unknown; machineId?: unknown; runId?: unknown; attemptIds?: unknown };
+    if (typeof value.type !== "string" || !TYPES.has(value.type) || typeof value.machineId !== "string") return null;
     if (value.type === "run.cancel") {
       const { runId, attemptIds } = value;
       if (typeof runId !== "string" || !Array.isArray(attemptIds) || !attemptIds.every((a) => typeof a === "string")) return null;
-      return { type: "run.cancel", podId: value.podId, runId, attemptIds: attemptIds as string[] };
+      return { type: "run.cancel", machineId: value.machineId, runId, attemptIds: attemptIds as string[] };
     }
     if (value.type === "run.resume") {
       if (typeof value.runId !== "string") return null;
-      return { type: "run.resume", podId: value.podId, runId: value.runId };
+      return { type: "run.resume", machineId: value.machineId, runId: value.runId };
     }
-    return { type: value.type, podId: value.podId } as GatewayCommand;
+    return { type: value.type, machineId: value.machineId } as GatewayCommand;
   } catch {
     return null;
   }

@@ -1,42 +1,44 @@
 import { createServer, type Server } from "node:http";
 import { WebSocketServer } from "ws";
+import type { Clock } from "@clauderon/core";
+import type { Db } from "@clauderon/db";
 import { fromWebSocket } from "@clauderon/protocol";
 import type { BrowserHub } from "./browser-hub";
-import type { HostLink } from "./host-link";
-import type { TerminalHub } from "./terminals";
+import type { MachineLinks } from "./machine-link";
+import { handlePairing } from "./pairing";
+
+export type GatewayServerOptions = { db: Db; clock: Clock; links: MachineLinks; hub: BrowserHub; webUrl?: string; log?: (message: string) => void };
 
 /**
- * HTTP and WebSocket front of the Gateway: `/host-agent` for the Host Agent,
- * `/browser` for browser sockets, `/terminal` for web terminals, `/health` for
- * the hosting's health check.
+ * HTTP and WebSocket front of the Gateway: `/agent` for Agents, `/pair` for
+ * Pairing, `/browser` for browser sockets, `/health` for the hosting's
+ * health check.
  */
-export function createGatewayServer(link: HostLink, hub: BrowserHub, terminals?: TerminalHub): Server {
+export function createGatewayServer({ db, clock, links, hub, webUrl, log }: GatewayServerOptions): Server {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
 
   const server = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, hostAgentConnected: link.connected }));
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
-    res.writeHead(404).end();
+    handlePairing(req, res, { db, clock, webUrl })
+      .then((handled) => {
+        if (!handled) res.writeHead(404).end();
+      })
+      .catch((error: unknown) => {
+        (log ?? console.warn)(`pairing: ${String(error)}`);
+        if (!res.headersSent) res.writeHead(500).end();
+      });
   });
 
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://gateway");
-    if (url.pathname === "/host-agent") {
-      wss.handleUpgrade(req, socket, head, (ws) => link.attach(fromWebSocket(ws), req.headers.authorization));
+    if (url.pathname === "/agent") {
+      wss.handleUpgrade(req, socket, head, (ws) => links.attach(fromWebSocket(ws), req.headers.authorization));
     } else if (url.pathname === "/browser") {
       wss.handleUpgrade(req, socket, head, (ws) => void hub.attach(fromWebSocket(ws), url.searchParams.get("ticket")));
-    } else if (url.pathname === "/terminal" && terminals) {
-      const options = {
-        cols: Number(url.searchParams.get("cols")) || undefined,
-        rows: Number(url.searchParams.get("rows")) || undefined,
-        login: url.searchParams.get("login"),
-      };
-      wss.handleUpgrade(req, socket, head, (ws) =>
-        void terminals.attach(fromWebSocket(ws), url.searchParams.get("ticket"), url.searchParams.get("podId"), options),
-      );
     } else {
       socket.destroy();
     }

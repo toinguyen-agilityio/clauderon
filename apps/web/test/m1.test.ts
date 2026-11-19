@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { recordHostConnected, schema, sql, type Db, type GatewayCommand } from "@clauderon/db";
+import { createPairing, hashToken, schema, sql, type Db, type GatewayCommand } from "@clauderon/db";
 import {
   FakeClock,
   FakeGitHub,
   createTestDatabase,
+  machineRow,
   memberRow,
-  podRow,
   projectRow,
   sampleFlowId,
   startSampleBatch,
@@ -13,7 +13,16 @@ import {
   type TestDatabase,
 } from "@clauderon/testing";
 import type { AppDeps } from "../src/server/deps";
-import { createMyPod, gbToMb, podAction, removePod, setMyPodSettings, terminalAccess, viewPod, viewPods } from "../src/server/pods";
+import {
+  approveMyPairing,
+  checkMyLogins,
+  lookUpPairing,
+  removeMachine,
+  setMyMachineSettings,
+  unpairMyMachine,
+  viewMachine,
+  viewMachines,
+} from "../src/server/machines";
 import { enableRepository, enableableRepositories, syncProject } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
 import { startDialog, startRuns } from "../src/server/start";
@@ -31,7 +40,7 @@ beforeAll(async () => {
 });
 afterAll(() => test.drop());
 beforeEach(async () => {
-  await db.execute(sql`truncate member, pod, project, ticket, batch, run, attempt, output, audit_entry, pod_host, flow, node cascade`);
+  await db.execute(sql`truncate member, machine, pairing, project, ticket, batch, run, attempt, output, audit_entry, flow, node cascade`);
   commands = [];
   github = new FakeGitHub();
   deps = {
@@ -41,147 +50,141 @@ beforeEach(async () => {
     publish: () => {},
     command: async (c) => void commands.push(c),
     github,
-    podImage: "ghcr.io/acme/clauderon-pod:2026-11-16",
-    limitCeiling: { slots: 4, cpus: 4, memoryMb: 8192 },
   };
 });
 
 const actions = async () => (await db.select().from(schema.auditEntry)).map((a) => a.action);
 
-describe("Pods (POD-2, POD-4, POD-6)", () => {
-  it("T1-1: Create my Pod sends pod.create with 2/2/4096; a second Create is refused", async () => {
-    const ann = await memberRow(db, "ann@example.com");
-    const created = await createMyPod(deps, ann);
-    expect(created).toEqual({ ok: true, podId: expect.any(String) });
-    const [pod] = await db.select().from(schema.pod);
-    expect(pod).toMatchObject({ status: "creating", slots: 2, cpus: 2, memoryMb: 4096, imageTag: "ghcr.io/acme/clauderon-pod:2026-11-16" });
-    expect(commands).toEqual([{ type: "pod.create", podId: pod!.id }]);
-    expect(await createMyPod(deps, ann)).toEqual({ ok: false, reason: "exists" });
-    expect(await actions()).toEqual(["pod.create"]);
-  });
+describe("Machines (ADR 0006)", () => {
+  /** A pending pairing an Agent asked for; its code is what the Member types. */
+  async function pendingCode(token = "agent-token", hostname = "ann-laptop") {
+    const result = await createPairing(db, { tokenHash: hashToken(token), hostname, os: "darwin", arch: "arm64" }, deps.clock.now());
+    if (!result.ok) throw new Error(result.reason);
+    return result.pairing.code;
+  }
 
-  it("Create my Pod takes the limits from its dialog, capped by the ceiling", async () => {
+  it("Look up shows which computer a code belongs to; Approve pairs it as my Machine with 2 Slots", async () => {
     const ann = await memberRow(db, "ann@example.com");
-    expect(await createMyPod(deps, ann, { slots: 9, cpus: 2, memoryMb: 4096 })).toEqual({ ok: false, reason: "limits", error: "Slots are capped at 4." });
-    expect(await db.select().from(schema.pod)).toEqual([]);
+    const code = await pendingCode();
+    expect(await lookUpPairing(deps, ann, `${code.slice(0, 4)}-${code.slice(4)}`.toLowerCase())).toEqual({
+      ok: true,
+      pairing: { code: `${code.slice(0, 4)}-${code.slice(4)}`, hostname: "ann-laptop", os: "darwin", arch: "arm64", expiresAt: expect.any(Date), replaces: null },
+    });
+    const approved = await approveMyPairing(deps, ann, code);
+    expect(approved).toEqual({ ok: true, machineId: expect.any(String) });
+    expect((await db.select().from(schema.machine))[0]).toMatchObject({ memberId: ann.id, hostname: "ann-laptop", slots: 2, tokenHash: hashToken("agent-token") });
+    // A first pairing has no old Agent to disconnect.
     expect(commands).toEqual([]);
-
-    expect(await createMyPod(deps, ann, { slots: 2, cpus: 2, memoryMb: 4096, name: "x".repeat(61) })).toMatchObject({ ok: false, error: "The name is at most 60 characters." });
-    expect(await createMyPod(deps, ann, { slots: 2, cpus: 2, memoryMb: gbToMb("9") })).toMatchObject({ ok: false, error: "RAM is capped at 8 GB." });
-
-    expect(await createMyPod(deps, ann, { slots: "3", cpus: "1.5", memoryMb: gbToMb("2.5"), name: "  Ann's builder  " })).toEqual({ ok: true, podId: expect.any(String) });
-    expect((await db.select().from(schema.pod))[0]).toMatchObject({ name: "Ann's builder", slots: 3, cpus: 1.5, memoryMb: 2560 });
+    expect(await actions()).toEqual(["machine.pair"]);
   });
 
-  it("T1-1: over-commit shows a warning but creates", async () => {
-    await recordHostConnected(db, { agentVersion: "1", processId: "p", arch: "arm64", cpus: 4, memoryMb: 8192, diskGb: 100, dockerRunning: true }, new Date());
-    for (const email of ["a@x.com", "b@x.com", "c@x.com"]) expect((await createMyPod(deps, await memberRow(db, email))).ok).toBe(true);
-    const view = await viewPods(deps, (await db.select().from(schema.member))[0]!);
-    expect(view.pods).toHaveLength(3);
-    expect(view.overCommitted).toBe(true);
-  });
-
-  it("T1-2: Stop is refused while the Pod has a Running Run; only the owner can start or stop", async () => {
+  it("an unknown or expired code is refused with what to do", async () => {
     const ann = await memberRow(db, "ann@example.com");
-    const bob = await memberRow(db, "bob@example.com");
-    const pod = await podRow(db, ann.id);
-    const project = await projectRow(db);
-    const ticket = await ticketRow(db, project.id, 1);
-    const start = await startSampleBatch(db, ann, pod.id, [ticket.id], deps.clock.now());
-    await db.update(schema.run).set({ state: "running" });
-
-    expect(await podAction(deps, bob, pod.id, "stop")).toBe("not-found");
-    expect(await podAction(deps, ann, pod.id, "stop")).toEqual({ ok: false, reason: "busy" });
-    expect(commands).toEqual([]);
-
-    await db.update(schema.run).set({ state: "succeeded" });
-    expect(start.ok).toBe(true);
-    expect(await podAction(deps, ann, pod.id, "stop")).toEqual({ ok: true });
-    expect(await podAction(deps, ann, pod.id, "refresh")).toEqual({ ok: true });
-    expect(commands).toEqual([
-      { type: "pod.stop", podId: pod.id },
-      { type: "pod.checkLogins", podId: pod.id },
-    ]);
-    expect(await actions()).toContain("pod.stop");
+    const code = await pendingCode();
+    expect(await lookUpPairing(deps, ann, "ZZZZ-ZZZZ")).toMatchObject({ ok: false, error: expect.stringContaining("No pairing waits for that code") });
+    deps.clock = new FakeClock(new Date("2026-11-16T10:00:00Z"));
+    expect(await approveMyPairing(deps, ann, code)).toMatchObject({ ok: false });
+    expect(await db.select().from(schema.machine)).toEqual([]);
   });
 
-  it("the Pods page shows owner, Pod Ready, Slots in use and queue", async () => {
+  it("pairing a second computer replaces the first: the Gateway disconnects it, Slots and history stay", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const machine = await machineRow(db, ann.id, { slots: 3, hostname: "old-mac" });
+    const code = await pendingCode("new-token", "new-mac");
+    expect(await lookUpPairing(deps, ann, code)).toMatchObject({ ok: true, pairing: { replaces: "old-mac" } });
+    expect(await approveMyPairing(deps, ann, code)).toEqual({ ok: true, machineId: machine.id });
+    expect((await db.select().from(schema.machine))[0]).toMatchObject({ id: machine.id, hostname: "new-mac", slots: 3, connected: false });
+    expect(commands).toEqual([{ type: "machine.repaired", machineId: machine.id }]);
+  });
+
+  it("the Machines page shows owner, Machine Ready, Slots in use and queue", async () => {
     const ann = await memberRow(db, "ann@example.com", "Ann");
-    const pod = await podRow(db, ann.id, { ghTokenScope: { tokenRepos: ["acme/web"] }, ghAccount: "ann-gh" });
+    const machine = await machineRow(db, ann.id, { ghTokenScope: { tokenRepos: ["acme/web"] }, ghAccount: "ann-gh", claudeAccount: "ann@example.com", claudePlan: "pro" });
     const project = await projectRow(db);
     const t1 = await ticketRow(db, project.id, 1);
     const t2 = await ticketRow(db, project.id, 2);
-    await startSampleBatch(db, ann, pod.id, [t1.id, t2.id], deps.clock.now());
+    await startSampleBatch(db, ann, machine.id, [t1.id, t2.id], deps.clock.now());
     await db.update(schema.run).set({ state: "running" }).where(sql`ticket_id = ${t1.id}`);
 
-    const view = await viewPods(deps, ann);
-    expect(view.mine).toMatchObject({ id: pod.id, ready: true, inUse: 1, queued: 1, ghAccount: "ann-gh", tokenRepos: ["acme/web"], owner: { name: "Ann" } });
+    const view = await viewMachines(deps, ann);
+    expect(view.mine).toMatchObject({ id: machine.id, paired: true, ready: true, inUse: 1, queued: 1, ghAccount: "ann-gh", claudeAccount: "ann@example.com", claudePlan: "pro", tokenRepos: ["acme/web"], owner: { name: "Ann" } });
+
+    await db.update(schema.machine).set({ connected: false });
+    expect((await viewMachines(deps, ann)).mine).toMatchObject({ ready: false });
   });
 
-  it("the Pod page shows the Runs holding Slots and the queue to every Member, actions only to the owner", async () => {
+  it("the Machine page shows the Runs holding Slots and the queue to every Member, actions only to the owner", async () => {
     const ann = await memberRow(db, "ann@example.com", "Ann");
     const bob = await memberRow(db, "bob@example.com");
-    const pod = await podRow(db, ann.id, { slots: 1 });
+    const machine = await machineRow(db, ann.id, { slots: 1 });
     const project = await projectRow(db);
     const t1 = await ticketRow(db, project.id, 1);
     const t2 = await ticketRow(db, project.id, 2);
-    await startSampleBatch(db, ann, pod.id, [t1.id, t2.id], deps.clock.now());
+    await startSampleBatch(db, ann, machine.id, [t1.id, t2.id], deps.clock.now());
     await db.update(schema.run).set({ state: "waiting_for_human" }).where(sql`ticket_id = ${t1.id}`);
 
-    const mine = await viewPod(deps, ann, pod.id);
-    expect(mine).toMatchObject({ pod: { id: pod.id, mine: true, inUse: 1, queued: 1 } });
-    if (mine === "not-found") throw new Error("expected the Pod");
+    const mine = await viewMachine(deps, ann, machine.id);
+    expect(mine).toMatchObject({ machine: { id: machine.id, mine: true, inUse: 1, queued: 1 }, canRemove: true });
+    if (mine === "not-found") throw new Error("expected the Machine");
     expect(mine.using).toEqual([expect.objectContaining({ state: "waiting_for_human", key: expect.stringMatching(/#1$/) })]);
-    expect(mine.pod.queue).toEqual([expect.objectContaining({ state: "queued", position: 1, key: expect.stringMatching(/#2$/) })]);
+    expect(mine.machine.queue).toEqual([expect.objectContaining({ state: "queued", position: 1, key: expect.stringMatching(/#2$/) })]);
 
-    expect(await viewPod(deps, bob, pod.id)).toMatchObject({ pod: { id: pod.id, mine: false } });
-    expect(await viewPod(deps, ann, "not-a-uuid")).toBe("not-found");
+    expect(await viewMachine(deps, bob, machine.id)).toMatchObject({ machine: { id: machine.id, mine: false }, canRemove: false });
+    expect(await viewMachine(deps, ann, "not-a-uuid")).toBe("not-found");
   });
 
-  it("POD-7: Remove Pod is refused while a Run is Active, then deletes the row and keeps the ended Runs", async () => {
+  it("Check logins asks the Gateway, the owner's only", async () => {
     const ann = await memberRow(db, "ann@example.com");
     const bob = await memberRow(db, "bob@example.com");
-    const pod = await podRow(db, ann.id);
+    const machine = await machineRow(db, ann.id);
+    expect(await checkMyLogins(deps, bob, machine.id)).toBe("not-found");
+    expect(await checkMyLogins(deps, ann, machine.id)).toEqual({ ok: true });
+    expect(commands).toEqual([{ type: "machine.checkLogins", machineId: machine.id }]);
+  });
+
+  it("Unpair stops the token and tells the Gateway; the Machine and its Slots stay", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    const machine = await machineRow(db, ann.id, { slots: 4 });
+    expect(await unpairMyMachine(deps, bob, machine.id)).toBe("not-found");
+    expect(await unpairMyMachine(deps, ann, machine.id)).toEqual({ ok: true });
+    expect((await db.select().from(schema.machine))[0]).toMatchObject({ tokenHash: null, connected: false, slots: 4 });
+    expect(commands).toEqual([{ type: "machine.repaired", machineId: machine.id }]);
+    expect((await viewMachines(deps, ann)).mine).toMatchObject({ paired: false, ready: false });
+  });
+
+  it("Remove is refused while a Run is Active, then deletes the row and keeps the ended Runs", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    const machine = await machineRow(db, ann.id);
     const project = await projectRow(db);
     const ticket = await ticketRow(db, project.id, 1);
-    await startSampleBatch(db, ann, pod.id, [ticket.id], deps.clock.now());
+    await startSampleBatch(db, ann, machine.id, [ticket.id], deps.clock.now());
 
-    expect(await removePod(deps, bob, pod.id)).toBe("not-found");
+    expect(await removeMachine(deps, bob, machine.id)).toBe("not-found");
     for (const state of ["queued", "failed", "interrupted"] as const) {
       await db.update(schema.run).set({ state });
-      expect(await removePod(deps, ann, pod.id)).toEqual({ ok: false, reason: "busy" });
+      expect(await removeMachine(deps, ann, machine.id)).toEqual({ ok: false, reason: "busy" });
     }
     expect(commands).toEqual([]);
 
     await db.update(schema.run).set({ state: "succeeded" });
-    expect(await removePod(deps, ann, pod.id)).toEqual({ ok: true });
-    expect(await db.select().from(schema.pod)).toEqual([]);
-    expect((await db.select().from(schema.run))[0]).toMatchObject({ podId: null, state: "succeeded" });
-    expect(commands).toEqual([{ type: "pod.delete", podId: pod.id }]);
-    expect(await actions()).toContain("pod.delete");
-    expect(await viewRun(deps, (await db.select().from(schema.run))[0]!.id)).toMatchObject({ podOwner: null });
-
-    // The owner can create a new Pod afterwards.
-    expect((await createMyPod(deps, ann)).ok).toBe(true);
+    expect(await removeMachine(deps, ann, machine.id)).toEqual({ ok: true });
+    expect(await db.select().from(schema.machine)).toEqual([]);
+    expect((await db.select().from(schema.run))[0]).toMatchObject({ machineId: null, state: "succeeded" });
+    expect(commands).toEqual([{ type: "machine.repaired", machineId: machine.id }]);
+    expect(await actions()).toContain("machine.remove");
+    expect(await viewRun(deps, (await db.select().from(schema.run))[0]!.id)).toMatchObject({ machineOwner: null });
   });
 
-  it("POD-7: an Operator can remove another Member's Pod", async () => {
+  it("an Operator can remove another Member's Machine", async () => {
     const ann = await memberRow(db, "ann@example.com");
     const op = await memberRow(db, "op@example.com");
-    const pod = await podRow(db, ann.id);
+    const machine = await machineRow(db, ann.id);
     deps.operators = ["op@example.com"];
-    expect(await viewPod(deps, op, pod.id)).toMatchObject({ canRemove: true, pod: { mine: false } });
-    expect(await removePod(deps, op, pod.id)).toEqual({ ok: true });
-    expect(await actions()).toEqual(["pod.delete"]);
-  });
-
-  it("T1-3: a Member who is not the owner gets 404 on the terminal page", async () => {
-    const ann = await memberRow(db, "ann@example.com");
-    const bob = await memberRow(db, "bob@example.com");
-    const pod = await podRow(db, ann.id);
-    expect(await terminalAccess(deps, bob, pod.id)).toBe("not-found");
-    expect(await terminalAccess(deps, ann, "not-a-uuid")).toBe("not-found");
-    expect(await terminalAccess(deps, ann, pod.id)).toMatchObject({ pod: { id: pod.id } });
+    expect(await viewMachine(deps, op, machine.id)).toMatchObject({ canRemove: true, machine: { mine: false } });
+    expect(await removeMachine(deps, op, machine.id)).toEqual({ ok: true });
+    expect(await actions()).toEqual(["machine.remove"]);
   });
 });
 
@@ -230,10 +233,10 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
     github.addIssue("acme", "web", { number: 5, title: "Five" });
     const ann = await memberRow(db, "ann@example.com");
-    const pod = await podRow(db, ann.id);
+    const machine = await machineRow(db, ann.id);
     const project = await projectRow(db);
     const ticket = await ticketRow(db, project.id, 5);
-    await startSampleBatch(db, ann, pod.id, [ticket.id], deps.clock.now());
+    await startSampleBatch(db, ann, machine.id, [ticket.id], deps.clock.now());
     await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/5-x-abc", pullRequestNumber: 9, pullRequestState: "open" });
     github.addPullRequest("acme", "web", { number: 9, branch: "clauderon/5-x-abc", state: "merged", url: "u" });
 
@@ -252,10 +255,10 @@ describe("Pull requests page", () => {
   it("lists Runs that opened a pull request by state, refreshing open ones from GitHub", async () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
     const ann = await memberRow(db, "ann@example.com");
-    const pod = await podRow(db, ann.id);
+    const machine = await machineRow(db, ann.id);
     const project = await projectRow(db);
     const tickets = [await ticketRow(db, project.id, 5), await ticketRow(db, project.id, 6), await ticketRow(db, project.id, 7)];
-    await startSampleBatch(db, ann, pod.id, tickets.map((t) => t.id), deps.clock.now());
+    await startSampleBatch(db, ann, machine.id, tickets.map((t) => t.id), deps.clock.now());
     const runs = await db.select().from(schema.run);
     const byTicket = new Map(runs.map((r) => [r.ticketId, r.id]));
     await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/5-a", pullRequestNumber: 15, pullRequestState: "open" }).where(sql`id = ${byTicket.get(tickets[0]!.id)}`);
@@ -299,10 +302,10 @@ describe("Tickets page (TIC-1, TIC-2, TIC-3, TIC-7)", () => {
 
   it("a Ticket with an Active Run cannot be selected and names the Run", async () => {
     const ann = await memberRow(db, "ann@example.com");
-    const pod = await podRow(db, ann.id);
+    const machine = await machineRow(db, ann.id);
     const project = await projectRow(db);
     const ticket = await ticketRow(db, project.id, 1);
-    const start = await startSampleBatch(db, ann, pod.id, [ticket.id], deps.clock.now());
+    const start = await startSampleBatch(db, ann, machine.id, [ticket.id], deps.clock.now());
     const [row] = (await viewTickets(deps, {})).rows;
     expect(row).toMatchObject({ status: "Queued", activeRunId: start.ok ? start.runIds[0] : null });
   });
@@ -311,59 +314,61 @@ describe("Tickets page (TIC-1, TIC-2, TIC-3, TIC-7)", () => {
 describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
   async function ready(values = {}) {
     const ann = await memberRow(db, "ann@example.com");
-    const pod = await podRow(db, ann.id, values);
+    const machine = await machineRow(db, ann.id, values);
     const project = await projectRow(db);
     const mine = await ticketRow(db, project.id, 1, { authorAssociation: "MEMBER" });
     const outside = await ticketRow(db, project.id, 2, { authorAssociation: "NONE" });
     await sampleFlowId(db); // seeds the samples
     const flows = (await startDialog(deps, ann, [mine.id])).flows;
-    return { ann, pod, mine, outside, flowId: flows.find((f) => f.name === "Basic ticket delivery")!.id };
+    return { ann, machine, mine, outside, flowId: flows.find((f) => f.name === "Basic ticket delivery")!.id };
   }
 
-  it("shows the Pod, its Slots and Pod Ready, and warns about outside authors without blocking", async () => {
+  it("shows the Machine, its Slots and Machine Ready, and warns about outside authors without blocking", async () => {
     const { ann, mine, outside } = await ready();
     const dialog = await startDialog(deps, ann, [mine.id, outside.id]);
-    expect(dialog.pod).toMatchObject({ slots: 2, inUse: 0, queued: 0, ready: true });
+    expect(dialog.machine).toMatchObject({ slots: 2, inUse: 0, queued: 0, ready: true, connected: true, paired: true });
     expect(dialog.warnings).toEqual([{ ticketId: outside.id, key: "web#2", authorAssociation: "NONE" }]);
     expect(dialog.flows.map((f) => f.name).sort()).toEqual(["Basic ticket delivery", "Plan and deliver"]);
   });
 
-  it("T1-5: Start in Real mode is refused when gh is not logged in, with a link to the terminal", async () => {
-    const { ann, pod, mine, flowId } = await ready({ ghLoggedIn: false });
+  it("T1-5: Start in Real mode is refused when gh is not logged in, with a link to the Machine", async () => {
+    const { ann, machine, mine, flowId } = await ready({ ghLoggedIn: false });
     expect(await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "" })).toEqual({
       ok: false,
-      error: "gh is not logged in on your Pod. Log in from its terminal.",
-      terminal: `/pods/${pod.id}/terminal`,
+      error: "gh is not logged in on your Machine. Log in on your Machine in your own terminal, then check logins on its page.",
+      machinePage: `/machines/${machine.id}`,
     });
     expect(await db.select().from(schema.run)).toEqual([]);
   });
 
   it("a Dry-run Start needs no logins and queues a dry Run", async () => {
-    const { ann, pod, mine, flowId } = await ready({ ghLoggedIn: false, claudeLoggedIn: false });
+    const { ann, machine, mine, flowId } = await ready({ ghLoggedIn: false, claudeLoggedIn: false });
     const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "", mode: "dry" });
     expect(result).toMatchObject({ ok: true });
-    expect(await db.select().from(schema.run)).toEqual([expect.objectContaining({ mode: "dry", state: "queued", podId: pod.id })]);
-    expect(commands).toEqual([{ type: "schedule", podId: pod.id }]);
+    expect(await db.select().from(schema.run)).toEqual([expect.objectContaining({ mode: "dry", state: "queued", machineId: machine.id })]);
+    expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
   });
 
-  it("refuses a Member with no Pod", async () => {
+  it("refuses a Member with no paired Machine", async () => {
     const bob = await memberRow(db, "bob@example.com");
-    const { mine, flowId } = await ready();
-    expect(await startRuns(deps, bob, { flowId, ticketIds: [mine.id], extraInstructions: "" })).toMatchObject({ ok: false, error: "You have no Pod yet." });
+    const { ann, mine, flowId } = await ready();
+    expect(await startRuns(deps, bob, { flowId, ticketIds: [mine.id], extraInstructions: "" })).toMatchObject({ ok: false, error: "You have no paired Machine yet." });
+    await db.update(schema.machine).set({ tokenHash: null });
+    expect(await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "" })).toMatchObject({ ok: false, machinePage: "/machines" });
   });
 
   it("creates a Batch with one queued Run per Ticket, audits each and asks the Gateway to schedule", async () => {
-    const { ann, pod, mine, outside, flowId } = await ready();
+    const { ann, machine, mine, outside, flowId } = await ready();
     const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id, outside.id], extraInstructions: "Be brief." });
     expect(result).toEqual({ ok: true, batchId: expect.any(String), runIds: [expect.any(String), expect.any(String)] });
     const runs = await db.select().from(schema.run);
-    expect(runs.every((r) => r.state === "queued" && r.podId === pod.id && r.mode === "real")).toBe(true);
-    expect(commands).toEqual([{ type: "schedule", podId: pod.id }]);
+    expect(runs.every((r) => r.state === "queued" && r.machineId === machine.id && r.mode === "real")).toBe(true);
+    expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
     expect(await actions()).toEqual(["run.start", "run.start"]);
   });
 
-  it("a stopped Pod with both logins accepts the Batch", async () => {
-    const { ann, mine, flowId } = await ready({ status: "stopped" });
+  it("an offline Machine with both logins accepts the Batch", async () => {
+    const { ann, mine, flowId } = await ready({ connected: false });
     expect((await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "" })).ok).toBe(true);
   });
 
@@ -392,18 +397,18 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
 describe("Runs (TRK-1, TRK-2, TRK-7)", () => {
   it("lists Runs newest first with combined filters, and shows a Run's timeline in topological order", async () => {
     const ann = await memberRow(db, "ann@example.com", "Ann");
-    const pod = await podRow(db, ann.id);
+    const machine = await machineRow(db, ann.id);
     const project = await projectRow(db);
     const t1 = await ticketRow(db, project.id, 1);
     const t2 = await ticketRow(db, project.id, 2);
-    const first = await startSampleBatch(db, ann, pod.id, [t1.id], deps.clock.now());
-    const second = await startSampleBatch(db, ann, pod.id, [t2.id], new Date(deps.clock.now().getTime() + 60_000));
+    const first = await startSampleBatch(db, ann, machine.id, [t1.id], deps.clock.now());
+    const second = await startSampleBatch(db, ann, machine.id, [t2.id], new Date(deps.clock.now().getTime() + 60_000));
     if (!first.ok || !second.ok) throw new Error("start failed");
     await db.update(schema.run).set({ state: "failed", failureReason: "boom" }).where(sql`id = ${first.runIds[0]}`);
 
     const list = await viewRuns(deps, {}, 1);
     expect(list.rows.map((r) => r.id)).toEqual([second.runIds[0], first.runIds[0]]);
-    expect((await viewRuns(deps, { state: "failed", podId: pod.id }, 1)).rows.map((r) => r.id)).toEqual([first.runIds[0]]);
+    expect((await viewRuns(deps, { state: "failed", machineId: machine.id }, 1)).rows.map((r) => r.id)).toEqual([first.runIds[0]]);
     expect((await viewRuns(deps, { state: "failed", flowId: "00000000-0000-0000-0000-000000000000" }, 1)).rows).toEqual([]);
 
     const run = await viewRun(deps, first.runIds[0]!);
@@ -421,49 +426,50 @@ describe("Runs (TRK-1, TRK-2, TRK-7)", () => {
 });
 
 describe("Slots, limits and the queue (spec M2 §6)", () => {
-  it("T2-9: setting Slots above the ceiling is refused and saves nothing", async () => {
+  it("T2-9: setting Slots above the cap is refused and saves nothing", async () => {
     const ann = await memberRow(db, "ann@example.com");
-    const pod = await podRow(db, ann.id);
-    expect(await setMyPodSettings(deps, ann, pod.id, { slots: 5, cpus: 2, memoryMb: 4096 })).toEqual({ ok: false, error: "Slots are capped at 4." });
-    expect((await db.select().from(schema.pod))[0]!.slots).toBe(2);
+    const machine = await machineRow(db, ann.id);
+    expect(await setMyMachineSettings(deps, ann, machine.id, { slots: 9 })).toEqual({ ok: false, error: "Slots are capped at 8." });
+    expect(await setMyMachineSettings(deps, ann, machine.id, { slots: 2, name: "x".repeat(61) })).toEqual({ ok: false, error: "The name is at most 60 characters." });
+    expect((await db.select().from(schema.machine))[0]!.slots).toBe(2);
     expect(commands).toEqual([]);
   });
 
-  it("the owner saves limits, an audit entry records them and the Gateway is asked to schedule", async () => {
+  it("the owner saves name and Slots, an audit entry records them and the Gateway is asked to schedule", async () => {
     const ann = await memberRow(db, "ann@example.com");
-    const pod = await podRow(db, ann.id);
-    expect(await setMyPodSettings(deps, ann, pod.id, { slots: 3, cpus: 1, memoryMb: 2048, name: "Build box" })).toEqual({ ok: true });
-    expect((await db.select().from(schema.pod))[0]).toMatchObject({ name: "Build box", slots: 3, cpus: 1, memoryMb: 2048 });
-    expect(await setMyPodSettings(deps, ann, pod.id, { slots: 3, cpus: 1, memoryMb: 2048, name: "   " })).toEqual({ ok: true });
-    expect((await db.select().from(schema.pod))[0]!.name).toBeNull();
+    const machine = await machineRow(db, ann.id);
+    expect(await setMyMachineSettings(deps, ann, machine.id, { slots: "3", name: "Build box" })).toEqual({ ok: true });
+    expect((await db.select().from(schema.machine))[0]).toMatchObject({ name: "Build box", slots: 3 });
+    expect(await setMyMachineSettings(deps, ann, machine.id, { slots: 3, name: "   " })).toEqual({ ok: true });
+    expect((await db.select().from(schema.machine))[0]!.name).toBeNull();
     expect(commands).toEqual([
-      { type: "schedule", podId: pod.id },
-      { type: "schedule", podId: pod.id },
+      { type: "schedule", machineId: machine.id },
+      { type: "schedule", machineId: machine.id },
     ]);
     const [entry] = await db.select().from(schema.auditEntry);
-    expect(entry).toMatchObject({ action: "pod.limits", actorEmail: "ann@example.com" });
+    expect(entry).toMatchObject({ action: "machine.settings", actorEmail: "ann@example.com" });
   });
 
   it("another Member gets not-found and changes nothing", async () => {
     const ann = await memberRow(db, "ann@example.com");
     const bob = await memberRow(db, "bob@example.com");
-    const pod = await podRow(db, ann.id);
-    expect(await setMyPodSettings(deps, bob, pod.id, { slots: 3, cpus: 1, memoryMb: 2048 })).toBe("not-found");
-    expect((await db.select().from(schema.pod))[0]!.slots).toBe(2);
+    const machine = await machineRow(db, ann.id);
+    expect(await setMyMachineSettings(deps, bob, machine.id, { slots: 3 })).toBe("not-found");
+    expect((await db.select().from(schema.machine))[0]!.slots).toBe(2);
   });
 
-  it("the Pods page lists Queued Runs in start order, and the Start dialog shows where new Runs land", async () => {
+  it("the Machines page lists Queued Runs in start order, and the Start dialog shows where new Runs land", async () => {
     const ann = await memberRow(db, "ann@example.com");
-    const pod = await podRow(db, ann.id, { slots: 1 });
+    const machine = await machineRow(db, ann.id, { slots: 1 });
     const project = await projectRow(db);
     const tickets = [await ticketRow(db, project.id, 1), await ticketRow(db, project.id, 2), await ticketRow(db, project.id, 3)];
-    const start = await startSampleBatch(db, ann, pod.id, tickets.map((t) => t.id), new Date("2026-11-16T09:00:00Z"));
+    const start = await startSampleBatch(db, ann, machine.id, tickets.map((t) => t.id), new Date("2026-11-16T09:00:00Z"));
     expect(start.ok).toBe(true);
     await db.update(schema.run).set({ state: "running" }).where(sql`${schema.run.ticketId} = ${tickets[0]!.id}`);
 
-    const view = await viewPods(deps, ann);
-    expect(view.pods[0]!.queue.map((q) => q.key)).toEqual(expect.arrayContaining([expect.stringMatching(/#[23]$/)]));
-    expect(view.pods[0]!.queue.map((q) => q.position)).toEqual([1, 2]);
+    const view = await viewMachines(deps, ann);
+    expect(view.machines[0]!.queue.map((q) => q.key)).toEqual(expect.arrayContaining([expect.stringMatching(/#[23]$/)]));
+    expect(view.machines[0]!.queue.map((q) => q.position)).toEqual([1, 2]);
 
     const fresh = await ticketRow(db, project.id, 4);
     const dialog = await startDialog(deps, ann, [fresh.id]);
@@ -472,13 +478,13 @@ describe("Slots, limits and the queue (spec M2 §6)", () => {
 });
 
 describe("Cancel (RUN-8, MEM-2)", () => {
-  it("any Member cancels an Active Run: it ends at once, the Gateway is told, and the Pod can then be removed", async () => {
+  it("any Member cancels an Active Run: it ends at once, the Gateway is told, and the Machine can then be removed", async () => {
     const ann = await memberRow(db, "ann@example.com");
     const bob = await memberRow(db, "bob@example.com");
-    const pod = await podRow(db, ann.id);
+    const machine = await machineRow(db, ann.id);
     const project = await projectRow(db);
     const ticket = await ticketRow(db, project.id, 1);
-    const start = await startSampleBatch(db, ann, pod.id, [ticket.id], deps.clock.now());
+    const start = await startSampleBatch(db, ann, machine.id, [ticket.id], deps.clock.now());
     if (!start.ok) throw new Error("start failed");
     const runId = start.runIds[0]!;
     await db.update(schema.run).set({ state: "running" });
@@ -487,15 +493,15 @@ describe("Cancel (RUN-8, MEM-2)", () => {
       .values({ runId, flowNodeId: "00000000-0000-0000-0000-000000000001", number: 1, state: "running" })
       .returning();
 
-    expect(await removePod(deps, ann, pod.id)).toEqual({ ok: false, reason: "busy" });
+    expect(await removeMachine(deps, ann, machine.id)).toEqual({ ok: false, reason: "busy" });
     expect(await cancelRunAs(deps, bob, runId)).toEqual({ ok: true });
     expect((await db.select().from(schema.run))[0]).toMatchObject({ state: "cancelled", endedAt: deps.clock.now() });
     expect((await db.select().from(schema.attempt))[0]).toMatchObject({ id: attempt!.id, state: "cancelled" });
-    expect(commands).toEqual([{ type: "run.cancel", podId: pod.id, runId, attemptIds: [attempt!.id] }]);
+    expect(commands).toEqual([{ type: "run.cancel", machineId: machine.id, runId, attemptIds: [attempt!.id] }]);
     expect(await actions()).toContain("run.cancel");
 
     expect(await cancelRunAs(deps, ann, runId)).toEqual({ ok: false, reason: "ended" });
     expect(await cancelRunAs(deps, ann, "not-a-uuid")).toBe("not-found");
-    expect(await removePod(deps, ann, pod.id)).toEqual({ ok: true });
+    expect(await removeMachine(deps, ann, machine.id)).toEqual({ ok: true });
   });
 });

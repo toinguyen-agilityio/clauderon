@@ -34,20 +34,9 @@ export function ticketKeys(projects: readonly { id: string; owner: string; repo:
   };
 }
 
-/** Pod Ready: running with both Claude Code and gh logged in (POD-5). */
-export function isPodReady(pod: { status: string; claudeLoggedIn: boolean; ghLoggedIn: boolean }): boolean {
-  return pod.status === "running" && pod.claudeLoggedIn && pod.ghLoggedIn;
-}
-
-/** The Pods' limits add up to more than the Pod Host's CPU or RAM (POD-2). */
-export function overCommitted(
-  host: { cpus: number | null; memoryMb: number | null } | null,
-  pods: readonly { cpus: number; memoryMb: number }[],
-): boolean {
-  if (!host?.cpus || !host.memoryMb) return false;
-  const cpus = pods.reduce((sum, p) => sum + p.cpus, 0);
-  const memoryMb = pods.reduce((sum, p) => sum + p.memoryMb, 0);
-  return cpus > host.cpus || memoryMb > host.memoryMb;
+/** Machine Ready: connected with both Claude Code and gh logged in (POD-5). */
+export function isMachineReady(machine: { connected: boolean; claudeLoggedIn: boolean; ghLoggedIn: boolean }): boolean {
+  return machine.connected && machine.claudeLoggedIn && machine.ghLoggedIn;
 }
 
 export type PromptInput = { name: string; value: unknown };

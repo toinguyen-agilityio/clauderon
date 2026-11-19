@@ -653,7 +653,7 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
             <button
               type="button"
               className="fe-btn"
-              title={problems.length > 0 ? "Fix the problems first" : "Walk the Flow with made-up Outputs. Nothing runs on a Pod."}
+              title={problems.length > 0 ? "Fix the problems first" : "Walk the Flow with made-up Outputs. Nothing runs on a Machine."}
               onClick={startRun}
               disabled={placements.length === 0}
             >
@@ -771,7 +771,7 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
               <>
                 <span className="fe-run-dot ok">{FIcon.check}</span>
                 <span>
-                  <b>Test run passed</b> · {testRun.order.length} Node{testRun.order.length === 1 ? "" : "s"}, nothing ran on a Pod.
+                  <b>Test run passed</b> · {testRun.order.length} Node{testRun.order.length === 1 ? "" : "s"}, nothing ran on a Machine.
                 </span>
                 <Link href="/tickets" className="fe-btn sm">
                   Start a Run

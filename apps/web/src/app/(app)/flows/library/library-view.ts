@@ -31,7 +31,7 @@ export type NodeFormValue = {
 
 export const KIND_HELP: Record<NodeKind, string> = {
   agent: "Claude works on the instructions by itself and reports its Outputs.",
-  command: "Runs a shell command in the Pod. The exit code and the end of its output become the Output.",
+  command: "Runs a bash command on the Starter's Machine. The exit code and the end of its output become the Output.",
   approve: "Pauses the Run until a person approves, or rejects with feedback for the next try.",
   grill: "Claude asks a person its questions first, then produces its Outputs.",
   ticket: "The entry of every Flow (built in).",
@@ -40,7 +40,7 @@ export const KIND_HELP: Record<NodeKind, string> = {
 export const TYPE_HELP: Record<OutputType, string> = {
   issue: "A GitHub issue: number, title and body.",
   plan: "A short step-by-step plan.",
-  branch: "A branch committed in the Pod's clone.",
+  branch: "A branch committed in the Run's worktree.",
   "test-result": "The exit code and the last lines of a test run.",
   "pull-request": "A GitHub pull request.",
   summary: "Free text, such as a summary or a link.",

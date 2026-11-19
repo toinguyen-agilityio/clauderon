@@ -1,5 +1,6 @@
 import type { Clock, TimerHandle } from "@clauderon/core";
 import {
+  CloseCode,
   ResumeBuffer,
   controlMessage,
   isMessageType,
@@ -18,10 +19,11 @@ export const BACKOFF_CAP_MS = 10_000;
 /** Opens the WebSocket; resolves once it is open, rejects if it cannot be. */
 export type Connector = (url: string, headers: Record<string, string>) => Promise<LinkSocket>;
 
-export type HostFacts = { arch: string; cpus: number; memoryMb: number; diskGb: number; dockerRunning: boolean };
-export type HostFactsReader = () => Promise<HostFacts>;
+/** What a hello tells about the Machine (spec M0 §8, ADR 0006). */
+export type MachineFacts = { os: string; arch: string; hostname: string; cpus: number; memoryMb: number; diskGb: number };
+export type MachineFactsReader = () => Promise<MachineFacts>;
 
-/** Where the Host Agent keeps its last received id between restarts. */
+/** Where the Agent keeps its last received id between restarts. */
 export interface StateStore {
   load(): Promise<{ lastReceivedId: number }>;
   save(state: { lastReceivedId: number }): Promise<void>;
@@ -29,31 +31,33 @@ export interface StateStore {
 
 type Handler<T extends MessageType> = (payload: Payload<T>, envelope: Envelope<Payload<T>>) => void | Promise<void>;
 
-export type HostAgentOptions = {
+export type AgentOptions = {
   url: string;
-  secret: string;
+  /** The Machine's token from Pairing. */
+  token: string;
   clock: Clock;
   connect: Connector;
-  facts: HostFactsReader;
+  facts: MachineFactsReader;
   state: StateStore;
   processId: string;
   version: string;
   log?: (message: string) => void;
   /** Attempts whose Node process is running here (spec M3 §6). */
   runningAttempts?: () => readonly string[];
-  /** Each Pod container's state, sent with every heartbeat (spec M3 §6). */
-  podStatuses?: () => Promise<Payload<"heartbeat">["pods"]>;
   /** After every welcome: e.g. kill orphaned Node processes. */
   onWelcome?: () => void | Promise<void>;
+  /** The Gateway refused the token (unknown, or replaced by a new Pairing): the Agent has stopped. */
+  onUnpaired?: (code: number) => void;
 };
 
 /**
- * The Host Agent's end of the link (spec M0 §4): connects out to the Gateway,
- * says hello with the host's facts, resumes from message ids, sends a
+ * The Agent's end of the link (spec M0 §4, ADR 0006): connects out to the
+ * Gateway with its Machine's token, says hello with the Machine's facts, resumes from message ids, sends a
  * heartbeat every 10 s and reconnects with backoff 1, 2, 4 … capped at 10 s,
- * forever (NFR-3). It only executes and reports; M1 adds the handlers.
+ * forever (NFR-3), until the Gateway refuses the token. It only executes and
+ * reports; the handlers do the work.
  */
-export class HostAgent {
+export class Agent {
   private buffer = new ResumeBuffer();
   private socket: LinkSocket | null = null;
   private welcomed = false;
@@ -64,7 +68,7 @@ export class HostAgent {
   private handlers = new Map<string, Handler<MessageType>[]>();
   private queue: Promise<void> = Promise.resolve();
 
-  constructor(private readonly opts: HostAgentOptions) {}
+  constructor(private readonly opts: AgentOptions) {}
 
   async start(): Promise<void> {
     const saved = await this.opts.state.load();
@@ -96,8 +100,8 @@ export class HostAgent {
     if (this.stopped) return;
     let socket: LinkSocket;
     try {
-      socket = await this.opts.connect(`${this.opts.url.replace(/\/$/, "")}/host-agent`, {
-        authorization: `Bearer ${this.opts.secret}`,
+      socket = await this.opts.connect(`${this.opts.url.replace(/\/$/, "")}/agent`, {
+        authorization: `Bearer ${this.opts.token}`,
       });
     } catch (error) {
       this.log(`connect failed: ${String(error)}`);
@@ -114,6 +118,12 @@ export class HostAgent {
       this.socket = null;
       this.welcomed = false;
       this.stopHeartbeat();
+      if (code === CloseCode.Unauthorized || code === CloseCode.Revoked) {
+        // Reconnecting cannot help: only a new Pairing can.
+        this.stopped = true;
+        this.opts.onUnpaired?.(code);
+        return;
+      }
       this.scheduleReconnect();
     });
 
@@ -154,17 +164,12 @@ export class HostAgent {
   private beat(): void {
     this.heartbeat = this.opts.clock.setTimeout(() => {
       this.beat();
-      void this.sendHeartbeat();
+      this.sendHeartbeat();
     }, HEARTBEAT_MS);
   }
 
-  private async sendHeartbeat(): Promise<void> {
-    const socket = this.socket;
-    const pods = await (this.opts.podStatuses?.() ?? Promise.resolve([])).catch((error: unknown) => {
-      this.log(`pod statuses: ${String(error)}`);
-      return [];
-    });
-    socket?.send(serialize(controlMessage("heartbeat", { at: this.opts.clock.now().toISOString(), pods })));
+  private sendHeartbeat(): void {
+    this.socket?.send(serialize(controlMessage("heartbeat", { at: this.opts.clock.now().toISOString() })));
   }
 
   private stopHeartbeat(): void {

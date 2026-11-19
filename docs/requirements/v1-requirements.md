@@ -92,7 +92,7 @@ Acceptance checks:
 | A3 | The Flow editor rejects an edge whose Output Type does not match the input, and rejects any cycle | Unit tests of the validator |
 | A4 | Each Run shows the correct state of every Node: queued, running, waiting for human, succeeded, failed | Manual script plus runner unit tests |
 | A5 | Reloading the page or restarting the app loses no Pods, Flows, Runs or logs; a Run that was Running when the Gateway restarted keeps running if the Host Agent reconnects within 30 seconds | Manual check |
-| A7 | An allowlisted Google account signs in and its email shows on its actions; a Google account not on the allowlist is refused; the Operator removes an email on the Allowlist page and that Member's session, open terminal and live connections end at once | Manual check |
+| A7 | An allowlisted Google account signs in and its email shows on its actions; a Google account not on the allowlist is refused; the Operator removes an email on the Members page and that Member's session, open terminal and live connections end at once | Manual check |
 
 ---
 
@@ -100,7 +100,7 @@ Acceptance checks:
 
 ### In scope
 
-- **People:** one team on one shared web app with its own database. A member signs in with their Google account; only email addresses on the app's allowlist get in. The Operator manages the allowlist on an Allowlist page.
+- **People:** one team on one shared web app with its own database. A member signs in with their Google account; only email addresses on the app's allowlist get in. Every member sees the team on a Members page; the Operator adds and removes members there.
 - **Projects:** each Project is one GitHub repository and its base branch. Several Projects can be enabled, all owned by one GitHub owner (an organisation or a user).
 - **Pod Host:** exactly one team machine running Docker (for example Docker Desktop on an ARM64 Mac), always on, with one Host Agent that connects out to the Gateway.
 - **Pods:** one Docker container per Member on the Pod Host, created, started, stopped, recreated and deleted from the app; one standard Ubuntu image; a Workspace volume per Pod; Slots and CPU/RAM limits; a web terminal for the owner to log in to Claude Code and gh; measured CPU, RAM and disk use.
@@ -140,8 +140,8 @@ Priority: **Must** / **Should** / **Could**.
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | MEM-1 | Sign in with Google, through an OAuth client in the company's Google Cloud project managed by the team lead. Only verified Google email addresses on the allowlist can sign in; any other address sees an "access denied" page. A Member is identified by that email, shown by the Google name and picture, and named on every action they take. A session lasts 24 hours. Sign out ends the session. | Must |
-| MEM-3 | The allowlist is stored in the database and holds exact email addresses only, never a whole domain, compared case-insensitively. The **Operator** emails, set in the app's configuration, are always allowed, so the Operator cannot be locked out. The first sign-in of an allowed email creates the Member. Every request and every open WebSocket and terminal connection checks the session's email against the allowlist, so removing an email takes effect at once; the Member's Pod, Runs and audit entries are kept. | Must |
-| MEM-4 | **Allowlist page**, for the Operator only: list the allowed emails with who added each one and when, add an email, remove an email. Every change is recorded in the audit log. | Must |
+| MEM-3 | The allowlist is stored in the database and holds exact email addresses only, never a whole domain, compared case-insensitively. The **Operator** emails, set in the app's configuration, are always allowed, so the Operator cannot be locked out. The first sign-in of an allowed email creates the Member. Every request and every open WebSocket and terminal connection checks the session's email against the allowlist, so removing an email takes effect at once. Removing an email also removes the Member's Machine ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md)), so its Agent is disconnected and its token stops working, and is refused while that Machine has Active Runs; the Member's Runs and audit entries are kept. | Must |
+| MEM-4 | **Members page**, readable by every Member: each allowed email with the Member's name and picture, status (Active once signed in, Invited until then, Removed while a removed Member's Machine is left), Operator tag, last sign-in, Machine status and Active Runs. Only the Operator adds an email, removes one (behind a confirm that warns the Machine is removed too, with a link to the blocking Runs when refused), and removes another Member's Machine. Every change is recorded in the audit log. The old Allowlist address redirects here. | Must |
 | MEM-2 | Every member can approve, reject, answer, cancel and retry any Run. Starting a Run and opening a Pod's terminal are tied to the Member's own Pod (POD-3, POD-9). | Must |
 | PRJ-1 | Enable a GitHub repository as a Project by picking it from the repositories the app's token can read, then choosing its base branch from the repository's branches. | Must |
 | PRJ-2 | One fine-grained personal access token for the app, with Issues: read and Pull requests: read on the Projects' repositories, kept in the app's configuration and never stored in the database. One token reads the repositories of one owner, so every Project belongs to that owner. | Must |
@@ -290,7 +290,7 @@ A Run holds a Slot only while Running or Waiting for human.
 | Screen | Shows | Main actions |
 | --- | --- | --- |
 | Sign in | Sign in with Google button; access denied page for emails not on the allowlist | Sign in, sign out |
-| Allowlist | Allowed emails, who added each and when (Operator only) | Add an email, remove an email |
+| Members | Every allowed email with name, status, Operator tag, last sign-in, Machine and Active Runs (every Member reads it) | Operator: add an email, remove one (removes the Machine too), remove a Member's Machine |
 | Projects | Enabled repositories | Enable a repo from the token's list, pick its base branch, Sync |
 | Tickets | Tickets per Project with derived status | Search, filter, select, Start |
 | Start dialog | Flow, mode, extra instructions, selected Tickets with author warnings, the Starter's Pod with its Slots | Start the Batch |
@@ -336,7 +336,7 @@ A Run holds a Slot only while Running or Waiting for human.
 | R3 | **Anthropic terms** for running Claude Code headless on a subscription from a separate app | Medium | Check the official terms during design. Fallback: an API key on the Pod |
 | R4 | Subscription quota runs out mid-Run | Medium | The Node fails with a clear reason and can be retried; load-test with Dry-run; a Gateway deploy does not interrupt Runs (RUN-12), so Nodes are not re-run needlessly |
 | R5 | A Node waiting for a person holds a Slot indefinitely | Medium | Needs you queue; any member can answer or cancel |
-| R6 | **Allowlist drift:** someone who leaves the team keeps access until their email is removed | Low | The Operator removes the email on the Allowlist page; their Runs and audit entries stay |
+| R6 | **Allowlist drift:** someone who leaves the team keeps access until their email is removed | Low | The Operator removes the email on the Members page, which removes their Machine too; their Runs and audit entries stay |
 | R10 | **Two deploy targets:** the web app on Vercel and the Gateway on Railway or Fly must stay in step on the protocol and the database schema | Medium | One monorepo with shared protocol types; database migrations run before either part is deployed |
 | R11 | **Sign-in depends on one Google Cloud project:** if its owner leaves or the project is deleted, nobody can sign in | Medium | The OAuth client lives in the company's project managed by the team lead (MEM-1); if a personal project is ever used, add a second owner and document who holds it and how to rotate the client secret |
 

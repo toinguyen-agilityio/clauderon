@@ -1,26 +1,27 @@
+import { join } from "node:path";
 import { mask } from "@clauderon/core";
-import { POD_USER, containerName, execText, type DockerClient } from "./docker";
-import { detached, type AgentLink, type Log } from "./pods";
+import { detached, errorText, type AgentLink, type Log } from "./link";
+import { runScript, runText, type System } from "./system";
 
-export const projectDir = (owner: string, repo: string) => `/workspace/projects/${owner}/${repo}`;
-export const worktreeDir = (runId: string) => `/workspace/runs/${runId}`;
+/** Where the Agent keeps its clones and worktrees, never the Member's own checkouts (ADR 0006). */
+export const projectDir = (home: string, owner: string, repo: string) => join(home, "projects", owner, repo);
+export const worktreeDir = (home: string, runId: string) => join(home, "runs", runId);
 
 const SAFE = /^[A-Za-z0-9._/-]+$/;
 
-// Commits are made as the gh account, with its noreply address, unless the
-// owner set their own identity in the terminal.
+// Commits are made as the Member's own git identity; a clone with none gets
+// the gh account and its noreply address, in that clone's config only.
 const GIT_IDENTITY = [
-  "gh auth setup-git",
-  'git config --global user.name >/dev/null || git config --global user.name "$(gh api user --jq .login)"',
-  'git config --global user.email >/dev/null || git config --global user.email "$(gh api user --jq \'"\\(.id)+\\(.login)@users.noreply.github.com"\')"',
+  'git -C "$1" config user.name >/dev/null || git -C "$1" config user.name "$(gh api user --jq .login)"',
+  'git -C "$1" config user.email >/dev/null || git -C "$1" config user.email "$(gh api user --jq \'"\\(.id)+\\(.login)@users.noreply.github.com"\')"',
 ].join(" && ");
 
 /**
  * `workspace.prepare` (spec M1 §4.2, POD-10): clone the Project once with the
- * Starter's gh login, otherwise fetch the base; then a worktree and branch per
+ * Member's gh login, otherwise fetch the base; then a worktree and branch per
  * Run.
  */
-export function registerWorkspaceHandlers(link: AgentLink, docker: DockerClient, log: Log): void {
+export function registerWorkspaceHandlers(link: AgentLink, system: System, { home, log }: { home: string; log: Log }): void {
   // One prepare at a time per clone: a Batch starts several Runs of the same
   // Project together, and two first-time clones into one directory collide.
   const queues = new Map<string, Promise<void>>();
@@ -34,29 +35,29 @@ export function registerWorkspaceHandlers(link: AgentLink, docker: DockerClient,
     return next;
   };
 
-  link.on("workspace.prepare", detached(async ({ runId, podId, owner, repo, baseBranch, branch }) => {
-    try {
-      for (const value of [owner, repo, baseBranch, branch, runId]) {
-        if (!SAFE.test(value) || value.includes("..")) throw new Error(`Refusing unsafe name ${JSON.stringify(value)}`);
-      }
-      const container = containerName(podId);
-      const options = { user: POD_USER };
-      const dir = projectDir(owner, repo);
-      const git = (args: string[]) => execText(docker, container, ["git", "-C", dir, ...args], options);
-      const path = worktreeDir(runId);
+  link.on(
+    "workspace.prepare",
+    detached(async ({ runId, owner, repo, baseBranch, branch }) => {
+      try {
+        for (const value of [owner, repo, baseBranch, branch, runId]) {
+          if (!SAFE.test(value) || value.includes("..")) throw new Error(`Refusing unsafe name ${JSON.stringify(value)}`);
+        }
+        const dir = projectDir(home, owner, repo);
+        const git = (args: string[]) => runText(system, ["git", "-C", dir, ...args]);
+        const path = worktreeDir(home, runId);
 
-      await oneAtATime(`${container}:${dir}`, async () => {
-        await execText(docker, container, ["bash", "-lc", GIT_IDENTITY], options);
-        const cloned = (await docker.exec(container, ["test", "-d", `${dir}/.git`], options)) === 0;
-        if (cloned) await git(["fetch", "origin", baseBranch]);
-        else await execText(docker, container, ["gh", "repo", "clone", `${owner}/${repo}`, dir], options);
-        await git(["worktree", "add", path, "-b", branch, `origin/${baseBranch}`]);
-      });
-      link.send("workspace.ready", { runId, worktreePath: path });
-    } catch (error) {
-      const text = mask(error instanceof Error ? error.message : String(error));
-      log(`workspace ${runId}: ${text}`);
-      link.send("workspace.failed", { runId, error: text });
-    }
-  }));
+        await oneAtATime(dir, async () => {
+          if (await system.exists(join(dir, ".git"))) await git(["fetch", "origin", baseBranch]);
+          else await runText(system, ["gh", "repo", "clone", `${owner}/${repo}`, dir]);
+          await runScript(system, GIT_IDENTITY, [dir]);
+          await git(["worktree", "add", path, "-b", branch, `origin/${baseBranch}`]);
+        });
+        link.send("workspace.ready", { runId, worktreePath: path });
+      } catch (error) {
+        const text = mask(errorText(error));
+        log(`workspace ${runId}: ${text}`);
+        link.send("workspace.failed", { runId, error: text });
+      }
+    }),
+  );
 }

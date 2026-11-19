@@ -1,5 +1,7 @@
 # Pods are per-Member Docker containers on one Pod Host, driven by a Host Agent
 
+Superseded by [ADR 0006](0006-each-member-runs-on-their-own-machine.md).
+
 Each Member gets one Docker container, built from one standard Ubuntu image, on a single always-on team machine (the Pod Host). The container's Workspace volume holds that Member's own Claude Code and gh logins, so Runs spend the Starter's own subscription and open pull requests under the Starter's name, and every Run executes on its Starter's Pod. The Clauderon web app is hosted elsewhere with its own database, so a Host Agent on the Pod Host opens an outbound HTTPS connection to the app and carries out every command (create, start, stop, recreate, delete, exec, stream logs). This keeps the Pod Host free of inbound ports and works for remote Members, at the cost of one more process to install and keep running.
 
 ## Considered Options
