@@ -1,7 +1,12 @@
 // PostToolUse hook for `gh pr merge`: reminds Claude to update the linked ticket.
 const chunks = [];
 for await (const c of process.stdin) chunks.push(c);
-const input = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+let input = {};
+try {
+  input = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+} catch {
+  // Malformed input: do nothing rather than fail the hook.
+}
 const cmd = input.tool_input?.command ?? "";
 // Only when `gh pr merge` is a command itself (start of line, or after && ; | ), not text inside a body or message.
 if (/(^|&&|\|\||[;|\n])\s*gh\s+pr\s+merge\b/.test(cmd)) {
