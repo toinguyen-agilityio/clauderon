@@ -1,19 +1,16 @@
 import type { Clock } from "@clauderon/core";
 import type { Db } from "@clauderon/db";
 import { BrowserHub } from "./browser-hub";
-import { HostLink } from "./host-link";
-import { HostWatch } from "./host-watch";
 import { LiveHub } from "./live-hub";
 import { LogRetention } from "./log-retention";
-import { PodService } from "./pods";
+import { MachineLinks } from "./machine-link";
+import { MachineWatch } from "./machine-watch";
+import { MachineService } from "./machines";
 import { RunEngine } from "./run-engine";
-import { TerminalHub } from "./terminals";
 
 export type GatewayOptions = {
   db: Db;
   clock: Clock;
-  hostAgentSecret: string;
-  podImage: string;
   operators: readonly string[];
   sessionSecret: string;
   /** Secret values masked out of every stored log line (NFR-1). */
@@ -26,40 +23,45 @@ export type GatewayOptions = {
   heartbeatTimeoutMs?: number;
 };
 
-/** Every Gateway part, wired to the Host Agent's messages. */
+/** Every Gateway part, wired to the Agents' messages. */
 export function createGateway(opts: GatewayOptions) {
   const { db, clock, log } = opts;
   const live = new LiveHub(db);
-  const link = new HostLink({ db, secret: opts.hostAgentSecret, podImage: opts.podImage, clock, log });
+  const links = new MachineLinks({ db, clock, log });
   const hub = new BrowserHub({ db, operators: opts.operators, sessionSecret: opts.sessionSecret, clock, live });
   const engine = new RunEngine({
     db,
-    link,
+    links,
     clock,
     live,
     secrets: opts.appSecrets,
     dryRunFailureRate: opts.dryRunFailureRate,
     random: opts.random,
     log,
-    hostConnected: () => link.connected,
   });
-  const watch = new HostWatch({ link, engine, clock, timeoutMs: opts.heartbeatTimeoutMs });
-  const pods = new PodService({ db, link, engine, log });
-  const terminals = new TerminalHub({ db, hub, link, clock });
+  const watch = new MachineWatch({ db, links, engine, clock, timeoutMs: opts.heartbeatTimeoutMs });
+  const machines = new MachineService({ db, links, engine, log });
   const retention = new LogRetention({ db, clock, log });
 
-  link.on("pod.status", (p) => pods.status(p));
-  link.on("pod.logins", (p) => pods.logins(p));
-  link.on("workspace.ready", (p) => engine.workspaceReady(p));
-  link.on("workspace.failed", (p) => engine.workspaceFailed(p));
-  link.on("node.log", (p) => engine.nodeLog(p));
-  link.on("node.usage", (p) => engine.nodeUsage(p));
-  link.on("node.result", (p) => engine.nodeResult(p));
-  link.on("terminal.output", (p) => terminals.output(p));
-  link.on("terminal.closed", (p) => terminals.closed(p));
-  link.onHeartbeat((p) => pods.heartbeat(p));
+  links.on("machine.logins", (p, machineId) => machines.logins(p, machineId));
+  links.on("workspace.ready", (p) => engine.workspaceReady(p));
+  links.on("workspace.failed", (p) => engine.workspaceFailed(p));
+  links.on("node.log", (p) => engine.nodeLog(p));
+  links.on("node.usage", (p) => engine.nodeUsage(p));
+  links.on("node.result", (p) => engine.nodeResult(p));
+  // A new Agent process, e.g. right after Pairing: its logins are unknown until checked (POD-5).
+  links.onHello((machineId, _hello, { processChanged }) => {
+    if (processChanged) links.send(machineId, "machine.checkLogins", {});
+  });
 
-  return { link, hub, live, engine, pods, terminals, watch, retention };
+  /** Loads the links, interrupts lost Dry-runs and arms the boot wait (spec M3 §6). */
+  const start = async () => {
+    await links.start();
+    await watch.start();
+    await engine.booted();
+  };
+
+  return { links, hub, live, engine, machines, watch, retention, start };
 }
 
 export type Gateway = ReturnType<typeof createGateway>;

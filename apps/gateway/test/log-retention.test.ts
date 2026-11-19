@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { appendLogChunk, createAttempt, logChunksOf, schema, sql, type Db } from "@clauderon/db";
-import { FakeClock, createTestDatabase, memberRow, podRow, projectRow, startSampleBatch, ticketRow, type TestDatabase } from "@clauderon/testing";
+import { FakeClock, createTestDatabase, memberRow, machineRow, projectRow, startSampleBatch, ticketRow, type TestDatabase } from "@clauderon/testing";
 import { LOG_RETENTION_DAYS, LogRetention } from "../src/log-retention";
 
 let test: TestDatabase;
@@ -13,15 +13,15 @@ beforeAll(async () => {
 });
 afterAll(() => test.drop());
 beforeEach(async () => {
-  await db.execute(sql`truncate member, pod, project, ticket, batch, run, attempt, log_chunk cascade`);
+  await db.execute(sql`truncate member, machine, project, ticket, batch, run, attempt, log_chunk cascade`);
 });
 
 async function attemptId(now: Date): Promise<string> {
   const member = await memberRow(db, "ann@example.com", "Ann");
-  const pod = await podRow(db, member.id);
+  const machine = await machineRow(db, member.id);
   const project = await projectRow(db);
   const ticket = await ticketRow(db, project.id, 1);
-  const started = await startSampleBatch(db, member, pod.id, [ticket.id], now);
+  const started = await startSampleBatch(db, member, machine.id, [ticket.id], now);
   if (!started.ok) throw new Error("batch not started");
   const [node] = await db.select({ id: schema.flowNode.id }).from(schema.flowNode).limit(1);
   const attempt = await createAttempt(db, { runId: started.runIds[0]!, flowNodeId: node!.id, number: 1, startedAt: now });

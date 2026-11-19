@@ -14,11 +14,13 @@ import {
   type Db,
 } from "@clauderon/db";
 import type { Payload } from "@clauderon/protocol";
-import { createTestDatabase, memberRow, podRow, projectRow, startSampleBatch, ticketRow, type FakeHostAgent, type TestDatabase } from "@clauderon/testing";
+import { createTestDatabase, machineRow, memberRow, projectRow, startSampleBatch, ticketRow, type FakeAgent, type TestDatabase } from "@clauderon/testing";
 import { restartGateway, startGateway } from "./harness";
 
+const TOKEN = "ann-machine-token";
+
 // Spec M3 acceptance tests on the Gateway: Human Nodes, Grill rounds, Retry
-// and resilience, with the fake Host Agent and the fake clock.
+// and resilience, with the fake Agent and the fake clock.
 
 let test: TestDatabase;
 let db: Db;
@@ -29,7 +31,7 @@ beforeAll(async () => {
 });
 afterAll(() => test.drop());
 beforeEach(async () => {
-  await db.execute(sql`truncate member, pod, project, ticket, batch, run, attempt, output, log_chunk, human_request, audit_entry, pod_host cascade`);
+  await db.execute(sql`truncate member, machine, pairing, project, ticket, batch, run, attempt, output, log_chunk, human_request, audit_entry cascade`);
 });
 
 type Script = {
@@ -41,12 +43,12 @@ type Script = {
   hold?: (run: Payload<"node.run">) => boolean;
 };
 
-/** A Host Agent for *Plan and deliver*: Grill asks `grillRounds` rounds, then every Node succeeds. */
-function scriptPlanAndDeliver(agent: FakeHostAgent, script: Script = {}) {
+/** An Agent for *Plan and deliver*: Grill asks `grillRounds` rounds, then every Node succeeds. */
+function scriptPlanAndDeliver(agent: FakeAgent, script: Script = {}) {
   let asked = 0;
   const exits = [...(script.testExits ?? [])];
-  agent.respond("pod.checkLogins", ({ podId }, a) =>
-    a.send("pod.logins", { podId, claude: true, gh: true, ghAccount: "octocat", tokenRepos: [], checkedAt: new Date().toISOString() }),
+  agent.respond("machine.checkLogins", (_, a) =>
+    a.send("machine.logins", { claude: true, gh: true, ghAccount: "octocat", tokenRepos: [], checkedAt: new Date().toISOString() }),
   );
   agent.respond("workspace.prepare", ({ runId }, a) => a.send("workspace.ready", { runId, worktreePath: `/workspace/runs/${runId}` }));
   agent.respond("node.run", (run, a) => {
@@ -76,19 +78,19 @@ function scriptPlanAndDeliver(agent: FakeHostAgent, script: Script = {}) {
 async function setup(slots = 2, ticketCount = 1) {
   const ann = await memberRow(db, "ann@example.com", "Ann");
   const bo = await memberRow(db, "bo@example.com", "Bo");
-  const pod = await podRow(db, ann.id, { slots });
+  const machine = await machineRow(db, ann.id, { slots, token: TOKEN });
   const project = await projectRow(db);
   const tickets: Awaited<ReturnType<typeof ticketRow>>[] = [];
   for (let n = 1; n <= ticketCount; n++) tickets.push(await ticketRow(db, project.id, 410 + n));
-  const ctx = await startGateway(db);
+  const ctx = await startGateway(db, TOKEN);
   const start = async (ticketIndexes = [0], slug = "plan-and-deliver") => {
-    const started = await startSampleBatch(db, ann, pod.id, ticketIndexes.map((i) => tickets[i]!.id), ctx.clock.now(), "", "real", slug);
+    const started = await startSampleBatch(db, ann, machine.id, ticketIndexes.map((i) => tickets[i]!.id), ctx.clock.now(), "", "real", slug);
     if (!started.ok) throw new Error("start failed");
-    await ctx.gateway.engine.schedule(pod.id);
+    await ctx.gateway.engine.schedule(machine.id);
     await ctx.flush();
     return started.runIds;
   };
-  return { ann, bo, pod, tickets, start, ...ctx };
+  return { ann, bo, machine, tickets, start, ...ctx };
 }
 
 /** Each Node's state on the Run page's terms (T3-1): from its latest Attempt of the current pass. */
@@ -257,7 +259,7 @@ describe("Human Nodes on the Gateway (spec M3 §2)", () => {
 
 describe("Retry on the Gateway (spec M3 §4)", () => {
   it("T3-6: Retry from Code a change after a Reject: new Attempts, earlier ones kept, the prompt holds feedback, exit code, last lines and note", async () => {
-    const { ann, bo, gateway, agent, flush, start, pod } = await setup(1, 1);
+    const { ann, bo, gateway, agent, flush, start, machine } = await setup(1, 1);
     scriptPlanAndDeliver(agent, { testExits: [0, 1] });
     const [runId] = await start();
     const respond = async (action: Parameters<typeof respondToHuman>[3]) => {
@@ -271,7 +273,7 @@ describe("Retry on the Gateway (spec M3 §4)", () => {
       const result = await retryRun(db, runId!, snapshot.nodes.find((n) => n.name === node)!.id, note, ann.email, new Date());
       expect(result).toMatchObject({ ok: true });
       expect((await getRun(db, runId!))!.state).toBe("queued");
-      await gateway.engine.schedule(pod.id);
+      await gateway.engine.schedule(machine.id);
       await flush();
     };
 
@@ -286,10 +288,10 @@ describe("Retry on the Gateway (spec M3 §4)", () => {
 
     // Pass 3: retry from Code a change with a note.
     const before = agent.of("node.run").length;
-    const checksBefore = agent.of("pod.checkLogins").length;
+    const checksBefore = agent.of("machine.checkLogins").length;
     await retry("Code a change", "Check the rounding.");
     // A Real Retry runs the login check again; the worktree is kept, so no new workspace.
-    expect(agent.of("pod.checkLogins").length).toBe(checksBefore + 1);
+    expect(agent.of("machine.checkLogins").length).toBe(checksBefore + 1);
     expect(agent.of("workspace.prepare")).toHaveLength(1);
     const prompt = agent.of("node.run").slice(before).find((r) => r.kind === "agent")!.prompt!;
     expect(prompt).toContain(`## ${FEEDBACK_HEADING}\n\nKeep the old API.`);
@@ -316,13 +318,13 @@ describe("Retry on the Gateway (spec M3 §4)", () => {
     expect((await getRun(db, runId!))!.state).toBe("waiting_for_human");
   });
 
-  it("T3-6: a retried Run joins the end of its Pod's queue, behind an existing Queued Run", async () => {
-    const { ann, gateway, agent, flush, start, pod } = await setup(1, 3);
+  it("T3-6: a retried Run joins the end of its Machine's queue, behind an existing Queued Run", async () => {
+    const { ann, gateway, agent, flush, start, machine } = await setup(1, 3);
     scriptPlanAndDeliver(agent);
     const [a] = await start([0]);
     const reject = await openRequest(a!);
     await respondToHuman(db, reject.request.id, ann.email, { decision: "reject", feedback: "No." }, new Date());
-    await gateway.engine.schedule(pod.id);
+    await gateway.engine.schedule(machine.id);
     await flush();
     // B started in the freed Slot and waits; C queues behind it.
     const [b, c] = await start([1, 2]);
@@ -334,7 +336,7 @@ describe("Retry on the Gateway (spec M3 §4)", () => {
     // Free B's Slot: C, queued earlier, goes first.
     const cancelled = await cancelRun(db, b!, ann.email, new Date());
     if (!cancelled.ok) throw new Error("cancel failed");
-    await gateway.engine.cancelled({ podId: pod.id, runId: b!, attemptIds: cancelled.cancelledAttemptIds });
+    await gateway.engine.cancelled({ machineId: machine.id, runId: b!, attemptIds: cancelled.cancelledAttemptIds });
     await flush();
     expect((await getRun(db, c!))!.state).toBe("waiting_for_human");
     expect((await getRun(db, a!))!.state).toBe("queued");
@@ -360,7 +362,7 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
   const holdCode = (run: Payload<"node.run">) => run.kind === "agent" && !run.prompt?.includes('"questions"');
 
   it("T3-9: a 20 s drop and reconnect: the Run stays running, no log line lost or duplicated", async () => {
-    const { gateway, agent, clock, flush, start, reconnect, gatewaySide } = await setup();
+    const { gateway, agent, clock, flush, start, reconnect, gatewaySide, machine } = await setup();
     scriptPlanAndDeliver(agent, { hold: holdCode });
     const [runId] = await start([0], "basic-ticket-delivery");
     const code = agent.of("node.run").at(-1)!;
@@ -382,7 +384,7 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     expect((await logChunksOf(db, code.attemptId)).map((l) => l.seq)).toEqual([0, 1, 2]);
     expect(agent.of("node.kill")).toEqual([]);
     expect((await getRun(db, runId!))!.state).toBe("succeeded");
-    expect(gateway.link.connected).toBe(true);
+    expect(gateway.links.connected(machine.id)).toBe(true);
   });
 
   it("T3-10: 31 s without a heartbeat interrupts running Runs, keeps waiting ones, and kills their Attempts on reconnect", async () => {
@@ -396,10 +398,10 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     agent.stopBeating();
     await clock.advance(31_000);
     await flush();
-    expect(await getRun(db, running!)).toMatchObject({ state: "interrupted", failureReason: "Pod Host unreachable" });
+    expect(await getRun(db, running!)).toMatchObject({ state: "interrupted", failureReason: "Machine unreachable" });
     expect((await attemptsOfRun(db, running!)).find((a) => a.id === code.attemptId)).toMatchObject({ state: "interrupted" });
     expect((await getRun(db, waiting!))!.state).toBe("waiting_for_human");
-    // The silent socket was dropped, so the Host Agent says hello again.
+    // The silent socket was dropped, so the Agent says hello again.
     expect(agent.connected).toBe(false);
 
     reconnect({ liveAttempts: [code.attemptId] });
@@ -413,29 +415,45 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     expect(agent.of("node.run").filter((r) => r.runId === running)).toHaveLength(1);
   });
 
-  it("a Host Agent restart interrupts Runs whose Attempts it no longer lists, and kills nothing it still runs", async () => {
+  it("an Agent restart interrupts Runs whose Attempts it no longer lists, and kills nothing it still runs", async () => {
     const { agent, flush, start, reconnect } = await setup();
     scriptPlanAndDeliver(agent, { hold: holdCode });
     const [runId] = await start([0], "basic-ticket-delivery");
     const code = agent.of("node.run").at(-1)!;
     reconnect({ processId: "fake-process-2", liveAttempts: [], lastReceivedId: agent.buffer.lastReceivedId });
     await flush();
-    expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "Host Agent restarted" });
+    expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "Agent restarted" });
     expect(agent.of("node.kill")).toEqual([{ attemptId: code.attemptId }]);
   });
 
-  it("a Pod reported stopped in a heartbeat interrupts its Running Runs", async () => {
-    const { agent, flush, start, pod } = await setup();
+  it("ADR 0006: pairing the Machine anew closes the old Agent and interrupts its Running Runs", async () => {
+    const { agent, flush, start, gateway, machine } = await setup();
     scriptPlanAndDeliver(agent, { hold: holdCode });
     const [runId] = await start([0], "basic-ticket-delivery");
-    agent.heartbeat(new Date().toISOString(), [{ podId: pod.id, status: "stopped" }]);
+    await gateway.machines.command({ type: "machine.repaired", machineId: machine.id });
     await flush();
-    expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "Pod stopped: container is not running" });
-    const [stored] = await db.select().from(schema.pod);
-    expect(stored!.status).toBe("stopped");
+    expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "The Machine was paired anew" });
+    expect(agent.closeCode).toBe(4403);
+    const [stored] = await db.select().from(schema.machine);
+    expect(stored!.connected).toBe(false);
   });
 
-  it("T3-11 (A5): restart the Gateway mid-Run; the Host Agent reconnects within 30 s listing the Attempt as live; the Run succeeds", async () => {
+  it("a restarted Gateway interrupts Dry-runs whose Node was being simulated", async () => {
+    const { ann, machine, tickets, gateway, agent, clock, flush, gatewaySide } = await setup();
+    const started = await startSampleBatch(db, ann, machine.id, [tickets[0]!.id], clock.now(), "", "dry", "basic-ticket-delivery");
+    if (!started.ok) throw new Error("start failed");
+    await gateway.engine.schedule(machine.id);
+    await flush();
+    const runId = started.runIds[0]!;
+    expect((await attemptsOfRun(db, runId)).at(-1)).toMatchObject({ state: "running" });
+
+    gatewaySide.cut();
+    await flush();
+    await restartGateway(db, TOKEN, agent, []);
+    expect(await getRun(db, runId)).toMatchObject({ state: "interrupted", failureReason: "Lost while the Gateway restarted" });
+  });
+
+  it("T3-11 (A5): restart the Gateway mid-Run; the Agent reconnects within 30 s listing the Attempt as live; the Run succeeds", async () => {
     const { agent, flush, start, gatewaySide } = await setup();
     scriptPlanAndDeliver(agent, { hold: holdCode });
     const [runId] = await start([0], "basic-ticket-delivery");
@@ -446,7 +464,7 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     await flush();
     agent.respond("node.run", () => {});
     scriptPlanAndDeliver(agent);
-    const next = await restartGateway(db, agent, [code.attemptId]);
+    const next = await restartGateway(db, TOKEN, agent, [code.attemptId]);
     await next.clock.advance(20_000);
     agent.send("node.result", { attemptId: code.attemptId, exitCode: 0, headCommit: "c0ffee", result: { outputs: { summary: "ok" } } });
     await next.flush();
@@ -454,17 +472,17 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     expect(agent.of("node.kill")).toEqual([]);
   });
 
-  it("a restarted Gateway whose Host Agent does not list the Attempt interrupts the Run; one that never says hello does so after 30 s", async () => {
+  it("a restarted Gateway whose Agent does not list the Attempt interrupts the Run; one that never says hello does so after 30 s", async () => {
     const { agent, flush, start, gatewaySide } = await setup();
     scriptPlanAndDeliver(agent, { hold: holdCode });
     const [runId] = await start([0], "basic-ticket-delivery");
     gatewaySide.cut();
     await flush();
-    await restartGateway(db, agent, []);
+    await restartGateway(db, TOKEN, agent, []);
     expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "Lost while the Gateway restarted" });
   });
 
-  it("a Gateway that boots without hearing from the Host Agent interrupts Running Runs after 30 s", async () => {
+  it("a Gateway that boots without hearing from the Agent interrupts Running Runs after 30 s", async () => {
     const { agent, flush, start, gatewaySide } = await setup();
     scriptPlanAndDeliver(agent, { hold: holdCode });
     const [runId] = await start([0], "basic-ticket-delivery");
@@ -473,14 +491,13 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     const { createGateway } = await import("../src/gateway");
     const { FakeClock } = await import("@clauderon/testing");
     const clock = new FakeClock();
-    const booted = createGateway({ db, clock, hostAgentSecret: "x", podImage: "", operators: [], sessionSecret: "s", appSecrets: [], log: () => {} });
-    await booted.link.start();
-    booted.watch.start();
+    const booted = createGateway({ db, clock, operators: [], sessionSecret: "s", appSecrets: [], log: () => {} });
+    await booted.start();
     await clock.advance(29_000);
     await booted.engine.idle();
     expect((await getRun(db, runId!))!.state).toBe("running");
     await clock.advance(2_000);
     await booted.engine.idle();
-    expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "Pod Host unreachable" });
+    expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "Machine unreachable" });
   });
 });
