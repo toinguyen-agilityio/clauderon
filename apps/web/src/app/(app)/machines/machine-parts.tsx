@@ -15,9 +15,6 @@ export const formatGb = (memoryMb: number) => `${Math.round((memoryMb / 1024) * 
 export const machineName = (machine: { name: string | null; owner: { name: string | null; email: string } }) =>
   machine.name ?? defaultMachineName(machine.owner);
 
-/** Pairing from a checkout of this repository, for those who run the Agent by hand (ADR 0006). */
-export const pairCommand = (webUrl: string) => `pnpm --filter @clauderon/host-agent pair ${webUrl}`;
-
 /** The Claude account Runs use, as one short label: "ann · Pro" (the full email goes in a tooltip). */
 export function claudeAccountLabel(machine: { claudeLoggedIn: boolean; claudeAccount: string | null; claudePlan: string | null }): string | null {
   if (!machine.claudeLoggedIn || !machine.claudeAccount) return null;

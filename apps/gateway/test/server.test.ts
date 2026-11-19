@@ -84,6 +84,17 @@ describe("Gateway server over real HTTP and WebSockets", () => {
     await expect.poll(async () => (await getMachineOfMember(db, ann.id))?.connected).toBe(true);
     expect(await getMachineOfMember(db, ann.id)).toMatchObject({ hostname: "ann-laptop", os: "linux" });
     socket.close();
+
+    // ADR 0007: the installer and the doctor ask whether the token is still paired.
+    const check = await fetch(`${http}/agent/check`, { headers: { authorization: `Bearer ${token}` } });
+    expect(check.status).toBe(200);
+    expect(await check.json()).toEqual({ paired: true, webUrl: "https://app.test" });
+    expect(check.headers.get("date")).toBeTruthy();
+  });
+
+  it("ADR 0007: the token check refuses an unknown or missing token", async () => {
+    expect((await fetch(`${http}/agent/check`, { headers: { authorization: "Bearer nope" } })).status).toBe(401);
+    expect((await fetch(`${http}/agent/check`)).status).toBe(401);
   });
 
   it("refuses a malformed pairing request and a token already in use", async () => {

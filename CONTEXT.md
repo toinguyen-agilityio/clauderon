@@ -50,12 +50,16 @@ _Avoid_: Host Agent, daemon, runner, client
 Linking a Machine to its Member: the Agent shows a short-lived code that the Member approves in the web app, after which the Machine connects with its own token; a new Pairing replaces the Member's previous Machine.
 _Avoid_: Registration, enrolment, login
 
+**Doctor**:
+The Agent's check of its Machine: tools, logins, Pairing, Gateway, service and disk, each failure with the step that fixes it on that operating system; a failed check makes the Machine Not ready, a warning does not.
+_Avoid_: Health check, diagnostics, preflight
+
 **Workspace**:
 The Agent's own directory on a Machine: a clone of each Project and a worktree per Run.
 _Avoid_: Volume, home, checkout
 
 **Machine Ready**:
-The state of a Machine that is connected with both Claude Code and gh logged in.
+The state of a Machine that is connected with both Claude Code and gh logged in, and whose Doctor found no failure.
 _Avoid_: Online, healthy
 
 **Slot**:

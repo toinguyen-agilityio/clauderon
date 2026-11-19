@@ -17,6 +17,7 @@ CMD ["pnpm", "--filter", "@clauderon/gateway", "start"]
 
 FROM workspace AS web
 ENV NODE_ENV=production
-RUN pnpm --filter @clauderon/web build
+# The web app serves the Agent as one file to installers and updating Agents (ADR 0007).
+RUN pnpm --filter @clauderon/host-agent build && pnpm --filter @clauderon/web build
 EXPOSE 3000
 CMD ["pnpm", "--filter", "@clauderon/web", "start"]

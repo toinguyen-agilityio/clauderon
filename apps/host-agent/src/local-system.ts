@@ -23,9 +23,12 @@ export function findBash(env: NodeJS.ProcessEnv = process.env): string {
   return "bash.exe";
 }
 
-// A login profile may reset PATH (Debian's does), so the Agent's own tools
-// are put first inside the shell. Git Bash wants a POSIX path.
-const WITH_AGENT_BIN = 'if [ -n "${CLAUDERON_BIN:-}" ]; then PATH="$(cygpath -u "$CLAUDERON_BIN" 2>/dev/null || printf %s "$CLAUDERON_BIN"):$PATH"; export PATH; fi\n';
+// A login profile may reset PATH (Debian's does), so the Member's own PATH
+// (from their login shell, tool-path.ts) and then the Agent's own tools are
+// put first inside the shell. Git Bash wants a POSIX path.
+const WITH_AGENT_BIN =
+  'if [ -n "${CLAUDERON_PATH:-}" ]; then PATH="$CLAUDERON_PATH:$PATH"; export PATH; fi\n' +
+  'if [ -n "${CLAUDERON_BIN:-}" ]; then PATH="$(cygpath -u "$CLAUDERON_BIN" 2>/dev/null || printf %s "$CLAUDERON_BIN"):$PATH"; export PATH; fi\n';
 
 function signalGroup(pid: number, signal: Signal): void {
   if (WINDOWS) {

@@ -1,7 +1,9 @@
 import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
-import { flow, machine, member, run, ticket } from "./schema";
+import { flow, machine, member, run, ticket, type MachineDoctor } from "./schema";
+
+export type { MachineDoctor } from "./schema";
 
 // Machines (ADR 0006): one per Member, created by its first Pairing.
 
@@ -94,6 +96,11 @@ export async function applyMachineLogins(db: Db, logins: MachineLogins): Promise
     .where(eq(machine.id, logins.machineId))
     .returning();
   return row ?? null;
+}
+
+/** Keeps the Agent's latest doctor report (ADR 0007). */
+export async function applyMachineDoctor(db: Db, machineId: string, doctor: MachineDoctor): Promise<void> {
+  await db.update(machine).set({ doctor }).where(eq(machine.id, machineId));
 }
 
 export type DeleteMachineResult = { ok: true } | { ok: false; reason: "missing" | "busy" };

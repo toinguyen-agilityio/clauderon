@@ -5,7 +5,7 @@ import { installCommandPs1, installCommandSh } from "../../../server/agent-insta
 import { lookUpPairing, viewMachines, type MachineView } from "../../../server/machines";
 import { deps, pageWebUrl, requireMember } from "../../../server/runtime";
 import { CmdBox } from "./cmd-box";
-import { claudeAccountLabel, LoginChip, MachineStatusChip, ReadyChip, SlotBar, SlotChips, machineName, osLabel, pairCommand } from "./machine-parts";
+import { claudeAccountLabel, LoginChip, MachineStatusChip, ReadyChip, SlotBar, SlotChips, machineName, osLabel } from "./machine-parts";
 import { PairMachine } from "./pair-machine";
 
 export const dynamic = "force-dynamic";
@@ -67,11 +67,9 @@ export default async function MachinesPage({ searchParams }: { searchParams: Pro
             <CmdBox command={installCommandPs1(web)} />
           </div>
           <details className="small">
-            <summary className="faint">Run the Agent by hand, or enter a code</summary>
+            <summary className="faint">The browser did not open? Enter the code</summary>
             <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-              <span className="faint">From a clone of this app&apos;s repository, after pnpm install:</span>
-              <CmdBox command={pairCommand(web)} />
-              <span className="faint">If the browser did not open, enter the code the Agent shows:</span>
+              <span className="faint">Enter the code the install command shows in your terminal:</span>
               <PairMachine />
             </div>
           </details>

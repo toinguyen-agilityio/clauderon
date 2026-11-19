@@ -34,9 +34,19 @@ export function ticketKeys(projects: readonly { id: string; owner: string; repo:
   };
 }
 
-/** Machine Ready: connected with both Claude Code and gh logged in (POD-5). */
-export function isMachineReady(machine: { connected: boolean; claudeLoggedIn: boolean; ghLoggedIn: boolean }): boolean {
-  return machine.connected && machine.claudeLoggedIn && machine.ghLoggedIn;
+/**
+ * Machine Ready: connected with both Claude Code and gh logged in (POD-5),
+ * and no failed doctor check (ADR 0007), e.g. git or Git Bash missing. The
+ * doctor's Gateway checks do not count: the live connection says that.
+ */
+export function isMachineReady(machine: {
+  connected: boolean;
+  claudeLoggedIn: boolean;
+  ghLoggedIn: boolean;
+  doctor?: { checks: readonly { id: string; status: string }[] } | null;
+}): boolean {
+  const doctorFails = machine.doctor?.checks.some((c) => c.status === "fail" && !c.id.startsWith("gateway.")) ?? false;
+  return machine.connected && machine.claudeLoggedIn && machine.ghLoggedIn && !doctorFails;
 }
 
 export type PromptInput = { name: string; value: unknown };

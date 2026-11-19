@@ -44,6 +44,7 @@ export function createGateway(opts: GatewayOptions) {
   const retention = new LogRetention({ db, clock, log });
 
   links.on("machine.logins", (p, machineId) => machines.logins(p, machineId));
+  links.on("machine.doctor", (p, machineId) => machines.doctor(p, machineId));
   links.on("workspace.ready", (p) => engine.workspaceReady(p));
   links.on("workspace.failed", (p) => engine.workspaceFailed(p));
   links.on("node.log", (p) => engine.nodeLog(p));

@@ -66,7 +66,7 @@ export function fileStateStore(dir: string): StateStore {
 }
 
 /** What Pairing leaves behind: the Gateway to connect to and the Machine's token. */
-export type Pairing = { gatewayUrl: string; token: string };
+export type Pairing = { gatewayUrl: string; token: string; webUrl?: string };
 
 /** `<home>/agent.json`, readable by the Member only: the token is the Machine's password. */
 export function pairingFile(home: string) {
@@ -75,7 +75,8 @@ export function pairingFile(home: string) {
     async load(): Promise<Pairing | null> {
       try {
         const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<Pairing>;
-        return typeof parsed.gatewayUrl === "string" && typeof parsed.token === "string" ? { gatewayUrl: parsed.gatewayUrl, token: parsed.token } : null;
+        if (typeof parsed.gatewayUrl !== "string" || typeof parsed.token !== "string") return null;
+        return typeof parsed.webUrl === "string" ? { gatewayUrl: parsed.gatewayUrl, token: parsed.token, webUrl: parsed.webUrl } : { gatewayUrl: parsed.gatewayUrl, token: parsed.token };
       } catch {
         return null;
       }

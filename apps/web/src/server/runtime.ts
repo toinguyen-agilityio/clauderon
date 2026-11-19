@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { systemClock } from "@clauderon/core";
 import { connect, notifyGatewayCommand, notifyMemberRevoked, parseOperatorEmails, type DbHandle } from "@clauderon/db";
 import { SESSION_COOKIES, memberFromCookies } from "./access";
-import { DEFAULT_AGENT_REPOSITORY } from "./agent-install";
 import type { AppDeps } from "./deps";
 import { gitHubApi } from "./github";
 
@@ -38,11 +37,6 @@ export function webUrl(requestOrigin: string): string {
 export async function pageWebUrl(): Promise<string> {
   const h = await headers();
   return webUrl(`${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000"}`);
-}
-
-/** The repository the Agent installer clones (ADR 0006). */
-export function agentRepository(): string {
-  return process.env.AGENT_REPOSITORY ?? DEFAULT_AGENT_REPOSITORY;
 }
 
 /** The Gateway's public WebSocket origin, for browser sockets. */

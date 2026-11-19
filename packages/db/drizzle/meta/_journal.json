@@ -64,6 +64,13 @@
       "when": 1795079830000,
       "tag": "0008_machine_claude_account",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795099522174,
+      "tag": "0009_machine_doctor",
+      "breakpoints": true
     }
   ]
 }
