@@ -24,11 +24,12 @@ import {
   ticketRow,
   type TestDatabase,
 } from "@clauderon/testing";
-import { addToAllowlist, removeFromAllowlist } from "../src/server/access";
+import { addToAllowlist } from "../src/server/access";
 import type { AppDeps } from "../src/server/deps";
 import { cloneMyFlow, deleteMyFlow, editorData, saveMyFlow } from "../src/server/flows";
 import { createMyNode, deleteMyNode, updateMyNode } from "../src/server/library";
 import { approveMyPairing, removeMachine, setMyMachineSettings, unpairMyMachine } from "../src/server/machines";
+import { removeMember } from "../src/server/members";
 import { cancelRunAs, needsYouCount, respondAs, retryAs, viewAudit, viewNeedsYou, viewRun } from "../src/server/runs";
 import { startRuns } from "../src/server/start";
 
@@ -410,7 +411,7 @@ describe("Audit (T3-12, RUN-15, spec M3 §7)", () => {
   it("allowlist.add and allowlist.remove", async () => {
     const op = await memberRow(db, "op@example.com");
     await addToAllowlist(deps, op, "dee@example.com");
-    await removeFromAllowlist(deps, op, "dee@example.com");
+    await removeMember(deps, op, "dee@example.com");
     expect(await lastEntry("allowlist.add")).toMatchObject({ actorEmail: "op@example.com", subjectId: "dee@example.com" });
     expect(await lastEntry("allowlist.remove")).toMatchObject({ actorEmail: "op@example.com", subjectId: "dee@example.com" });
   });

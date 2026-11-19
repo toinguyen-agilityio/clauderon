@@ -38,6 +38,19 @@ export async function machineRunCounts(db: Db, machineIds: readonly string[]): P
   return counts;
 }
 
+/** Active Runs (anything not Succeeded or Cancelled) per Machine; they block removing it. */
+export async function machineActiveRuns(db: Db, machineIds: readonly string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>(machineIds.map((id) => [id, 0]));
+  if (machineIds.length === 0) return counts;
+  const rows = await db
+    .select({ machineId: run.machineId, n: sql<number>`count(*)::int` })
+    .from(run)
+    .where(and(inArray(run.machineId, [...machineIds]), notInArray(run.state, ["succeeded", "cancelled"])))
+    .groupBy(run.machineId);
+  for (const r of rows) counts.set(r.machineId!, r.n);
+  return counts;
+}
+
 export type MachineRow = Machine & { owner: { email: string; name: string | null; pictureUrl: string | null } } & MachineRunCounts;
 
 /** Every Machine with its owner, Slots in use and queue, for the Machines page. */

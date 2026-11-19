@@ -235,7 +235,7 @@ a.stat.on { border-color: var(--accent-text); }
 .pager { display: flex; gap: 8px; justify-content: flex-end; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
 
 /* dialogs */
-dialog.modal { text-align: left; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg); box-shadow: var(--shadow); width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
+dialog.modal { text-align: left; white-space: normal; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg); box-shadow: var(--shadow); width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
 dialog.modal.wide { width: min(860px, calc(100vw - 32px)); }
 dialog.modal::backdrop { background: var(--scrim); }
 .modal-in { display: flex; flex-direction: column; max-height: calc(100vh - 34px); }
@@ -998,4 +998,24 @@ a.proj-count:hover span { color: var(--accent-text); text-decoration: underline;
 }
 @media (prefers-reduced-motion: reduce) {
   .proj, .proj-name svg { transition: none; }
+}
+
+/* Members page */
+.members-add { width: 240px; }
+/* Keeps the add form on the right even when a password manager injects an element beside it. */
+.members-head > h2 { margin-right: auto; }
+.members-who { display: flex; align-items: center; gap: 10px; min-width: 240px; }
+.members-who .avatar { width: 32px; height: 32px; }
+.members-id { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.members-name { font-weight: 600; }
+.members-id .mono { font-size: 12px; overflow-wrap: anywhere; }
+.members-machine { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.members-machine-link:hover { text-decoration: none; }
+.members-runs { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid color-mix(in srgb, var(--run) 30%, transparent); background: var(--run-bg); color: var(--run); font-weight: 600; font-size: 12.5px; font-variant-numeric: tabular-nums; transition: background 250ms var(--ease), border-color 250ms var(--ease); }
+.members-runs svg { width: 14px; height: 14px; flex: none; }
+.members-runs:hover { text-decoration: none; background: color-mix(in srgb, var(--run) 20%, transparent); border-color: var(--run); }
+.members-actions { justify-content: flex-end; flex-wrap: nowrap; }
+.tbl tr.members-removed td { background: color-mix(in srgb, var(--fail-bg) 45%, transparent); }
+@media (max-width: 860px) {
+  .members-add { width: 100%; }
 }

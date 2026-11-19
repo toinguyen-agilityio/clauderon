@@ -1,6 +1,5 @@
 import { ThemeToggle } from "../../components/theme-toggle";
 import type { ReactNode } from "react";
-import { isOperator } from "@clauderon/db";
 import { signOut } from "../../auth";
 import { Avatar, Brand } from "../../components/brand";
 import { Icon } from "../../components/icons";
@@ -11,14 +10,13 @@ import { deps, requireMember } from "../../server/runtime";
 /** The signed-in shell of the prototype: left rail, work area on the right. */
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const member = await requireMember();
-  const operator = isOperator(member.email, deps().operators);
   const needsYou = await needsYouCount(deps());
 
   return (
     <div className="shell">
       <aside className="side">
         <Brand />
-        <SideNav operator={operator} needsYou={needsYou} />
+        <SideNav needsYou={needsYou} />
         <div className="side-foot">
           <div className="me">
             <Avatar name={member.name} email={member.email} picture={member.pictureUrl} />

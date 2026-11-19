@@ -8,7 +8,7 @@ type Item = { href: string; label: string; icon: React.ReactNode; badge?: number
 type Group = { title: string; items: Item[] };
 
 /** `needsYou`: open requests across all Runs, shown beside Needs you (spec M3 §3). */
-export function SideNav({ operator, needsYou }: { operator: boolean; needsYou: number }) {
+export function SideNav({ needsYou }: { needsYou: number }) {
   const path = usePathname();
   const groups: Group[] = [
     {
@@ -26,7 +26,7 @@ export function SideNav({ operator, needsYou }: { operator: boolean; needsYou: n
         { href: "/flows", label: "Flows", icon: Icon.flows },
         { href: "/machines", label: "Machines", icon: Icon.host },
         { href: "/projects", label: "Projects", icon: Icon.projects },
-        ...(operator ? [{ href: "/allowlist", label: "Allowlist", icon: Icon.allowlist }] : []),
+        { href: "/members", label: "Members", icon: Icon.allowlist },
       ],
     },
     { title: "Insight", items: [{ href: "/audit", label: "Audit log", icon: Icon.audit }] },
