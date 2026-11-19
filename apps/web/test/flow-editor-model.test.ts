@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LAYOUT_GAP_X, layeredLayout } from "../src/app/(app)/flows/[id]/flow-layout";
 import { describeProblems } from "../src/app/(app)/flows/[id]/problem-hints";
+import { hasUnsavedChanges, leavesPage } from "../src/app/(app)/flows/[id]/unsaved";
 import { advanceTestRun, edgeStates, nodeStates, startTestRun, type TestRun } from "../src/app/(app)/flows/[id]/test-run";
 
 const node = (id: string, x: number, y: number) => ({ id, nodeId: id, x, y, enabledOptionalOutputs: [] });
@@ -124,5 +125,47 @@ describe("problem hints", () => {
     expect(missing!.title).toBe("“Implement” is missing its “issue” input");
     expect(missing!.hint).toContain("type issue");
     expect(missing!.fix).toBeUndefined();
+  });
+});
+
+describe("unsaved changes check (issue #77)", () => {
+  const saved = { readOnly: false, graphChanged: false, name: "Plan", savedName: "Plan" };
+
+  it("is clean when nothing changed, and right after Save", () => {
+    expect(hasUnsavedChanges(saved)).toBe(false);
+    // Save copies the sent Flow and name into the saved state, so both match again.
+    expect(hasUnsavedChanges({ ...saved, name: "  Plan  " })).toBe(false);
+  });
+
+  it("is dirty after a graph edit or a rename", () => {
+    expect(hasUnsavedChanges({ ...saved, graphChanged: true })).toBe(true);
+    expect(hasUnsavedChanges({ ...saved, name: "Plan v2" })).toBe(true);
+  });
+
+  it("never asks for a read-only Flow", () => {
+    expect(hasUnsavedChanges({ ...saved, readOnly: true, graphChanged: true, name: "x" })).toBe(false);
+  });
+});
+
+describe("which link clicks leave the editor (issue #77)", () => {
+  const here = { origin: "https://app.test", pathname: "/flows/1", search: "" };
+  const plain = { defaultPrevented: false, button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false };
+  const link = (href: string, over: { target?: string; download?: boolean } = {}) => ({ href, target: over.target ?? "", hasAttribute: (n: string) => n === "download" && !!over.download });
+
+  it("asks for a link to another page of the app", () => {
+    expect(leavesPage(plain, link("https://app.test/flows"), here)).toBe(true);
+    expect(leavesPage(plain, link("/tickets"), here)).toBe(true);
+  });
+
+  it("does not ask for the same page, a hash, a new tab, a download or a modified click", () => {
+    expect(leavesPage(plain, link("https://app.test/flows/1#problems"), here)).toBe(false);
+    expect(leavesPage(plain, link("https://app.test/flows", { target: "_blank" }), here)).toBe(false);
+    expect(leavesPage(plain, link("https://app.test/x.csv", { download: true }), here)).toBe(false);
+    expect(leavesPage({ ...plain, ctrlKey: true }, link("https://app.test/flows"), here)).toBe(false);
+    expect(leavesPage({ ...plain, defaultPrevented: true }, link("https://app.test/flows"), here)).toBe(false);
+  });
+
+  it("leaves another site to the browser's own prompt", () => {
+    expect(leavesPage(plain, link("https://github.com/x"), here)).toBe(false);
   });
 });

@@ -22,6 +22,8 @@ import { NodeView, type NodeAction, type Placement, type WireFrom } from "./flow
 import { NODE_DRAG_TYPE, NodeLibrary } from "./node-library";
 import { NodePanel, type PlacementPatch } from "./node-panel";
 import { describeProblems, type ProblemFix, type ProblemView } from "./problem-hints";
+import { hasUnsavedChanges } from "./unsaved";
+import { useLeaveGuard } from "./use-leave-guard";
 import { advanceTestRun, edgeStates, nodeStates, startTestRun, type TestRun } from "./test-run";
 
 // The canvas editor (spec M2 §3, FLW-3 … FLW-5): place Nodes from the library,
@@ -450,13 +452,8 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
   }, [message]);
 
   // Leaving with unsaved changes asks first.
-  const unsaved = !readOnly && (dirty || name.trim() !== savedName);
-  useEffect(() => {
-    if (!unsaved) return;
-    const onLeave = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", onLeave);
-    return () => window.removeEventListener("beforeunload", onLeave);
-  }, [unsaved]);
+  const unsaved = hasUnsavedChanges({ readOnly, graphChanged: dirty, name, savedName });
+  useLeaveGuard(unsaved);
 
   // --- keyboard shortcuts ---
   const keyState = useRef({ selected, single, readOnly, libraryAt, renaming, panelOpen, problemsOpen, shortcutsOpen, testRun });
