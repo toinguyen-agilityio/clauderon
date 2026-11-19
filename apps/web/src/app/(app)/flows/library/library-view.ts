@@ -117,3 +117,13 @@ export function saveOutcome(
   const problems = result.withProblems > 0 ? `; ${result.withProblems} now ${result.withProblems === 1 ? "has" : "have"} problems` : "";
   return { close: false, message: { kind: "ok", text: `Saved. It changed ${plural(result.flows, "Flow")}${problems}.` } };
 }
+
+/** A name for a copy that does not clash with an existing Node: "Copy of X", then "Copy of X (2)", "(3)"... (names are at most 120 characters). */
+export function copyName(name: string, existing: readonly string[]): string {
+  const taken = new Set(existing.map((n) => n.trim().toLowerCase()));
+  const fit = (base: string, suffix: string) => `${base.slice(0, 120 - suffix.length)}${suffix}`;
+  const base = `Copy of ${name.trim()}`;
+  let candidate = fit(base, "");
+  for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = fit(base, ` (${n})`);
+  return candidate;
+}

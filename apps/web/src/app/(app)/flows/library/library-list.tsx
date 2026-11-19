@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NodeKind, OutputType } from "@clauderon/core";
 import { Icon } from "../../../../components/icons";
+import { cloneNodeAction } from "./actions";
 import { EMPTY_NODE, NodeForm } from "./node-form";
 import { KIND_GROUP_LABEL, cardMeta, filterNodes, groupCounts, type KindGroup, type LibraryNodeView } from "./library-view";
 import { closeOnBackdrop } from "../../../../components/dialog";
@@ -24,11 +25,12 @@ function PortChips({ ports }: { ports: Port[] }) {
   ));
 }
 
-function NodeCard({ node, onOpen }: { node: LibraryNodeView; onOpen: () => void }) {
+function NodeCard({ node, onOpen, onClone, cloning }: { node: LibraryNodeView; onOpen: () => void; onClone: () => void; cloning: boolean }) {
   const inputs: Port[] = node.inputs.map((i) => ({ name: i.name, type: i.type, optional: !i.required }));
   const outputs: Port[] = node.outputs.map((o) => ({ name: o.name, type: o.type, optional: o.optional }));
   const locked = node.usedBy.some((u) => u.locked);
   return (
+    <div className="lib-card-wrap">
     <button type="button" className="card lib-card" onClick={onOpen} aria-haspopup="dialog">
       <span className="lib-card-h">
         <span className={`lib-kind k-${node.kind}`} aria-hidden="true">
@@ -58,6 +60,13 @@ function NodeCard({ node, onOpen }: { node: LibraryNodeView; onOpen: () => void 
         {locked && <span className="tag dry">locked</span>}
       </span>
     </button>
+      {/* The Ticket sample cannot be cloned: a Flow has exactly one Ticket Node. */}
+      {node.isSample && node.kind !== "ticket" && (
+        <button type="button" className="btn sm lib-clone" disabled={cloning} aria-label={`Clone ${node.name}`} onClick={onClone}>
+          {cloning ? "Cloning…" : "Clone"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -113,12 +122,23 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<KindGroup | "all">("all");
   const [open, setOpen] = useState<string | null>(null); // a Node id, or "new"
+  const [cloning, setCloning] = useState<string | null>(null);
+  const [cloneError, setCloneError] = useState<string | null>(null);
   const search = useRef<HTMLInputElement>(null);
 
   const counts = useMemo(() => groupCounts(nodes), [nodes]);
   const shown = useMemo(() => filterNodes(nodes, query, group), [nodes, query, group]);
   // A Node deleted from its dialog leaves the list, which closes the dialog too.
   const openNode = open && open !== "new" ? (nodes.find((n) => n.id === open) ?? null) : null;
+
+  const clone = async (id: string) => {
+    setCloning(id);
+    setCloneError(null);
+    const result = await cloneNodeAction(id);
+    setCloning(null);
+    if (!result.ok) return setCloneError(result.error);
+    setOpen(result.id); // the copy opens for editing; the list refreshes behind it
+  };
 
   // "/" jumps to the search box, as the hint in it says.
   useEffect(() => {
@@ -164,9 +184,15 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
         </button>
       </div>
 
+      {cloneError && (
+        <div className="banner error" role="alert">
+          {cloneError}
+        </div>
+      )}
+
       <div className="lib-grid" data-testid="library-list">
         {shown.map((n) => (
-          <NodeCard key={n.id} node={n} onOpen={() => setOpen(n.id)} />
+          <NodeCard key={n.id} node={n} onOpen={() => setOpen(n.id)} onClone={() => void clone(n.id)} cloning={cloning === n.id} />
         ))}
         {shown.length === 0 && (
           <div className="card empty lib-empty">

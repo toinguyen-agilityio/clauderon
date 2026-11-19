@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createMyNode, deleteMyNode, updateMyNode, type LibraryInput, type NodeOutcome } from "../../../../server/library";
+import { cloneMyNode, createMyNode, deleteMyNode, updateMyNode, type LibraryInput, type CloneNodeOutcome, type NodeOutcome } from "../../../../server/library";
 import { deps, requireMember } from "../../../../server/runtime";
 
 /** Create (no id) or edit a library Node; the form sends it as one object. */
@@ -17,5 +17,14 @@ export async function deleteNodeAction(nodeId: string): Promise<NodeOutcome> {
   const member = await requireMember();
   const result = await deleteMyNode(deps(), member, nodeId);
   revalidatePath("/flows/library");
+  return result;
+}
+
+/** Clone a sample Node into the library as an editable copy. */
+export async function cloneNodeAction(nodeId: string): Promise<CloneNodeOutcome> {
+  const member = await requireMember();
+  const result = await cloneMyNode(deps(), member, nodeId);
+  revalidatePath("/flows/library");
+  revalidatePath("/flows");
   return result;
 }

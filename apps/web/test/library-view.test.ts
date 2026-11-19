@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardMeta, deleteBlocker, filterNodes, groupCounts, kindGroupOf, saveBlocker, saveOutcome, sameValue, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
+import { cardMeta, copyName, deleteBlocker, filterNodes, groupCounts, kindGroupOf, saveBlocker, saveOutcome, sameValue, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
 
 const node = (name: string, kind: "agent" | "command" | "approve", over: { instructions?: string; command?: string | null } = {}) => ({
   name,
@@ -108,5 +108,22 @@ describe("New Node modal after saving (issue #90)", () => {
     const o = saveOutcome({ ok: true, flows: 2, withProblems: 1 }, false);
     expect(o.close).toBe(false);
     expect(o.message.text).toBe("Saved. It changed 2 Flows; 1 now has problems.");
+  });
+});
+
+describe("copyName (issue #94)", () => {
+  it("names a copy 'Copy of <name>'", () => {
+    expect(copyName("Code a change", ["Code a change"])).toBe("Copy of Code a change");
+  });
+
+  it("avoids a name that is already taken, ignoring case", () => {
+    expect(copyName("Code a change", ["Code a change", "copy of code a change"])).toBe("Copy of Code a change (2)");
+    expect(copyName("Code a change", ["Copy of Code a change", "Copy of Code a change (2)"])).toBe("Copy of Code a change (3)");
+  });
+
+  it("stays within 120 characters", () => {
+    const long = "x".repeat(120);
+    expect(copyName(long, []).length).toBe(120);
+    expect(copyName(long, [copyName(long, [])]).length).toBe(120);
   });
 });
