@@ -1,7 +1,9 @@
-import { topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
+import { buildFlowFile, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
 import {
   cloneFlow,
   deleteFlow,
+  importFlow,
+  listLibraryRows,
   flowLocks,
   listFlowRows,
   loadFlow,
@@ -13,6 +15,7 @@ import {
   type FlowLock,
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
+import { copyName } from "../app/(app)/flows/library/library-view";
 
 // The Flows page (spec M2 §2, FLW-7 … FLW-9) as plain functions over the
 // database, so tests drive them directly and pages and actions stay thin.
@@ -185,4 +188,59 @@ export async function saveMyFlow(deps: AppDeps, viewer: Viewer, flowId: string, 
     detail: { name: graph.name, nodes: graph.nodes.length, edges: graph.edges.length, problems },
   });
   return { ok: true, problems };
+}
+
+export type ExportFlowResult = { ok: true; filename: string; json: string } | { ok: false; error: string };
+
+/** Export (issue #98): any Member, any Flow including samples. The file holds no ids, emails or dates. */
+export async function exportMyFlow(deps: AppDeps, flowId: string): Promise<ExportFlowResult> {
+  const detail = await loadFlowDetail(deps.db, flowId);
+  if (!detail) return { ok: false, error: "That Flow no longer exists." };
+  const library = new Map((await listLibraryRows(deps.db)).map((n) => [n.id, n]));
+  const placements = [...detail.nodes]
+    .sort((a, b) => a.y - b.y || a.x - b.x || (a.id < b.id ? -1 : 1))
+    .flatMap((p) => {
+      const n = library.get(p.nodeId);
+      if (!n) return [];
+      const definition = { name: n.name, kind: n.kind, instructions: n.instructions, command: n.command, inputs: n.inputs, outputs: n.outputs };
+      return [{ id: p.id, definition, label: p.label, extraInstructions: p.extraInstructions, enabledOptionalOutputs: p.enabledOptionalOutputs, x: p.x, y: p.y }];
+    });
+  const file = buildFlowFile({ name: detail.flow.name, placements, edges: detail.edges });
+  const slug = detail.flow.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "flow";
+  return { ok: true, filename: slug + ".flow.json", json: JSON.stringify(file, null, 2) };
+}
+
+export type ImportFlowResult = { ok: true; flowId: string; name: string; createdNodes: number } | { ok: false; error: string };
+
+type Definition = { name: string; kind: string; instructions: string; command: string | null; inputs: unknown; outputs: unknown };
+const sameDefinition = (a: Definition, b: Definition) =>
+  a.name === b.name && a.kind === b.kind && a.instructions === b.instructions && a.command === b.command && JSON.stringify(a.inputs) === JSON.stringify(b.inputs) && JSON.stringify(a.outputs) === JSON.stringify(b.outputs);
+
+/**
+ * Import (issue #98): any Member; the file is checked first and nothing is created if it fails.
+ * A Node the library already has (same definition) is reused, a different Node that only shares
+ * a name becomes "Copy of <name>", and a Flow whose name is taken becomes "Copy of <name>" too, so
+ * nothing is overwritten. Audit `flow.create`.
+ */
+export async function importMyFlow(deps: AppDeps, viewer: Viewer, text: string): Promise<ImportFlowResult> {
+  const [rows, flowRows] = await Promise.all([listLibraryRows(deps.db), listFlowRows(deps.db)]);
+  const ticket = rows.find((n) => n.kind === "ticket" && n.isSample) ?? null;
+  const parsed = parseFlowFile(text, ticket);
+  if (!parsed.ok) return parsed;
+
+  const nodeNames = rows.map((n) => n.name);
+  const nodes = parsed.flow.nodes.map((n) => {
+    const same = rows.find((r) => (n.isTicket ? r.id === ticket!.id : sameDefinition(r, n.definition)));
+    if (same) return { ref: n.ref, existingId: same.id, definition: n.definition };
+    const clash = nodeNames.some((x) => x.toLowerCase() === n.definition.name.toLowerCase());
+    const name = clash ? copyName(n.definition.name, nodeNames) : n.definition.name;
+    nodeNames.push(name);
+    return { ref: n.ref, existingId: null, definition: { ...n.definition, name } };
+  });
+  const flowNames = flowRows.map((f) => f.name);
+  const name = flowNames.some((x) => x.toLowerCase() === parsed.flow.name.toLowerCase()) ? copyName(parsed.flow.name, flowNames) : parsed.flow.name;
+
+  const created = await importFlow(deps.db, { name, nodes, placements: parsed.flow.placements, edges: parsed.flow.edges }, viewer.email, deps.clock.now());
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: created.id, detail: { imported: true, newNodes: created.createdNodes } });
+  return { ok: true, flowId: created.id, name: created.name, createdNodes: created.createdNodes };
 }

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
-import { NODE_KINDS, OUTPUT_TYPES, type Flow, type FlowSnapshot, type LibraryNode, type NodeInput, type NodeOutput } from "@clauderon/core";
+import { NODE_KINDS, OUTPUT_TYPES, type Flow, type NodeDefinition, type FlowSnapshot, type LibraryNode, type NodeInput, type NodeOutput } from "@clauderon/core";
 import type { Db } from "./client";
 import { flow, flowEdge, flowNode, node, run } from "./schema";
 
@@ -258,5 +258,46 @@ export async function saveFlow(db: Db, flowId: string, input: FlowGraphInput, ac
     }
     await tx.update(flow).set({ name: input.name, updatedByEmail: actorEmail, updatedAt: now }).where(eq(flow.id, flowId));
     return { ok: true };
+  });
+}
+
+export type ImportFlowPlan = {
+  name: string;
+  /** Each Node the file uses: an existing library Node to reuse, or a new definition to create. */
+  nodes: { ref: string; existingId: string | null; definition: NodeDefinition }[];
+  placements: { id: string; node: string; label: string | null; extraInstructions: string; enabledOptionalOutputs: string[]; x: number; y: number }[];
+  edges: { from: string; output: string; to: string; input: string }[];
+};
+
+/**
+ * Creates a non-sample Flow from an imported file (issue #98), with any Nodes it needs that the
+ * library lacks, in one transaction. Nothing existing is changed: only rows are added.
+ */
+export async function importFlow(db: Db, plan: ImportFlowPlan, actorEmail: string, now: Date): Promise<{ id: string; name: string; createdNodes: number }> {
+  return db.transaction(async (tx) => {
+    const nodeIds = new Map<string, string>();
+    let createdNodes = 0;
+    for (const n of plan.nodes) {
+      if (n.existingId) {
+        nodeIds.set(n.ref, n.existingId);
+        continue;
+      }
+      const [made] = await tx.insert(node).values({ ...n.definition, isSample: false, updatedByEmail: actorEmail, updatedAt: now }).returning({ id: node.id });
+      nodeIds.set(n.ref, made!.id);
+      createdNodes++;
+    }
+    const [created] = await tx.insert(flow).values({ name: plan.name, isSample: false, updatedByEmail: actorEmail, updatedAt: now }).returning();
+    const placementIds = new Map<string, string>();
+    for (const p of plan.placements) {
+      const [made] = await tx
+        .insert(flowNode)
+        .values({ flowId: created!.id, nodeId: nodeIds.get(p.node)!, label: p.label, extraInstructions: p.extraInstructions, enabledOptionalOutputs: p.enabledOptionalOutputs, x: p.x, y: p.y })
+        .returning({ id: flowNode.id });
+      placementIds.set(p.id, made!.id);
+    }
+    for (const e of plan.edges) {
+      await tx.insert(flowEdge).values({ flowId: created!.id, fromFlowNodeId: placementIds.get(e.from)!, fromOutput: e.output, toFlowNodeId: placementIds.get(e.to)!, toInput: e.input });
+    }
+    return { id: created!.id, name: created!.name, createdNodes };
   });
 }

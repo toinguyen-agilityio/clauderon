@@ -3,6 +3,7 @@ import { viewFlows, type FlowView } from "../../../server/flows";
 import { viewLibrary } from "../../../server/library";
 import { deps, requireMember } from "../../../server/runtime";
 import { FlowsList } from "./flows-list";
+import { ImportFlow } from "./import-flow";
 import { FlowsTabs } from "./flows-tabs";
 import type { FlowRowView } from "./flows-view";
 
@@ -35,6 +36,7 @@ export default async function FlowsPage() {
             Run uses it.
           </p>
         </div>
+        <ImportFlow />
       </div>
 
       <FlowsTabs active="flows" flows={samples.length + flows.length} nodes={nodes.length} />

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cloneMyFlow, deleteMyFlow } from "../../../server/flows";
+import { cloneMyFlow, deleteMyFlow, exportMyFlow, importMyFlow, type ExportFlowResult, type ImportFlowResult } from "../../../server/flows";
 import { deps, requireMember } from "../../../server/runtime";
 
 export type FlowFormState = { error: string | null; notice: string | null; /** The Flow a clone just made, so the row can link to it. */ openFlowId: string | null };
@@ -21,4 +21,19 @@ export async function flowActionAction(_state: FlowFormState, form: FormData): P
     return result.ok ? { error: null, notice: "Flow deleted.", openFlowId: null } : { error: result.error, notice: null, openFlowId: null };
   }
   return { error: "Unknown action.", notice: null, openFlowId: null };
+}
+
+/** The file for one Flow; the browser turns it into a download. */
+export async function exportFlowAction(flowId: string): Promise<ExportFlowResult> {
+  await requireMember();
+  return exportMyFlow(deps(), flowId);
+}
+
+/** Creates a Flow of the Member's own from the text of a Flow file. */
+export async function importFlowAction(text: string): Promise<ImportFlowResult> {
+  const member = await requireMember();
+  const result = await importMyFlow(deps(), member, text);
+  revalidatePath("/flows");
+  revalidatePath("/flows/library");
+  return result;
 }
