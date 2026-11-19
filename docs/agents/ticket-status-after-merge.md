@@ -11,6 +11,7 @@ For each linked ticket (`closingIssuesReferences`, or `#N` in the PR body):
 | The ticket is waiting on a decision or missing info | Add `needs-info`, comment the exact question. Do not close. |
 | Another open ticket now blocks it | Add the native blocked-by link (see `issue-tracker.md`, "Blocking") and comment why. |
 | The merge unblocks other tickets | Comment on each: "Unblocked by #<pr>". Leave them open. |
+| The PR has no linked ticket (`closingIssuesReferences` empty, no `#N` in the body) | Do nothing to tickets: do not guess one, do not create one. Tell the user in one line: "PR #X has no linked ticket". |
 | The work turned out not to be needed | `wontfix` label, comment why, close. |
 
 Always comment the PR link on the ticket. If unsure which row applies, ask the user instead of guessing.
