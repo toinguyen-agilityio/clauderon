@@ -1,7 +1,9 @@
-/** An Output's value as the Run page and Needs you show it (TRK-2). */
+import { MarkdownText } from "./markdown-text";
+
+/** An Output's value as the Run page and Needs you show it (TRK-2). Text (a plan, a spec…) shows as Markdown. */
 export function OutputValue({ type, value }: { type: string; value: unknown }) {
   const v = value as Record<string, unknown> | string;
-  if (typeof v === "string") return <div className="outv">{v}</div>;
+  if (typeof v === "string") return <MarkdownText text={v} />;
   if (type === "issue") return <div className="outv">#{String(v.number)} {String(v.title ?? "")}</div>;
   if (type === "branch")
     return (

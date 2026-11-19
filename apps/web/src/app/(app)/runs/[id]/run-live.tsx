@@ -7,6 +7,7 @@ import { openGatewaySocket } from "../../../../components/gateway-socket";
 import { Icon } from "../../../../components/icons";
 import { HumanForm } from "../../../../components/human-form";
 import { OutputValue } from "../../../../components/output-value";
+import { MarkdownBody, MarkdownText } from "../../../../components/markdown-text";
 import { OType, StatePill } from "../../../../components/state-pill";
 import type { viewRun } from "../../../../server/runs";
 import { RetryFromHere } from "./retry-run";
@@ -166,8 +167,9 @@ export function RunLive({
               </span>
             )}
           </div>
-          {node.description && (
-            <p className={`faint small ${node.kind === "command" ? "mono" : ""}`} style={{ marginTop: 6, maxWidth: "75ch", whiteSpace: "pre-wrap" }}>
+          {node.description && node.kind !== "command" && <MarkdownText text={node.description} />}
+          {node.description && node.kind === "command" && (
+            <p className="faint small mono" style={{ marginTop: 6, maxWidth: "75ch", whiteSpace: "pre-wrap" }}>
               {node.description}
             </p>
           )}
@@ -234,9 +236,7 @@ export function RunLive({
                 <summary className="eyebrow">
                   Retry context
                 </summary>
-                <pre className="outv mono" style={{ whiteSpace: "pre-wrap" }}>
-                  {attempt.retryContext}
-                </pre>
+                <MarkdownText text={attempt.retryContext} />
               </details>
             )}
 
@@ -317,12 +317,12 @@ function Round({ round }: { round: RoundView }) {
           <div key={q.id} className="stack" style={{ gap: 6 }}>
             <div className="q">
               <span className="who">Claude · round {round.round}</span>
-              {q.text}
+              <MarkdownBody text={q.text} />
             </div>
             {response && "answers" in response && (
               <div className="ans">
                 <span className="who">{who}</span>
-                {response.answers[q.id]}
+                <MarkdownBody text={response.answers[q.id] ?? ""} />
               </div>
             )}
           </div>
