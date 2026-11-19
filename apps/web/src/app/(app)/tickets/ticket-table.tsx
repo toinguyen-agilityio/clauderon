@@ -7,6 +7,7 @@ import { Icon } from "../../../components/icons";
 import { StatePill, TicketStatusPill } from "../../../components/state-pill";
 import type { TicketRow } from "../../../server/tickets";
 import { loadStartDialog, startAction } from "./actions";
+import { closeOnBackdrop } from "../../../components/dialog";
 
 type Dialog = Awaited<ReturnType<typeof loadStartDialog>>;
 
@@ -185,7 +186,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
   const pod = dialog?.pod;
   const warned = new Map(dialog?.warnings.map((w) => [w.ticketId, w.authorAssociation]));
   return (
-    <dialog ref={ref} className="modal wide" aria-labelledby="sd-title" onClose={onClose}>
+    <dialog ref={ref} {...closeOnBackdrop} className="modal wide" aria-labelledby="sd-title" onClose={onClose}>
       <div className="modal-in">
         <div className="modal-h">
           <div>

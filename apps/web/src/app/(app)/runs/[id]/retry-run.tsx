@@ -5,6 +5,7 @@ import { Icon } from "../../../../components/icons";
 import { OutputValue } from "../../../../components/output-value";
 import { OType } from "../../../../components/state-pill";
 import { retryRunAction, type RetryFormState } from "./actions";
+import { closeOnBackdrop } from "../../../../components/dialog";
 
 type Input = { name: string; type: string; value: unknown };
 
@@ -21,7 +22,7 @@ export function RetryFromHere({ runId, nodeId, nodeName, inputs, context }: { ru
       <button type="button" className="btn sm" onClick={() => ref.current?.showModal()} data-testid="retry-from-here">
         Retry from here
       </button>
-      <dialog ref={ref} className="modal wide" aria-labelledby={`retry-${nodeId}`}>
+      <dialog ref={ref} {...closeOnBackdrop} className="modal wide" aria-labelledby={`retry-${nodeId}`}>
         <form action={action} className="modal-in">
           <div className="modal-h">
             <div>
