@@ -1,7 +1,7 @@
 import type { NodeOutput } from "./flow";
 import { activeOutputs, type OutputValue } from "./runner";
 
-// The Dry-run runner's fakes (spec M2 §7, RUN-13): nothing here touches a Pod,
+// The Dry-run runner's fakes (spec M2 §7, RUN-13): nothing here touches a Machine,
 // GitHub or Claude.
 
 const MIN_MS = 2000;

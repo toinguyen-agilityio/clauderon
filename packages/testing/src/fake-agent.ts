@@ -13,14 +13,14 @@ import {
 export type HelloOverrides = Partial<Payload<"hello">>;
 
 /** A scripted reply to one Gateway message type. */
-export type Responder<T extends MessageType> = (payload: Payload<T>, agent: FakeHostAgent) => void;
+export type Responder<T extends MessageType> = (payload: Payload<T>, agent: FakeAgent) => void;
 
 /**
- * Speaks the real Host Agent protocol from a test (spec "test seam"): sends
+ * Speaks the real Agent protocol from a test (spec "test seam"): sends
  * hello, resends what the Gateway missed, acknowledges and records what it
  * receives. Scripted per test; later milestones add Node behaviour.
  */
-export class FakeHostAgent {
+export class FakeAgent {
   readonly buffer = new ResumeBuffer();
   /** Numbered messages from the Gateway, each delivered once, in order. */
   readonly received: Envelope[] = [];
@@ -47,11 +47,12 @@ export class FakeHostAgent {
         controlMessage("hello", {
           agentVersion: "0.0.0-fake",
           processId: this.processId,
+          os: "darwin",
           arch: "arm64",
+          hostname: "fake-mac",
           cpus: 8,
           memoryMb: 16384,
           diskGb: 256,
-          dockerRunning: true,
           lastReceivedId: this.buffer.lastReceivedId,
           liveAttempts: [],
           ...hello,
@@ -77,11 +78,11 @@ export class FakeHostAgent {
     return envelope;
   }
 
-  heartbeat(at = new Date().toISOString(), pods: Payload<"heartbeat">["pods"] = []): void {
-    this.socket?.send(serialize(controlMessage("heartbeat", { at, pods })));
+  heartbeat(at = new Date().toISOString()): void {
+    this.socket?.send(serialize(controlMessage("heartbeat", { at })));
   }
 
-  /** Heartbeats on a (fake) clock while connected, as the real Host Agent does every 10 s. */
+  /** Heartbeats on a (fake) clock while connected, as the real Agent does every 10 s. */
   beatEvery(clock: Clock, everyMs = 10_000): void {
     this.stopBeating();
     const tick = () => {

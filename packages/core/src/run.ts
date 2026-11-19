@@ -87,13 +87,13 @@ export function nextNode(run: { flow: Flow; library: readonly LibraryNode[] }, a
   return "done";
 }
 
-export type PodForSchedule = { status: string; slots: number };
+export type MachineForSchedule = { connected: boolean; slots: number };
 export type RunForSchedule = { id: string; state: RunState; queuedAt: Date };
 
-/** Queued Runs to start now on a Pod (POD-3): oldest first, while Slots are free. */
-export function schedule(pod: PodForSchedule, runs: readonly RunForSchedule[]): string[] {
-  if (pod.status !== "running") return [];
-  const free = pod.slots - runs.filter((r) => holdsSlot(r.state)).length;
+/** Queued Runs to start now on a connected Machine (POD-3): oldest first, while Slots are free. */
+export function schedule(machine: MachineForSchedule, runs: readonly RunForSchedule[]): string[] {
+  if (!machine.connected) return [];
+  const free = machine.slots - runs.filter((r) => holdsSlot(r.state)).length;
   if (free <= 0) return [];
   return runs
     .filter((r) => r.state === "queued")

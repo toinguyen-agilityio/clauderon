@@ -22,7 +22,6 @@ const id = () => uuid("id").primaryKey().defaultRandom();
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const ts = (name: string) => timestamp(name, { withTimezone: true });
 
-export const podStatus = pgEnum("pod_status", ["creating", "running", "stopped", "error", "deleting"]);
 export const nodeKind = pgEnum("node_kind", ["ticket", "agent", "command", "approve", "grill"]);
 export const runMode = pgEnum("run_mode", ["real", "dry"]);
 export const runState = pgEnum("run_state", [
@@ -98,47 +97,57 @@ export const auditEntry = pgTable(
   (t) => [index("audit_entry_at_idx").on(t.at)],
 );
 
-/** A single row (id = 1) describing the Pod Host and its link. */
-export const podHost = pgTable("pod_host", {
-  id: integer("id").primaryKey().default(1),
-  createdAt: createdAt(),
-  connected: boolean("connected").notNull().default(false),
-  connectedAt: ts("connected_at"),
-  lastHeartbeatAt: ts("last_heartbeat_at"),
-  agentVersion: text("agent_version"),
-  processId: text("process_id"),
-  arch: text("arch"),
-  cpus: integer("cpus"),
-  memoryMb: integer("memory_mb"),
-  diskGb: integer("disk_gb"),
-  dockerRunning: boolean("docker_running"),
-  lastReceivedId: bigint("last_received_id", { mode: "number" }).notNull().default(0),
-  lastSentId: bigint("last_sent_id", { mode: "number" }).notNull().default(0),
-});
-
-export const pod = pgTable("pod", {
+/**
+ * One Member's Machine (ADR 0006): their own computer, paired with a token
+ * whose SHA-256 hash is kept here. Pairing a new computer replaces the hash,
+ * so the row, its Runs and its Slots stay. A null hash means not paired.
+ */
+export const machine = pgTable("machine", {
   id: id(),
   createdAt: createdAt(),
   memberId: uuid("member_id")
     .notNull()
     .unique()
     .references(() => member.id),
-  /** Shown instead of "<owner>'s Pod" when set. */
+  /** Shown instead of "<owner>'s Machine" when set. */
   name: text("name"),
-  containerId: text("container_id"),
-  status: podStatus("status").notNull().default("creating"),
-  imageTag: text("image_tag").notNull(),
-  imageDigest: text("image_digest"),
-  slots: integer("slots").notNull(),
-  cpus: real("cpus").notNull(),
-  memoryMb: integer("memory_mb").notNull(),
+  tokenHash: text("token_hash").unique(),
+  pairedAt: ts("paired_at"),
+  // Facts from the Agent's latest hello.
+  hostname: text("hostname"),
+  os: text("os"),
+  arch: text("arch"),
+  agentVersion: text("agent_version"),
+  processId: text("process_id"),
+  cpus: integer("cpus"),
+  memoryMb: integer("memory_mb"),
+  diskGb: integer("disk_gb"),
+  connected: boolean("connected").notNull().default(false),
+  connectedAt: ts("connected_at"),
+  lastHeartbeatAt: ts("last_heartbeat_at"),
+  lastReceivedId: bigint("last_received_id", { mode: "number" }).notNull().default(0),
+  lastSentId: bigint("last_sent_id", { mode: "number" }).notNull().default(0),
+  slots: integer("slots").notNull().default(2),
   claudeLoggedIn: boolean("claude_logged_in").notNull().default(false),
   ghLoggedIn: boolean("gh_logged_in").notNull().default(false),
   ghAccount: text("gh_account"),
   /** `{ tokenRepos }`: the Projects' repositories the gh login reaches (POD-4). */
   ghTokenScope: jsonb("gh_token_scope").$type<{ tokenRepos: string[] }>(),
   loginsCheckedAt: ts("logins_checked_at"),
-  metrics: jsonb("metrics"),
+});
+
+/** A pairing code an Agent is showing (ADR 0006); approving it pairs the approver's Machine. */
+export const pairing = pgTable("pairing", {
+  id: id(),
+  createdAt: createdAt(),
+  code: text("code").notNull().unique(),
+  tokenHash: text("token_hash").notNull().unique(),
+  hostname: text("hostname").notNull(),
+  os: text("os").notNull(),
+  arch: text("arch").notNull(),
+  expiresAt: ts("expires_at").notNull(),
+  approvedAt: ts("approved_at"),
+  approvedByMemberId: uuid("approved_by_member_id").references(() => member.id),
 });
 
 export const project = pgTable(
@@ -272,8 +281,8 @@ export const run = pgTable(
       .notNull()
       .references(() => flow.id),
     flowSnapshot: jsonb("flow_snapshot").notNull(),
-    /** Null once its Pod was removed (POD-7); only ended Runs can lose their Pod. */
-    podId: uuid("pod_id").references(() => pod.id, { onDelete: "set null" }),
+    /** Null once its Machine was removed; only ended Runs can lose their Machine. */
+    machineId: uuid("machine_id").references(() => machine.id, { onDelete: "set null" }),
     starterMemberId: uuid("starter_member_id")
       .notNull()
       .references(() => member.id),
@@ -294,7 +303,7 @@ export const run = pgTable(
     pendingRetry: jsonb("pending_retry").$type<PendingRetry>(),
   },
   (t) => [
-    index("run_queue_idx").on(t.podId, t.state, t.queuedAt),
+    index("run_machine_queue_idx").on(t.machineId, t.state, t.queuedAt),
     // One Active Run per Ticket, Dry-runs excluded (TIC-7).
     uniqueIndex("run_one_active_per_ticket_idx")
       .on(t.ticketId)

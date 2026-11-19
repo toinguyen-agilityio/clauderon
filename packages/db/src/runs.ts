@@ -12,7 +12,7 @@ import {
 } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
-import { attempt, batch, flow, humanRequest, logChunk, member, output, pod, project, run, ticket } from "./schema";
+import { attempt, batch, flow, humanRequest, logChunk, member, output, machine, project, run, ticket } from "./schema";
 
 // Batches, Runs, Attempts, Outputs and logs (spec M1 §4, §5). The Gateway's
 // Run engine writes them; the web app reads them.
@@ -25,7 +25,7 @@ export type StartBatchInput = {
   flowId: string;
   flowSnapshot: FlowSnapshot;
   starter: { id: string; email: string };
-  podId: string;
+  machineId: string;
   mode: "real" | "dry";
   extraInstructions: string;
   ticketIds: readonly string[];
@@ -76,7 +76,7 @@ export async function startBatch(db: Db, input: StartBatchInput, now: Date): Pro
             ticketId,
             flowId: input.flowId,
             flowSnapshot: input.flowSnapshot,
-            podId: input.podId,
+            machineId: input.machineId,
             starterMemberId: input.starter.id,
             mode: input.mode,
             state: "queued",
@@ -114,11 +114,11 @@ export async function getRunContext(db: Db, runId: string) {
   return row ? { ...row, snapshot: row.run.flowSnapshot as FlowSnapshot } : null;
 }
 
-export async function runsOfPod(db: Db, podId: string, states: readonly RunState[]) {
+export async function runsOfMachine(db: Db, machineId: string, states: readonly RunState[]) {
   return db
     .select({ id: run.id, state: run.state, mode: run.mode, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
     .from(run)
-    .where(and(eq(run.podId, podId), inArray(run.state, [...states])));
+    .where(and(eq(run.machineId, machineId), inArray(run.state, [...states])));
 }
 
 export async function updateRun(db: Db, runId: string, patch: Partial<Omit<Run, "id">>): Promise<void> {
@@ -136,7 +136,7 @@ export async function moveRun(db: Db, runId: string, from: RunState, patch: Part
 }
 
 export type CancelRunResult =
-  | { ok: true; podId: string | null; from: RunState; cancelledAttemptIds: string[] }
+  | { ok: true; machineId: string | null; from: RunState; cancelledAttemptIds: string[] }
   | { ok: false; reason: "not-found" | "ended" };
 
 /**
@@ -147,7 +147,7 @@ export type CancelRunResult =
 export async function cancelRun(db: Db, runId: string, actorEmail: string, now: Date): Promise<CancelRunResult> {
   if (!/^[0-9a-f-]{36}$/i.test(runId)) return { ok: false, reason: "not-found" };
   return db.transaction(async (tx) => {
-    const [current] = await tx.select({ state: run.state, podId: run.podId }).from(run).where(eq(run.id, runId)).for("update");
+    const [current] = await tx.select({ state: run.state, machineId: run.machineId }).from(run).where(eq(run.id, runId)).for("update");
     if (!current) return { ok: false, reason: "not-found" } as const;
     if (current.state === "succeeded" || current.state === "cancelled") return { ok: false, reason: "ended" } as const;
     await tx.update(run).set({ state: "cancelled", endedAt: now }).where(eq(run.id, runId));
@@ -164,13 +164,13 @@ export async function cancelRun(db: Db, runId: string, actorEmail: string, now: 
         .where(and(inArray(humanRequest.attemptId, cancelledAttemptIds), isNull(humanRequest.respondedAt)));
     }
     await recordAudit(tx, { actorEmail, action: "run.cancel", subjectType: "run", subjectId: runId, detail: { from: current.state } });
-    return { ok: true, podId: current.podId, from: current.state, cancelledAttemptIds } as const;
+    return { ok: true, machineId: current.machineId, from: current.state, cancelledAttemptIds } as const;
   });
 }
 
 export type RetryResult =
-  | { ok: true; podId: string; context: RetryContext }
-  | { ok: false; reason: "not-found" | "not-retryable" | "unknown-node" | "after-failure" | "no-pod" };
+  | { ok: true; machineId: string; context: RetryContext }
+  | { ok: false; reason: "not-found" | "not-retryable" | "unknown-node" | "after-failure" | "no-machine" };
 
 /**
  * What a retried Node is told (RUN-7): the Run's latest Reject feedback, why
@@ -234,7 +234,7 @@ export function retryableNodes(snapshot: FlowSnapshot, current: readonly { flowN
 /**
  * Retry from a Node (RUN-7, spec M3 §4): any Member, on a Failed or
  * Interrupted Run. Later Nodes' Attempts are superseded but kept; the Run
- * joins the end of its Pod's queue with the retry context waiting for the
+ * joins the end of its Machine's queue with the retry context waiting for the
  * chosen Node. A Real Retry checks the logins again before it continues.
  */
 export async function retryRun(db: Db, runId: string, flowNodeId: string, note: string, actorEmail: string, now: Date): Promise<RetryResult> {
@@ -243,7 +243,7 @@ export async function retryRun(db: Db, runId: string, flowNodeId: string, note: 
     const [current] = await tx.select().from(run).where(eq(run.id, runId)).for("update");
     if (!current) return { ok: false, reason: "not-found" } as const;
     if (current.state !== "failed" && current.state !== "interrupted") return { ok: false, reason: "not-retryable" } as const;
-    if (!current.podId) return { ok: false, reason: "no-pod" } as const;
+    if (!current.machineId) return { ok: false, reason: "no-machine" } as const;
     const snapshot = current.flowSnapshot as FlowSnapshot;
     const node = snapshot.nodes.find((n) => n.id === flowNodeId);
     const again = nodesFrom(snapshot, flowNodeId);
@@ -276,7 +276,7 @@ export async function retryRun(db: Db, runId: string, flowNodeId: string, note: 
       subjectId: runId,
       detail: { from: current.state, node: node.name, flowNodeId, note: context.note },
     });
-    return { ok: true, podId: current.podId, context } as const;
+    return { ok: true, machineId: current.machineId, context } as const;
   });
 }
 
@@ -289,11 +289,11 @@ export async function markRetryLoginsChecked(db: Db, runId: string): Promise<voi
 }
 
 /** Running Runs with their running Attempts, for the heartbeat watcher and recovery (RUN-12). */
-export async function runningRuns(db: Db, podId?: string) {
+export async function runningRuns(db: Db, machineId?: string) {
   const runs = await db
-    .select({ id: run.id, podId: run.podId, mode: run.mode, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
+    .select({ id: run.id, machineId: run.machineId, mode: run.mode, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
     .from(run)
-    .where(podId ? and(eq(run.state, "running"), eq(run.podId, podId)) : eq(run.state, "running"));
+    .where(machineId ? and(eq(run.state, "running"), eq(run.machineId, machineId)) : eq(run.state, "running"));
   if (runs.length === 0) return [];
   const attempts = await db
     .select({ id: attempt.id, runId: attempt.runId, state: attempt.state })
@@ -336,13 +336,13 @@ export async function runningAttemptIds(db: Db, attemptIds: readonly string[]): 
   return new Set(rows.map((r) => r.id));
 }
 
-/** Pods with Queued Runs, for the scheduler after the Pod Host is back. */
-export async function podsWithQueuedRuns(db: Db): Promise<string[]> {
+/** Machines with Queued Runs. */
+export async function machinesWithQueuedRuns(db: Db): Promise<string[]> {
   const rows = await db
-    .selectDistinct({ podId: run.podId })
+    .selectDistinct({ machineId: run.machineId })
     .from(run)
-    .where(and(eq(run.state, "queued"), sql`${run.podId} is not null`));
-  return rows.map((r) => r.podId!);
+    .where(and(eq(run.state, "queued"), sql`${run.machineId} is not null`));
+  return rows.map((r) => r.machineId!);
 }
 
 export type AttemptWithOutputs = Attempt & { outputs: (typeof output.$inferSelect)[] };
@@ -432,7 +432,7 @@ export async function logChunksOf(db: Db, attemptId: string, afterSeq = -1) {
     .orderBy(asc(logChunk.seq));
 }
 
-export type RunFilters = { state?: RunState; flowId?: string; podId?: string };
+export type RunFilters = { state?: RunState; flowId?: string; machineId?: string };
 export const RUNS_PAGE_SIZE = 25;
 
 const runListColumns = {
@@ -442,7 +442,7 @@ const runListColumns = {
   queuedAt: run.queuedAt,
   startedAt: run.startedAt,
   endedAt: run.endedAt,
-  podId: run.podId,
+  machineId: run.machineId,
   flowId: run.flowId,
   flowName: flow.name,
   ticketNumber: ticket.number,
@@ -460,7 +460,7 @@ export async function listRuns(db: Db, filters: RunFilters, page = 1) {
   const conditions: SQL[] = [];
   if (filters.state) conditions.push(eq(run.state, filters.state));
   if (filters.flowId) conditions.push(eq(run.flowId, filters.flowId));
-  if (filters.podId) conditions.push(eq(run.podId, filters.podId));
+  if (filters.machineId) conditions.push(eq(run.machineId, filters.machineId));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const rows = await db
     .select(runListColumns)
@@ -518,17 +518,17 @@ export async function runStateCounts(db: Db): Promise<Partial<Record<RunState, n
 export async function getRunView(db: Db, runId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(runId)) return null;
   const [row] = await db
-    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, podOwnerId: pod.memberId, podName: pod.name, podStatus: pod.status })
+    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, machineOwnerId: machine.memberId, machineName: machine.name, machineConnected: machine.connected })
     .from(run)
     .innerJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, ticket.projectId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
-    .leftJoin(pod, eq(pod.id, run.podId))
+    .leftJoin(machine, eq(machine.id, run.machineId))
     .where(eq(run.id, runId));
   if (!row) return null;
-  // Null once the Pod was removed (POD-7).
-  const [podOwner] = row.podOwnerId
-    ? await db.select({ email: member.email, name: member.name }).from(member).where(eq(member.id, row.podOwnerId))
+  // Null once the Machine was removed.
+  const [machineOwner] = row.machineOwnerId
+    ? await db.select({ email: member.email, name: member.name }).from(member).where(eq(member.id, row.machineOwnerId))
     : [];
-  return { ...row, snapshot: row.run.flowSnapshot as FlowSnapshot, podOwner: podOwner ?? null, attempts: await attemptsOfRun(db, runId) };
+  return { ...row, snapshot: row.run.flowSnapshot as FlowSnapshot, machineOwner: machineOwner ?? null, attempts: await attemptsOfRun(db, runId) };
 }

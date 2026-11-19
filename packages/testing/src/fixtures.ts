@@ -1,4 +1,4 @@
-import { buildFlowSnapshot, schema, seedSamples, startBatch, type Db } from "@clauderon/db";
+import { buildFlowSnapshot, hashToken, schema, seedSamples, startBatch, type Db } from "@clauderon/db";
 import { eq } from "drizzle-orm";
 
 // Rows for app tests, written straight to the real test database.
@@ -8,19 +8,20 @@ export async function memberRow(db: Db, email: string, name: string | null = nul
   return row!;
 }
 
-export async function podRow(db: Db, memberId: string, values: Partial<typeof schema.pod.$inferInsert> = {}) {
+/** A paired, connected Machine with both logins; `token` is what its Agent connects with. */
+export async function machineRow(db: Db, memberId: string, values: Partial<typeof schema.machine.$inferInsert> & { token?: string } = {}) {
+  const { token = `token-${memberId}`, ...rest } = values;
   const [row] = await db
-    .insert(schema.pod)
+    .insert(schema.machine)
     .values({
       memberId,
-      status: "running",
-      imageTag: "ghcr.io/acme/clauderon-pod:test",
+      tokenHash: hashToken(token),
+      pairedAt: new Date("2026-11-16T09:00:00Z"),
+      connected: true,
       slots: 2,
-      cpus: 2,
-      memoryMb: 4096,
       claudeLoggedIn: true,
       ghLoggedIn: true,
-      ...values,
+      ...rest,
     })
     .returning();
   return row!;
@@ -62,7 +63,7 @@ export async function sampleFlowId(db: Db, slug = "basic-ticket-delivery"): Prom
 export async function startSampleBatch(
   db: Db,
   starter: { id: string; email: string },
-  podId: string,
+  machineId: string,
   ticketIds: string[],
   now: Date,
   extraInstructions = "",
@@ -71,5 +72,5 @@ export async function startSampleBatch(
 ) {
   const flowId = await sampleFlowId(db, slug);
   const flowSnapshot = (await buildFlowSnapshot(db, flowId))!;
-  return startBatch(db, { flowId, flowSnapshot, starter, podId, mode, extraInstructions, ticketIds }, now);
+  return startBatch(db, { flowId, flowSnapshot, starter, machineId, mode, extraInstructions, ticketIds }, now);
 }

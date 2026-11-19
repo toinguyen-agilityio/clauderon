@@ -84,30 +84,30 @@ describe("nextNode", () => {
 });
 
 describe("schedule", () => {
-  const pod = { status: "running" as const, slots: 2 };
+  const machine = { connected: true, slots: 2 };
   const run = (id: string, state: RunState, queuedAt: number) => ({ id, state, queuedAt: new Date(queuedAt) });
 
   it("T0-7: with 2 Slots, 1 running and 1 waiting, starts nothing", () => {
     const runs = [run("a", "running", 1), run("b", "waiting_for_human", 2), run("c", "queued", 3)];
-    expect(schedule(pod, runs)).toEqual([]);
+    expect(schedule(machine, runs)).toEqual([]);
   });
 
   it("T0-7: after one ends, starts the oldest Queued Run", () => {
     const runs = [run("a", "succeeded", 1), run("b", "waiting_for_human", 2), run("d", "queued", 5), run("c", "queued", 3)];
-    expect(schedule(pod, runs)).toEqual(["c"]);
+    expect(schedule(machine, runs)).toEqual(["c"]);
   });
 
   it("breaks ties on queued time by id and fills every free Slot", () => {
     const runs = [run("z", "queued", 1), run("y", "queued", 1), run("x", "queued", 2)];
-    expect(schedule({ status: "running", slots: 2 }, runs)).toEqual(["y", "z"]);
+    expect(schedule({ connected: true, slots: 2 }, runs)).toEqual(["y", "z"]);
   });
 
-  it("starts nothing on a Pod that is not running (POD-5)", () => {
-    expect(schedule({ status: "stopped", slots: 2 }, [run("a", "queued", 1)])).toEqual([]);
+  it("starts nothing on a Machine that is not connected", () => {
+    expect(schedule({ connected: false, slots: 2 }, [run("a", "queued", 1)])).toEqual([]);
   });
 
   it("Failed and Interrupted Runs do not hold a Slot (RUN-9)", () => {
     const runs = [run("a", "failed", 1), run("b", "interrupted", 2), run("c", "queued", 3)];
-    expect(schedule({ status: "running", slots: 1 }, runs)).toEqual(["c"]);
+    expect(schedule({ connected: true, slots: 1 }, runs)).toEqual(["c"]);
   });
 });

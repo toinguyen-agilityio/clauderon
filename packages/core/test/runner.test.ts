@@ -6,8 +6,7 @@ import {
   checkAgentResult,
   commandOutputs,
   extractResultBlock,
-  isPodReady,
-  overCommitted,
+  isMachineReady,
   ticketKeys,
   tailLines,
 } from "../src/index";
@@ -42,20 +41,11 @@ describe("ticketKeys (TIC-1)", () => {
   });
 });
 
-describe("isPodReady (POD-5)", () => {
-  it("is running with both logins", () => {
-    expect(isPodReady({ status: "running", claudeLoggedIn: true, ghLoggedIn: true })).toBe(true);
-    expect(isPodReady({ status: "stopped", claudeLoggedIn: true, ghLoggedIn: true })).toBe(false);
-    expect(isPodReady({ status: "running", claudeLoggedIn: true, ghLoggedIn: false })).toBe(false);
-  });
-});
-
-describe("overCommitted (POD-2)", () => {
-  it("warns when the Pods' limits add up to more than the Pod Host", () => {
-    const host = { cpus: 4, memoryMb: 8192 };
-    expect(overCommitted(host, [{ cpus: 2, memoryMb: 4096 }, { cpus: 2, memoryMb: 4096 }])).toBe(false);
-    expect(overCommitted(host, [{ cpus: 2, memoryMb: 4096 }, { cpus: 2, memoryMb: 4096 }, { cpus: 2, memoryMb: 4096 }])).toBe(true);
-    expect(overCommitted(null, [{ cpus: 2, memoryMb: 4096 }])).toBe(false);
+describe("isMachineReady (POD-5)", () => {
+  it("needs a connected Machine with both logins", () => {
+    expect(isMachineReady({ connected: true, claudeLoggedIn: true, ghLoggedIn: true })).toBe(true);
+    expect(isMachineReady({ connected: false, claudeLoggedIn: true, ghLoggedIn: true })).toBe(false);
+    expect(isMachineReady({ connected: true, claudeLoggedIn: true, ghLoggedIn: false })).toBe(false);
   });
 });
 

@@ -1,30 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LIMIT_CEILING, checkLimits, parseLimitCeiling, queuePositions, schedule } from "../src/index";
+import { MAX_SLOTS, checkSlots, queuePositions, schedule } from "../src/index";
 
-describe("parseLimitCeiling (POD-2)", () => {
-  it("reads the three keys", () => {
-    expect(parseLimitCeiling("slots=6,cpus=8,memoryMb=16384")).toEqual({ slots: 6, cpus: 8, memoryMb: 16384 });
+describe("checkSlots (ADR 0006)", () => {
+  it("accepts 1 to MAX_SLOTS and reads numbers from form strings", () => {
+    expect(checkSlots("4")).toEqual({ ok: true, slots: 4 });
+    expect(checkSlots(MAX_SLOTS)).toEqual({ ok: true, slots: MAX_SLOTS });
   });
-  it("keeps the default for a missing or bad key", () => {
-    expect(parseLimitCeiling(undefined)).toEqual(DEFAULT_LIMIT_CEILING);
-    expect(parseLimitCeiling("slots=abc,cpus=2")).toEqual({ ...DEFAULT_LIMIT_CEILING, cpus: 2 });
-  });
-});
-
-describe("checkLimits (POD-2)", () => {
-  const ceiling = { slots: 4, cpus: 4, memoryMb: 8192 };
-  it("T2-9: refuses Slots, CPU or RAM above the ceiling", () => {
-    expect(checkLimits({ slots: 5, cpus: 2, memoryMb: 4096 }, ceiling)).toEqual({ ok: false, error: "Slots are capped at 4." });
-    expect(checkLimits({ slots: 2, cpus: 5, memoryMb: 4096 }, ceiling)).toMatchObject({ ok: false });
-    expect(checkLimits({ slots: 2, cpus: 2, memoryMb: 9000 }, ceiling)).toMatchObject({ ok: false });
-  });
-  it("accepts values at the ceiling and reads numbers from form strings", () => {
-    expect(checkLimits({ slots: "4", cpus: "4", memoryMb: "8192" }, ceiling)).toEqual({ ok: true, limits: { slots: 4, cpus: 4, memoryMb: 8192 } });
-  });
-  it("refuses zero, fractions of a Slot and junk", () => {
-    expect(checkLimits({ slots: 0, cpus: 2, memoryMb: 4096 }, ceiling)).toMatchObject({ ok: false });
-    expect(checkLimits({ slots: 1.5, cpus: 2, memoryMb: 4096 }, ceiling)).toMatchObject({ ok: false });
-    expect(checkLimits({ slots: 2, cpus: "x", memoryMb: 4096 }, ceiling)).toMatchObject({ ok: false });
+  it("refuses zero, fractions, junk and more than MAX_SLOTS", () => {
+    expect(checkSlots(0)).toMatchObject({ ok: false });
+    expect(checkSlots(1.5)).toMatchObject({ ok: false });
+    expect(checkSlots("x")).toMatchObject({ ok: false });
+    expect(checkSlots(MAX_SLOTS + 1)).toEqual({ ok: false, error: `Slots are capped at ${MAX_SLOTS}.` });
   });
 });
 
@@ -42,8 +28,8 @@ describe("lowering Slots (POD-6)", () => {
   it("T2-8: with 2 running and Slots lowered to 1, nothing new starts until both end", () => {
     const run = (id: string, state: "running" | "queued", at: number) => ({ id, state, queuedAt: new Date(at) });
     const runs = [run("a", "running", 1), run("b", "running", 2), run("c", "queued", 3)];
-    expect(schedule({ status: "running", slots: 1 }, runs)).toEqual([]);
-    expect(schedule({ status: "running", slots: 1 }, [run("b", "running", 2), run("c", "queued", 3)])).toEqual([]);
-    expect(schedule({ status: "running", slots: 1 }, [run("c", "queued", 3)])).toEqual(["c"]);
+    expect(schedule({ connected: true, slots: 1 }, runs)).toEqual([]);
+    expect(schedule({ connected: true, slots: 1 }, [run("b", "running", 2), run("c", "queued", 3)])).toEqual([]);
+    expect(schedule({ connected: true, slots: 1 }, [run("c", "queued", 3)])).toEqual(["c"]);
   });
 });
