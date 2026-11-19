@@ -15,7 +15,7 @@ export async function cancelRunAction(_state: CancelFormState, form: FormData): 
   if (result === "not-found") notFound();
   revalidatePath(`/runs/${runId}`);
   revalidatePath("/runs");
-  revalidatePath("/pods", "layout");
+  revalidatePath("/machines", "layout");
   return { error: result.ok ? null : "This Run has already ended." };
 }
 
@@ -29,6 +29,6 @@ export async function retryRunAction(_state: RetryFormState, form: FormData): Pr
   if (result === "not-found") notFound();
   revalidatePath(`/runs/${runId}`);
   revalidatePath("/runs");
-  revalidatePath("/pods", "layout");
+  revalidatePath("/machines", "layout");
   return { error: result.ok ? null : result.error };
 }

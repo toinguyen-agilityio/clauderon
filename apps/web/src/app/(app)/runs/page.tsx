@@ -9,7 +9,7 @@ import { FilterSelect } from "./filters";
 
 export const dynamic = "force-dynamic";
 
-type Search = { state?: string; flow?: string; pod?: string; page?: string };
+type Search = { state?: string; flow?: string; machine?: string; page?: string };
 
 const SUMMARY = ["running", "queued", "failed", "succeeded"] as const;
 const STATE_OPTIONS = [
@@ -27,20 +27,20 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
   const search = await searchParams;
   const page = Math.max(1, Number(search.page) || 1);
   const filters = parseRunFilters(search);
-  const { rows, hasMore, total, counts, flows, pods } = await viewRuns(deps(), filters, page);
+  const { rows, hasMore, total, counts, flows, machines } = await viewRuns(deps(), filters, page);
   const now = new Date();
   const href = (change: Search) => {
     const query = new URLSearchParams(Object.entries({ ...search, ...change }).filter(([, v]) => v) as [string, string][]);
     return `/runs${query.size ? `?${query}` : ""}`;
   };
-  const filtered = Boolean(filters.state || filters.flowId || filters.podId);
+  const filtered = Boolean(filters.state || filters.flowId || filters.machineId);
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Runs</h1>
-          <p className="sub">Every Run, newest first. A Run takes one Ticket through one Flow on its Starter&apos;s Pod.</p>
+          <p className="sub">Every Run, newest first. A Run takes one Ticket through one Flow on its Starter&apos;s Machine.</p>
         </div>
       </div>
 
@@ -57,7 +57,7 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
         <Suspense>
           <FilterSelect name="state" label="All states" options={STATE_OPTIONS} />
           <FilterSelect name="flow" label="All Flows" options={flows.map((f) => ({ value: f.id, label: f.name }))} />
-          <FilterSelect name="pod" label="All Pods" options={pods.map((p) => ({ value: p.id, label: p.label }))} />
+          <FilterSelect name="machine" label="All Machines" options={machines.map((p) => ({ value: p.id, label: p.label }))} />
         </Suspense>
         {filtered && (
           <Link className="btn ghost sm" href="/runs">
@@ -77,7 +77,7 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
                 <th>Ticket</th>
                 <th>Flow</th>
                 <th>State</th>
-                <th>Pod</th>
+                <th>Machine</th>
                 <th>Started by</th>
                 <th>Duration</th>
                 <th>PR</th>
@@ -112,7 +112,7 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
                   <td>
                     <StatePill state={r.state} />
                   </td>
-                  <td className="small nowrap">{r.pod}</td>
+                  <td className="small nowrap">{r.machine}</td>
                   <td>
                     <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
                       <Avatar name={r.starterName} email={r.starterEmail} picture={r.starterPicture} />

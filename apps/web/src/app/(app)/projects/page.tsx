@@ -92,7 +92,7 @@ export default async function ProjectsPage() {
           <h2>GitHub access for the app</h2>
           <p className="small muted">
             The app reads issues, branches and pull requests with one read-only token from its configuration. It never writes to GitHub:
-            Pods push branches and open pull requests with their owner&apos;s own gh login. All Projects share one owner.
+            Runs push branches and open pull requests with their Starter&apos;s own gh login, on their Machine. All Projects share one owner.
           </p>
         </div>
         <div className="card card-pad stack">

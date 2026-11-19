@@ -22,7 +22,7 @@ export default async function NeedsYouPage() {
       <div className="page-head">
         <div>
           <h1>Needs you</h1>
-          <p className="sub">Every Node waiting for a person, across all Runs, oldest first. Any Member can respond; each waiting Run holds a Pod Slot until someone does.</p>
+          <p className="sub">Every Node waiting for a person, across all Runs, oldest first. Any Member can respond; each waiting Run holds a Slot on its Machine until someone does.</p>
         </div>
       </div>
 

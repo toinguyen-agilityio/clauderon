@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-/** Reloads the page's data on an interval, e.g. while a Pod is being set up. */
+/** Reloads the page's data on an interval, e.g. while a Machine is being paired. */
 export function AutoRefresh({ everyMs }: { everyMs: number }) {
   const router = useRouter();
   useEffect(() => {

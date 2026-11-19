@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-/** A command to copy and run in the Pod's terminal. */
+/** A command to copy and run in a terminal. */
 export function CmdBox({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () =>

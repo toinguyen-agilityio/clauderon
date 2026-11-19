@@ -140,7 +140,7 @@ export function NodeForm({
                 readOnly={readOnly}
                 onChange={(e) => set({ command: e.target.value })}
               />
-              <span className="hint">Runs in the Pod, in the Run&apos;s clone of the repository.</span>
+              <span className="hint">Runs in bash on the Starter&apos;s Machine, in the Run&apos;s worktree of the repository.</span>
             </div>
           ) : (
             <div className="field">

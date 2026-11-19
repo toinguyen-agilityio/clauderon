@@ -1,18 +1,27 @@
-// Small pieces shared by the Pods page and the Pod page.
+// Small pieces shared by the Machines page and the Machine page.
 
 import { Icon } from "../../../components/icons";
-import { PodPill } from "../../../components/state-pill";
 
-/** Mirrors the server's limit; kept here so client dialogs need no server import. */
-export const POD_NAME_MAX = 60;
+/** Mirrors the server's limits; kept here so client dialogs need no server import. */
+export const MACHINE_NAME_MAX = 60;
+export { MAX_SLOTS } from "@clauderon/core";
 
-export const defaultPodName = (owner: { name: string | null; email: string }) => `${owner.name ?? owner.email}'s Pod`;
+export const defaultMachineName = (owner: { name: string | null; email: string }) => `${owner.name ?? owner.email}'s Machine`;
 
 /** RAM as stored (MB) in GB, with one decimal when needed: 2560 → "2.5 GB". */
 export const formatGb = (memoryMb: number) => `${Math.round((memoryMb / 1024) * 10) / 10} GB`;
 
-/** The Pod's own name, or "<owner>'s Pod" when it has none. */
-export const podName = (pod: { name: string | null; owner: { name: string | null; email: string } }) => pod.name ?? defaultPodName(pod.owner);
+/** The Machine's own name, or "<owner>'s Machine" when it has none. */
+export const machineName = (machine: { name: string | null; owner: { name: string | null; email: string } }) =>
+  machine.name ?? defaultMachineName(machine.owner);
+
+/** Pairing from a checkout of this repository, for those who run the Agent by hand (ADR 0006). */
+export const pairCommand = (webUrl: string) => `pnpm --filter @clauderon/host-agent pair ${webUrl}`;
+
+const OS_LABEL: Record<string, string> = { darwin: "macOS", linux: "Linux", win32: "Windows" };
+
+/** `darwin` → macOS, with the architecture: "macOS arm64". */
+export const osLabel = (os: string | null, arch: string | null) => [os ? (OS_LABEL[os] ?? os) : null, arch].filter(Boolean).join(" ");
 
 /** One box per Slot: Running fills it blue, Waiting for a human amber. */
 export function SlotBar({ slots, inUse, waiting = 0 }: { slots: number; inUse: number; waiting?: number }) {
@@ -25,13 +34,12 @@ export function SlotBar({ slots, inUse, waiting = 0 }: { slots: number; inUse: n
   );
 }
 
+// Status chips: every Machine state reads as a coloured label, not plain text.
 
-// Status chips: every Pod state reads as a coloured label, not plain text.
-
-/** The container's state, or the Host Agent being offline (then the state is unknown). */
-export function PodStatusChip({ status, hostConnected }: { status: string; hostConnected: boolean }) {
-  if (!hostConnected) return <span className="pill intr">Host Agent offline</span>;
-  return <PodPill status={status} />;
+/** Whether its Agent is connected now; an unpaired Machine has no Agent at all. */
+export function MachineStatusChip({ connected, paired }: { connected: boolean; paired: boolean }) {
+  if (!paired) return <span className="pill plain">Not paired</span>;
+  return connected ? <span className="pill ok">Online</span> : <span className="pill intr">Offline</span>;
 }
 
 export function ReadyChip({ ready }: { ready: boolean }) {

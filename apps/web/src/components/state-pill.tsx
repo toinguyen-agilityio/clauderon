@@ -23,14 +23,6 @@ const TICKET: Record<string, string> = {
   Closed: "",
 };
 
-const POD: Record<string, [tone: string, label: string]> = {
-  creating: ["run", "Creating…"],
-  running: ["ok", "Running"],
-  stopped: ["", "Stopped"],
-  error: ["fail", "Error"],
-  deleting: ["run", "Deleting…"],
-};
-
 export function StatePill({ state }: { state: string }) {
   const [tone, label] = RUN[state] ?? ["", state];
   return <span className={`pill ${tone}`}>{label}</span>;
@@ -38,11 +30,6 @@ export function StatePill({ state }: { state: string }) {
 
 export function TicketStatusPill({ status }: { status: string }) {
   return <span className={`pill ${TICKET[status] ?? ""}`}>{status}</span>;
-}
-
-export function PodPill({ status }: { status: string }) {
-  const [tone, label] = POD[status] ?? ["", status];
-  return <span className={`pill ${tone}`}>{label}</span>;
 }
 
 const OUTPUT_COLOR: Record<string, string> = {

@@ -20,7 +20,7 @@ export default async function AllowlistPage() {
           <h1>Allowlist</h1>
           <p className="sub">
             Exact email addresses that can sign in with Google. Operator emails come from configuration and cannot be removed. Removing
-            an email ends that Member&apos;s sessions at once; their Pod, Runs and audit entries are kept.
+            an email ends that Member&apos;s sessions at once; their Machine, Runs and audit entries are kept.
           </p>
         </div>
       </div>

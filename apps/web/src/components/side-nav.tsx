@@ -24,7 +24,7 @@ export function SideNav({ operator, needsYou }: { operator: boolean; needsYou: n
       title: "Setup",
       items: [
         { href: "/flows", label: "Flows", icon: Icon.flows },
-        { href: "/pods", label: "Pods", icon: Icon.pods },
+        { href: "/machines", label: "Machines", icon: Icon.host },
         { href: "/projects", label: "Projects", icon: Icon.projects },
         ...(operator ? [{ href: "/allowlist", label: "Allowlist", icon: Icon.allowlist }] : []),
       ],

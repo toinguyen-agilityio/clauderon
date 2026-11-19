@@ -29,7 +29,7 @@ export function RetryFromHere({ runId, nodeId, nodeName, inputs, context }: { ru
             <div>
               <h2 id={`retry-${nodeId}`}>Retry from “{nodeName}”</h2>
               <p className="muted small" style={{ marginTop: 4 }}>
-                This Node and every later one run again as new Attempts; earlier Attempts stay visible. The Run joins the end of its Pod&apos;s queue and keeps its worktree.
+                This Node and every later one run again as new Attempts; earlier Attempts stay visible. The Run joins the end of its Machine&apos;s queue and keeps its worktree.
               </p>
             </div>
             <button type="button" className="btn ghost sm" aria-label="Close" onClick={() => ref.current?.close()}>

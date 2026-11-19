@@ -1,8 +1,9 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { parseLimitCeiling, systemClock } from "@clauderon/core";
+import { systemClock } from "@clauderon/core";
 import { connect, notifyGatewayCommand, notifyMemberRevoked, parseOperatorEmails, type DbHandle } from "@clauderon/db";
 import { SESSION_COOKIES, memberFromCookies } from "./access";
+import { DEFAULT_AGENT_REPOSITORY } from "./agent-install";
 import type { AppDeps } from "./deps";
 import { gitHubApi } from "./github";
 
@@ -25,9 +26,23 @@ export function deps(): AppDeps {
     publish: notifyMemberRevoked(db),
     command: notifyGatewayCommand(db),
     github: gitHubApi(process.env.GITHUB_TOKEN ?? ""),
-    podImage: process.env.POD_IMAGE ?? "",
-    limitCeiling: parseLimitCeiling(process.env.POD_LIMIT_CEILING),
   };
+}
+
+/** The web app's public origin (`AUTH_URL`), or the request's own when unset. */
+export function webUrl(requestOrigin: string): string {
+  return (process.env.AUTH_URL ?? requestOrigin).replace(/\/$/, "");
+}
+
+/** The web app's public origin for a page being rendered. */
+export async function pageWebUrl(): Promise<string> {
+  const h = await headers();
+  return webUrl(`${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000"}`);
+}
+
+/** The repository the Agent installer clones (ADR 0006). */
+export function agentRepository(): string {
+  return process.env.AGENT_REPOSITORY ?? DEFAULT_AGENT_REPOSITORY;
 }
 
 /** The Gateway's public WebSocket origin, for browser sockets. */
@@ -37,6 +52,11 @@ export function gatewayUrl(): string {
 
 export function sessionSecret(): string {
   return required("SESSION_SECRET");
+}
+
+/** A path inside this app to return to after sign-in; anything else is dropped. */
+export function safeReturnPath(path: string | undefined | null): string | null {
+  return path && path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : null;
 }
 
 /** The signed-in Member for a page; sends anyone else to sign in. */
