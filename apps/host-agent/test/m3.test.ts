@@ -1,3 +1,4 @@
+import { join, sep } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Payload } from "@clauderon/protocol";
 import { settle } from "@clauderon/testing";
@@ -82,7 +83,7 @@ describe("Retry context file (spec M3 §4)", () => {
 });
 
 describe("Orphans (spec M3 §6)", () => {
-  const pidFile = (attemptId: string) => `${HOME}/nodes/${attemptId}.json`;
+  const pidFile = (attemptId: string) => join(HOME, "nodes", `${attemptId}.json`);
   const record = (pid: number, bootAt = system.boot) => JSON.stringify({ pid, bootAt: bootAt.toISOString() });
 
   it("records each running Node's process group, and forgets it once the Node ends", async () => {
@@ -109,7 +110,7 @@ describe("Orphans (spec M3 §6)", () => {
 
     await nodes.killOrphans();
     expect(system.kills).toEqual([{ pid: 4242, signal: "TERM" }]);
-    expect([...system.files.keys()].filter((p) => p.startsWith(`${HOME}/nodes/`))).toEqual([pidFile("att-live")]);
+    expect([...system.files.keys()].filter((p) => p.startsWith(join(HOME, "nodes") + sep))).toEqual([pidFile("att-live")]);
     held.open();
   });
 

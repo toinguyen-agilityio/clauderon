@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { installService, launchdPlist, serviceArgs, systemdUnit, uninstallService, windowsTaskCommand, type ServiceSpec } from "../src/service";
 
@@ -19,7 +20,7 @@ describe("Agent service (ADR 0006)", () => {
     expect(plist).toContain("<string>com.clauderon.agent</string>");
     expect(plist).toContain("<string>/Users/ann/R&amp;D/clauderon</string>");
     expect(plist).toMatch(/<key>SuccessfulExit<\/key>\s*<false\/>/);
-    expect(plist).toContain("<string>/Users/ann/.clauderon/agent.log</string>");
+    expect(plist).toContain(`<string>${join("/Users/ann/.clauderon", "agent.log")}</string>`);
     // Marks a service run: an updated Agent exits non-zero so launchd starts the new file.
     expect(plist).toMatch(/<key>CLAUDERON_SERVICE<\/key>\s*<string>1<\/string>/);
   });

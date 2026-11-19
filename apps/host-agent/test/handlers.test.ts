@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Payload } from "@clauderon/protocol";
 import { settle } from "@clauderon/testing";
@@ -10,6 +11,9 @@ import { FakeLink, FakeSystem, gate } from "./fakes";
 let system: FakeSystem;
 let link: FakeLink;
 const HOME = "/home/ann/.clauderon";
+// The Agent builds paths with the platform's separator: `\` on Windows.
+const CLONE = join(HOME, "projects", "acme", "web");
+const run = (id: string) => join(HOME, "runs", id);
 
 beforeEach(() => {
   system = new FakeSystem();
@@ -69,15 +73,15 @@ describe("workspace.prepare (T1-16, POD-10, RUN-3)", () => {
     await link.deliver("workspace.prepare", prepare("run-2", "clauderon/2-b-run2"));
 
     const commands = system.commands();
-    expect(commands.filter((c) => c.startsWith("gh repo clone"))).toEqual(["gh repo clone acme/web /home/ann/.clauderon/projects/acme/web"]);
-    expect(commands.filter((c) => c.includes(" fetch "))).toEqual(["git -C /home/ann/.clauderon/projects/acme/web fetch origin main"]);
+    expect(commands.filter((c) => c.startsWith("gh repo clone"))).toEqual([`gh repo clone acme/web ${CLONE}`]);
+    expect(commands.filter((c) => c.includes(" fetch "))).toEqual([`git -C ${CLONE} fetch origin main`]);
     expect(commands.filter((c) => c.includes("worktree add"))).toEqual([
-      "git -C /home/ann/.clauderon/projects/acme/web worktree add /home/ann/.clauderon/runs/run-1 -b clauderon/1-a-run1 origin/main",
-      "git -C /home/ann/.clauderon/projects/acme/web worktree add /home/ann/.clauderon/runs/run-2 -b clauderon/2-b-run2 origin/main",
+      `git -C ${CLONE} worktree add ${run("run-1")} -b clauderon/1-a-run1 origin/main`,
+      `git -C ${CLONE} worktree add ${run("run-2")} -b clauderon/2-b-run2 origin/main`,
     ]);
     expect(link.of("workspace.ready")).toEqual([
-      { runId: "run-1", worktreePath: "/home/ann/.clauderon/runs/run-1" },
-      { runId: "run-2", worktreePath: "/home/ann/.clauderon/runs/run-2" },
+      { runId: "run-1", worktreePath: run("run-1") },
+      { runId: "run-2", worktreePath: run("run-2") },
     ]);
   });
 
@@ -95,7 +99,7 @@ describe("workspace.prepare (T1-16, POD-10, RUN-3)", () => {
   it("sets a git identity only in the clone's own config, never the Member's global one", async () => {
     await link.deliver("workspace.prepare", prepare("run-1", "clauderon/1-a-run1"));
     const identity = system.execs.find((e) => e.script.includes("user.name"))!;
-    expect(identity.args).toEqual(["/home/ann/.clauderon/projects/acme/web"]);
+    expect(identity.args).toEqual([CLONE]);
     expect(identity.script).not.toContain("--global");
   });
 

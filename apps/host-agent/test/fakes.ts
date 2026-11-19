@@ -1,4 +1,4 @@
-import { posix } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { MessageType, Payload } from "@clauderon/protocol";
 import { settle } from "@clauderon/testing";
 import type { AgentLink } from "../src/link";
@@ -60,7 +60,7 @@ export class FakeSystem implements System {
     return this.files.has(path) || this.paths.has(path);
   }
   async list(dir: string) {
-    return [...this.files.keys()].filter((p) => posix.dirname(p) === dir).map((p) => posix.basename(p));
+    return [...this.files.keys()].filter((p) => dirname(p) === dir).map((p) => basename(p));
   }
   async remove(path: string) {
     this.files.delete(path);
@@ -76,7 +76,7 @@ export class FakeSystem implements System {
 
   private builtIn(call: ExecCall): ExecReply {
     const [cmd, ...args] = call.argv;
-    if (cmd === "gh" && args[0] === "repo" && args[1] === "clone") this.paths.add(`${args[3]}/.git`);
+    if (cmd === "gh" && args[0] === "repo" && args[1] === "clone") this.paths.add(join(args[3]!, ".git"));
     return {};
   }
 }
