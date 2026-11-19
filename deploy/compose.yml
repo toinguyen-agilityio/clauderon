@@ -3,7 +3,9 @@
 #   docker compose -f deploy/compose.yml --env-file deploy/.env.production up -d --build
 # Web and Gateway listen on localhost only; Tailscale Serve publishes them
 # to the tailnet with HTTPS (see deploy/README.md). Postgres is never published.
-name: clauderon
+# Not "clauderon": that is the dev compose project (the repo folder name), and
+# sharing it would let one stack replace or remove the other's containers.
+name: clauderon-prod
 
 x-app-env: &app-env
   DATABASE_URL: postgres://clauderon:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/clauderon
@@ -74,3 +76,5 @@ services:
 
 volumes:
   pgdata:
+    # Fixed name, so the data survives a change of project name.
+    name: clauderon_pgdata

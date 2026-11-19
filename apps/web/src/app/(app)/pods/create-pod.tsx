@@ -4,6 +4,7 @@ import { useActionState, useRef } from "react";
 import { Icon } from "../../../components/icons";
 import { createPodAction, type PodFormState } from "./actions";
 import { POD_NAME_MAX } from "./pod-parts";
+import { closeOnBackdrop } from "../../../components/dialog";
 
 type Limits = { slots: number; cpus: number; memoryMb: number };
 
@@ -31,7 +32,7 @@ export function CreatePod({
         {Icon.plus}
         Create my Pod
       </button>
-      <dialog ref={ref} className="modal" aria-labelledby="create-pod-title">
+      <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby="create-pod-title">
         <form action={action} className="modal-in">
           <div className="modal-h">
             <div>

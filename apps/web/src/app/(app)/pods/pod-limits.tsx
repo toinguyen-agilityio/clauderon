@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { Icon } from "../../../components/icons";
 import { setLimitsAction, type LimitsFormState } from "./actions";
 import { POD_NAME_MAX } from "./pod-parts";
+import { closeOnBackdrop } from "../../../components/dialog";
 
 type Limits = { slots: number; cpus: number; memoryMb: number };
 
@@ -41,7 +42,7 @@ export function PodLimits({
       <button type="button" className={`btn ${small ? "sm" : ""}`} onClick={() => ref.current?.showModal()}>
         {label}
       </button>
-      <dialog ref={ref} className="modal" aria-labelledby={`limits-${podId}`}>
+      <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby={`limits-${podId}`}>
         <form action={action} className="modal-in">
           <div className="modal-h">
             <div>

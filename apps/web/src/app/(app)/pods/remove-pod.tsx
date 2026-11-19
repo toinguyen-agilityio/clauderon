@@ -3,6 +3,7 @@
 import { useActionState, useRef } from "react";
 import { Icon } from "../../../components/icons";
 import { removePodAction, type PodFormState } from "./actions";
+import { closeOnBackdrop } from "../../../components/dialog";
 
 /** The danger zone on the Pod page: Remove Pod behind a confirm dialog (POD-7). */
 export function RemovePod({ podId, podName, mine }: { podId: string; podName: string; mine: boolean }) {
@@ -21,7 +22,7 @@ export function RemovePod({ podId, podName, mine }: { podId: string; podName: st
       <button type="button" className="btn danger" onClick={() => ref.current?.showModal()}>
         Remove Pod
       </button>
-      <dialog ref={ref} className="modal" aria-labelledby="remove-pod-title">
+      <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby="remove-pod-title">
         <form action={action} className="modal-in">
           <div className="modal-h">
             <h2 id="remove-pod-title">Remove {podName}?</h2>

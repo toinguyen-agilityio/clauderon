@@ -14,7 +14,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKUP_DIR="${BACKUP_DIR:-$ROOT/deploy/backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
-PROJECT="${COMPOSE_PROJECT_NAME:-clauderon}"
+PROJECT="${COMPOSE_PROJECT_NAME:-clauderon-prod}"
 LABEL="com.clauderon.backup"
 compose() { docker compose -p "$PROJECT" -f "$ROOT/deploy/compose.yml" --env-file "$ROOT/deploy/.env.production" "$@"; }
 

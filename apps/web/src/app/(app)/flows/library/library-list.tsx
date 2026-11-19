@@ -6,6 +6,7 @@ import type { NodeKind, OutputType } from "@clauderon/core";
 import { Icon } from "../../../../components/icons";
 import { EMPTY_NODE, NodeForm } from "./node-form";
 import { KIND_GROUP_LABEL, cardMeta, filterNodes, groupCounts, type KindGroup, type LibraryNodeView } from "./library-view";
+import { closeOnBackdrop } from "../../../../components/dialog";
 
 type Port = { name: string; type: OutputType; optional: boolean };
 
@@ -68,7 +69,7 @@ function NodeDialog({ node, onClose }: { node: LibraryNodeView | null; onClose: 
   }, []);
   const title = node ? node.name : "New Node";
   return (
-    <dialog ref={ref} className="modal wide lib-dialog" aria-labelledby="nd-title" onClose={onClose}>
+    <dialog ref={ref} {...closeOnBackdrop} className="modal wide lib-dialog" aria-labelledby="nd-title" onClose={onClose}>
       <div className="modal-in">
         <div className="modal-h">
           <div>
