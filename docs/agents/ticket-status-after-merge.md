@@ -1,0 +1,16 @@
+# Updating tickets after a PR merge
+
+Applies right after `gh pr merge` succeeds (a hook reminds Claude). First confirm the PR really merged: `gh pr view <n> --json state,body,closingIssuesReferences`.
+
+For each linked ticket (`closingIssuesReferences`, or `#N` in the PR body):
+
+| Situation after the merge | Action |
+| --- | --- |
+| The PR fully meets the ticket's Acceptance Criteria | Make sure it is closed (`Closes #N` usually does it); if not, `gh issue close <n> --comment "Done in #<pr>"`. |
+| Only part of the AC is met | Keep it open. Comment what is done and what is left, as a checklist. |
+| The ticket is waiting on a decision or missing info | Add `needs-info`, comment the exact question. Do not close. |
+| Another open ticket now blocks it | Add the native blocked-by link (see `issue-tracker.md`, "Blocking") and comment why. |
+| The merge unblocks other tickets | Comment on each: "Unblocked by #<pr>". Leave them open. |
+| The work turned out not to be needed | `wontfix` label, comment why, close. |
+
+Always comment the PR link on the ticket. If unsure which row applies, ask the user instead of guessing.
