@@ -3,6 +3,7 @@
 import { useActionState, useRef } from "react";
 import { Icon } from "../../../../components/icons";
 import { OutputValue } from "../../../../components/output-value";
+import { MarkdownText } from "../../../../components/markdown-text";
 import { OType } from "../../../../components/state-pill";
 import { retryRunAction, type RetryFormState } from "./actions";
 import { closeOnBackdrop } from "../../../../components/dialog";
@@ -50,9 +51,7 @@ export function RetryFromHere({ runId, nodeId, nodeName, inputs, context }: { ru
               {context && (
                 <>
                   <span className="eyebrow">and this retry context</span>
-                  <pre className="outv mono" style={{ whiteSpace: "pre-wrap", maxHeight: 260, overflow: "auto" }}>
-                    {context}
-                  </pre>
+                  <MarkdownText text={context} />
                 </>
               )}
             </div>
