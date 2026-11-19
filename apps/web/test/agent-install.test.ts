@@ -24,7 +24,9 @@ describe("Agent installer (ADR 0007)", () => {
     const ps1 = installPs1(input);
     expect(ps1).toContain("$WebUrl = 'https://clauderon.example.com'");
     expect(ps1).toContain("win-$Arch");
-    expect(ps1).toContain("Get-FileHash -Algorithm SHA256");
+    // .NET, not Get-FileHash or Expand-Archive, which fail in Windows PowerShell started from PowerShell 7.
+    expect(ps1).toContain("[Security.Cryptography.SHA256]::Create()");
+    expect(ps1).not.toMatch(/Get-FileHash -|Expand-Archive -/);
     expect(ps1).toContain("pair $WebUrl --no-start --if-needed");
     expect(ps1).toContain("install-service");
   });
