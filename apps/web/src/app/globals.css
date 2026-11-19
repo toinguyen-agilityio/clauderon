@@ -267,6 +267,10 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .checklist li:first-child { padding-top: 0; }
 .checklist li:last-child { border-bottom: 0; }
 .checklist li > :last-child { justify-self: end; text-align: right; overflow-wrap: anywhere; }
+/* Health (doctor): the dot, then the check and its fix, all left-aligned. */
+.checklist.left li { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.checklist.left li > :last-child { justify-self: stretch; text-align: left; }
+.checklist.left .ndot { margin-top: 1px; }
 .connect-box { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--sunk); }
 .connect-box .row > svg { width: 14px; height: 14px; flex: none; }
 .device-code { font-size: 22px; font-weight: 600; letter-spacing: 0.12em; padding: 4px 12px; border-radius: var(--r-sm); background: var(--panel); border: 1px solid var(--line-strong); }
@@ -307,6 +311,7 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .ndot.succeeded { border-color: var(--ok); background: var(--ok); color: var(--panel); }
 .ndot.running { border-color: var(--run); color: var(--run); }
 .ndot.failed { border-color: var(--fail); background: var(--fail); color: var(--panel); }
+.ndot.warned { border-color: var(--wait); background: var(--wait-bg); color: var(--wait); }
 .ndot.interrupted { border-color: var(--intr); background: var(--intr-bg); color: var(--intr); }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

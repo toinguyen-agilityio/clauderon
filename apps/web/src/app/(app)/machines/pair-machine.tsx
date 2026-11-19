@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { approvePairingAction, lookUpPairingAction, type PairFormState } from "./actions";
 import type { PairingPreview } from "../../../server/machines";
+import { Icon } from "../../../components/icons";
 import { osLabel } from "./machine-parts";
 
 /**
@@ -33,7 +34,14 @@ export function PairMachine({ opened = null }: { opened?: { pairing: PairingPrev
           style={{ maxWidth: 160, textTransform: "uppercase" }}
         />
         <button type="submit" className="btn sm" disabled={looking}>
-          {looking ? "Looking up…" : "Look up"}
+          {looking ? (
+            <>
+              {Icon.spin}
+              Looking up…
+            </>
+          ) : (
+            "Look up"
+          )}
         </button>
       </form>
       {pairing && (
@@ -49,7 +57,14 @@ export function PairMachine({ opened = null }: { opened?: { pairing: PairingPrev
             )}
           </div>
           <button type="submit" className="btn sm primary" disabled={approving}>
-            {approving ? "Approving…" : "Approve"}
+            {approving ? (
+              <>
+                {Icon.spin}
+                Approving…
+              </>
+            ) : (
+              "Approve"
+            )}
           </button>
         </form>
       )}

@@ -1,17 +1,29 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
+import { isLegacyAgentVersion } from "@clauderon/protocol";
 import { ago } from "../../../../components/format";
 import { Icon } from "../../../../components/icons";
 import { StatePill } from "../../../../components/state-pill";
+import { agentManifest, installCommandPs1, installCommandSh } from "../../../../server/agent-install";
 import { viewMachine } from "../../../../server/machines";
-import { deps, requireMember } from "../../../../server/runtime";
+import { deps, pageWebUrl, requireMember } from "../../../../server/runtime";
 import { AutoRefresh } from "../auto-refresh";
+import { CmdBox } from "../cmd-box";
+import { DoctorCard } from "../doctor-card";
 import { CheckLogins, RemoveMachine, UnpairMachine } from "../machine-actions";
 import { claudeAccountLabel, defaultMachineName, formatGb, machineName, MachineStatusChip, osLabel, ReadyChip, SlotBar, SlotChips } from "../machine-parts";
 import { MachineSettings } from "../machine-settings";
+import { PairingProgress } from "../pairing-progress";
 
 export const dynamic = "force-dynamic";
+
+const CHECKING = (
+  <span className="pill wait">
+    {Icon.spin}
+    Checking…
+  </span>
+);
 
 const loginChip = (ok: boolean, label: string) =>
   ok ? (
@@ -30,17 +42,38 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (view === "not-found") notFound();
   const { machine, using, canRemove } = view;
   const now = new Date();
+  const [latest, web] = await Promise.all([agentManifest(), pageWebUrl()]);
+  // ADR 0007: an old install (a clone run with tsx) cannot update itself; a bundle updates on its next connect.
+  const legacy = isLegacyAgentVersion(machine.agentVersion);
+  const updating = !legacy && latest && machine.agentVersion && !machine.agentVersion.endsWith("-dev") && machine.agentVersion !== latest.version;
+  const installCommand = machine.os === "win32" ? installCommandPs1(web) : installCommandSh(web);
   const owner = machine.owner.name ?? machine.owner.email;
   const name = machineName(machine);
   const waiting = using.filter((r) => r.state === "waiting_for_human").length;
   // A heartbeat after the pairing: the new Agent has connected at least once.
   const connectedSincePairing = Boolean(machine.lastHeartbeatAt && machine.pairedAt && machine.lastHeartbeatAt >= machine.pairedAt);
+  // Right after Pairing the logins are unknown, not missing: say "Checking…" instead of a red "Not logged in".
+  const checkedSincePairing = Boolean(machine.loginsCheckedAt && machine.pairedAt && machine.loginsCheckedAt >= machine.pairedAt);
+  const checking = machine.paired && machine.connected && !checkedSincePairing;
+  const settingUp = machine.mine && machine.paired && (!connectedSincePairing || checking);
+  const justReady = machine.mine && machine.ready && !!machine.pairedAt && now.getTime() - machine.pairedAt.getTime() < 10 * 60_000;
   // Each check ends in a chip: green when done, red or amber with what is wrong.
+  const agentReady = machine.paired && machine.connected;
   const checks: [ok: boolean, label: string, chip: ReactNode][] = [
-    [machine.paired, "Paired", machine.paired ? <span className="pill ok">Paired</span> : <span className="pill fail">Not paired</span>],
-    [machine.connected, "Agent", machine.connected ? <span className="pill ok">Connected</span> : <span className="pill fail">Offline</span>],
-    [machine.claudeLoggedIn, "Claude Code", loginChip(machine.claudeLoggedIn, claudeAccountLabel(machine) ?? "Logged in")],
-    [machine.ghLoggedIn, "gh", loginChip(machine.ghLoggedIn, machine.ghAccount ?? "Logged in")],
+    // One row for the connection: Ready once the computer is paired and its Agent is online.
+    [
+      agentReady,
+      "Connection",
+      agentReady ? (
+        <span className="pill ok">Ready</span>
+      ) : (
+        <span className="pill fail" title={machine.paired ? "Paired, but the Agent is offline" : "Not paired"}>
+          Not ready
+        </span>
+      ),
+    ],
+    [machine.claudeLoggedIn, "Claude Code", checking ? CHECKING : loginChip(machine.claudeLoggedIn, claudeAccountLabel(machine) ?? "Logged in")],
+    [machine.ghLoggedIn, "gh", checking ? CHECKING : loginChip(machine.ghLoggedIn, machine.ghAccount ?? "Logged in")],
   ];
   const facts: [label: string, value: ReactNode][] = [
     ["Hostname", <span key="h" className="mono small">{machine.hostname ?? "—"}</span>],
@@ -48,7 +81,13 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     ["CPU", machine.cpus ? `${machine.cpus} cores` : "—"],
     ["RAM", machine.memoryMb ? formatGb(machine.memoryMb) : "—"],
     ["Disk", machine.diskGb ? `${machine.diskGb} GB` : "—"],
-    ["Agent", <span key="a" className="mono small">{machine.agentVersion ?? "—"}</span>],
+    [
+      "Agent",
+      <span key="a" className="mono small">
+        {machine.agentVersion ?? "—"}
+        {updating && <span className="faint"> · updates to {latest.version} when idle</span>}
+      </span>,
+    ],
     ["Paired", ago(machine.pairedAt, now)],
   ];
 
@@ -66,7 +105,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             </h1>
             <div className="chips-row" style={{ marginTop: 8 }} data-testid="machine-chips">
               <MachineStatusChip connected={machine.connected} paired={machine.paired} />
-              <ReadyChip ready={machine.ready} />
+              {checking ? CHECKING : <ReadyChip ready={machine.ready} />}
               <SlotChips inUse={machine.inUse} slots={machine.slots} queued={machine.queued} />
             </div>
             <p className="sub small" style={{ marginTop: 8 }}>
@@ -85,23 +124,36 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      {machine.mine && machine.paired && !machine.ready && <AutoRefresh everyMs={5000} />}
-      {machine.mine && machine.paired && !machine.connected && (
-        <div className="banner wait" data-testid="machine-offline">
-          {connectedSincePairing ? (
-            <div className="grow small">
-              <b>The Agent is offline.</b> It comes back by itself when <span className="mono">{machine.hostname ?? "your computer"}</span> is on
-              and you are logged in. Run by hand, start it again with <span className="mono">pnpm --filter @clauderon/host-agent start</span>.
-              Queued Runs wait until it connects.
-            </div>
-          ) : (
-            <div className="grow small">
-              <b>Paired. Waiting for the Agent on {machine.hostname ?? "your computer"} to connect…</b> This page updates by itself.
-            </div>
-          )}
+      {machine.mine && machine.paired && !machine.ready && <AutoRefresh everyMs={settingUp ? 2000 : 5000} />}
+      {settingUp && <PairingProgress phase={connectedSincePairing ? "checking" : "connecting"} hostname={machine.hostname ?? "This computer"} />}
+      {justReady && !settingUp && (
+        <div className="banner ok" data-testid="machine-just-ready">
+          <div className="grow small">
+            <b>Your Machine is Ready.</b> Runs you start now run on <span className="mono">{machine.hostname ?? "it"}</span>.
+          </div>
         </div>
       )}
-      {machine.mine && machine.connected && (!machine.claudeLoggedIn || !machine.ghLoggedIn) && (
+      {machine.mine && machine.paired && !machine.connected && connectedSincePairing && (
+        <div className="banner wait" data-testid="machine-offline">
+          <div className="grow small">
+            <b>The Agent is offline.</b> It comes back by itself when <span className="mono">{machine.hostname ?? "your computer"}</span> is on
+            and you are logged in. If it does not, run the install command from the Machines page again on that computer: it keeps the
+            pairing and restarts the Agent. Queued Runs wait until it connects.
+          </div>
+        </div>
+      )}
+      {machine.mine && machine.paired && legacy && (
+        <div className="banner wait" data-testid="machine-legacy-agent">
+          <div className="grow small stack" style={{ gap: 8 }}>
+            <span>
+              <b>This Machine runs the old Agent install</b> ({machine.agentVersion}), which cannot update itself. Run the install command once
+              more on {machine.hostname ?? "that computer"}: it keeps the pairing, brings its own Node and from then on updates by itself.
+            </span>
+            <CmdBox command={installCommand} />
+          </div>
+        </div>
+      )}
+      {machine.mine && machine.connected && !checking && (!machine.claudeLoggedIn || !machine.ghLoggedIn) && (
         <div className="banner wait" data-testid="machine-logins">
           <div className="grow small">
             <b>Log in on the computer itself</b>, in your own terminal: {!machine.claudeLoggedIn && <span className="mono">claude</span>}
@@ -160,6 +212,8 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
           <p className="faint small">Runs work in the Agent&apos;s own directory, ~/.clauderon: one clone per Project, one worktree per Run.</p>
         </div>
       </div>
+
+      {machine.doctor && <DoctorCard doctor={machine.doctor} mine={machine.mine} now={now} />}
 
       <div className="grid g2">
         <div className="card" data-testid="machine-using">
