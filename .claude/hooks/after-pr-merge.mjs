@@ -3,7 +3,8 @@ const chunks = [];
 for await (const c of process.stdin) chunks.push(c);
 const input = JSON.parse(Buffer.concat(chunks).toString() || "{}");
 const cmd = input.tool_input?.command ?? "";
-if (/\bgh\s+pr\s+merge\b/.test(cmd)) {
+// Only when `gh pr merge` is a command itself (start of line, or after && ; | ), not text inside a body or message.
+if (/(^|&&|\|\||[;|\n])\s*gh\s+pr\s+merge\b/.test(cmd)) {
   console.log(
     JSON.stringify({
       hookSpecificOutput: {
