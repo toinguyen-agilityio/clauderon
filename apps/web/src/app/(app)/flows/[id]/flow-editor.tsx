@@ -23,6 +23,7 @@ import { NODE_DRAG_TYPE, NodeLibrary } from "./node-library";
 import { NodePanel, type PlacementPatch } from "./node-panel";
 import { describeProblems, type ProblemFix, type ProblemView } from "./problem-hints";
 import { hasUnsavedChanges } from "./unsaved";
+import { LeaveDialog } from "./leave-dialog";
 import { useLeaveGuard } from "./use-leave-guard";
 import { advanceTestRun, edgeStates, nodeStates, startTestRun, type TestRun } from "./test-run";
 
@@ -453,7 +454,7 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
 
   // Leaving with unsaved changes asks first.
   const unsaved = hasUnsavedChanges({ readOnly, graphChanged: dirty, name, savedName });
-  useLeaveGuard(unsaved);
+  const leaveGuard = useLeaveGuard(unsaved);
 
   // --- keyboard shortcuts ---
   const keyState = useRef({ selected, single, readOnly, libraryAt, renaming, panelOpen, problemsOpen, shortcutsOpen, testRun });
@@ -808,6 +809,7 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
           </div>
         )}
       </div>
+      <LeaveDialog pending={leaveGuard.pending} onStay={leaveGuard.stay} onLeave={leaveGuard.leave} />
     </div>
   );
 }

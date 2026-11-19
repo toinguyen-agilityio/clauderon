@@ -1,8 +1,6 @@
 // When leaving the Flow editor needs a confirmation (issue #77). Kept free of React and the
 // DOM so it is easy to test; use-leave-guard.ts wires it to clicks, Back and closing the tab.
 
-export const LEAVE_MESSAGE = "You have unsaved changes to this Flow. Leave without saving?";
-
 /** True while the editor holds edits that were not saved. A read-only Flow never has any. */
 export function hasUnsavedChanges(s: { readOnly: boolean; graphChanged: boolean; name: string; savedName: string }): boolean {
   return !s.readOnly && (s.graphChanged || s.name.trim() !== s.savedName);
