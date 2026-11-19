@@ -33,6 +33,13 @@ export function MarkdownBody({ text }: { text: string }) {
       <Markdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // Agent text is untrusted: an auto-loaded remote image could leak data in its URL. Show a link instead.
+          img: ({ src, alt }) =>
+            typeof src === "string" ? (
+              <a href={src} target="_blank" rel="noreferrer noopener">
+                {alt || src}
+              </a>
+            ) : null,
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noreferrer noopener">
               {children}

