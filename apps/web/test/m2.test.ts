@@ -13,7 +13,7 @@ import {
   type TestDatabase,
 } from "@clauderon/testing";
 import type { AppDeps } from "../src/server/deps";
-import { cloneMyFlow, deleteMyFlow, editorData, saveMyFlow, viewFlows } from "../src/server/flows";
+import { cloneMyFlow, deleteMyFlow, editorData, exportMyFlow, importMyFlow, saveMyFlow, viewFlows } from "../src/server/flows";
 import { startDialog } from "../src/server/start";
 import { cloneMyNode, createMyNode, deleteMyNode, updateMyNode, viewLibrary } from "../src/server/library";
 
@@ -236,6 +236,70 @@ describe("Node panel (spec M2 §3, FLW-6)", () => {
     expect(await saveMyFlow(deps, ann, copy.flowId, { name: data.flow.name, nodes: data.graph.nodes, edges: data.graph.edges })).toEqual({ ok: true, problems: 0 });
     const off = data.graph.nodes.map((n) => (n.id === code.id ? { ...n, enabledOptionalOutputs: [] } : n));
     expect(await saveMyFlow(deps, ann, copy.flowId, { name: data.flow.name, nodes: off, edges: data.graph.edges })).toEqual({ ok: true, problems: 1 });
+  });
+});
+
+describe("Export and import a Flow (issue #98)", () => {
+  const exported = async (flowId: string) => {
+    const result = await exportMyFlow(deps, flowId);
+    if (!result.ok) throw new Error(result.error);
+    return result;
+  };
+
+  it("round trips a sample Flow into a new Flow of the member's own, without touching anything", async () => {
+    const sample = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const { json, filename } = await exported(sample);
+    expect(filename).toBe("basic-ticket-delivery.flow.json");
+    expect(json).not.toContain("ann@example.com");
+
+    const nodesBefore = (await viewLibrary(deps)).length;
+    const result = await importMyFlow(deps, ann, json);
+    if (!result.ok) throw new Error(result.error);
+    // The sample already has this name, so the copy gets another; every Node is reused.
+    expect(result.name).toBe("Copy of Basic ticket delivery");
+    expect(result.createdNodes).toBe(0);
+    expect((await viewLibrary(deps)).length).toBe(nodesBefore);
+
+    const copy = await loadFlowDetail(db, result.flowId);
+    const original = await loadFlowDetail(db, sample);
+    expect(copy!.flow.isSample).toBe(false);
+    expect(copy!.nodes.map((n) => [n.nodeId, n.label, n.x, n.y]).sort()).toEqual(original!.nodes.map((n) => [n.nodeId, n.label, n.x, n.y]).sort());
+    expect(copy!.edges).toHaveLength(original!.edges.length);
+    expect((await viewFlows(deps)).flows.find((f) => f.id === result.flowId)!.problems).toBe(0);
+    expect((await viewFlows(deps)).samples).toHaveLength(2);
+    expect(await actions()).toContain("flow.create");
+  });
+
+  it("creates the Nodes a file brings that this library lacks, and renames one that only shares a name", async () => {
+    const sample = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const file = JSON.parse((await exported(sample)).json);
+    // A new Node, and a Node that shares a name with a sample but is different.
+    const agent = file.nodes.find((n: { kind: string }) => n.kind === "agent");
+    const original = agent.name;
+    agent.instructions = "A different prompt.";
+    const result = await importMyFlow(deps, ann, JSON.stringify({ ...file, name: "Brand new flow" }));
+    if (!result.ok) throw new Error(result.error);
+    expect(result.name).toBe("Brand new flow");
+    expect(result.createdNodes).toBeGreaterThan(0);
+    const library = await viewLibrary(deps);
+    const made = library.find((n) => n.name === "Copy of " + original);
+    expect(made).toMatchObject({ isSample: false, instructions: "A different prompt." });
+    // The sample Node is untouched.
+    expect(library.find((n) => n.name === original)).toMatchObject({ isSample: true });
+  });
+
+  it("an invalid file creates nothing", async () => {
+    await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const flowsBefore = await db.select().from(schema.flow);
+    const nodesBefore = await db.select().from(schema.node);
+    for (const text of ["{oops", JSON.stringify({ format: "clauderon-flow", version: 2 }), JSON.stringify({ format: "clauderon-flow", version: 1, name: "x", nodes: [], placements: [{ id: "a", node: "n" }], edges: [] })]) {
+      expect(await importMyFlow(deps, ann, text)).toMatchObject({ ok: false });
+    }
+    expect(await db.select().from(schema.flow)).toHaveLength(flowsBefore.length);
+    expect(await db.select().from(schema.node)).toHaveLength(nodesBefore.length);
   });
 });
 

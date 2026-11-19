@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
-import { flowActionAction, type FlowFormState } from "./actions";
+import { exportFlowAction, flowActionAction, type FlowFormState } from "./actions";
 
 /**
  * Open, Clone and Delete on one Flow (FLW-8, FLW-9). A sample is opened to look at, a Flow to edit. Delete asks
@@ -11,6 +11,23 @@ import { flowActionAction, type FlowFormState } from "./actions";
 export function FlowRowActions({ flowId, sample, locked }: { flowId: string; sample: boolean; locked: boolean }) {
   const [state, action, pending] = useActionState<FlowFormState, FormData>(flowActionAction, { error: null, notice: null, openFlowId: null });
   const [confirming, setConfirming] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  // Export (issue #98): the server builds the file, the browser saves it.
+  const exportFlow = async () => {
+    setExporting(true);
+    setExportError(null);
+    const result = await exportFlowAction(flowId);
+    setExporting(false);
+    if (!result.ok) return setExportError(result.error);
+    const url = URL.createObjectURL(new Blob([result.json], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = result.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // An answer from the server (done or refused) closes the question.
   useEffect(() => {
@@ -26,6 +43,9 @@ export function FlowRowActions({ flowId, sample, locked }: { flowId: string; sam
         </Link>
         <button type="submit" name="action" value="clone" className="btn sm" disabled={pending}>
           Clone
+        </button>
+        <button type="button" className="btn sm" disabled={exporting} onClick={() => void exportFlow()}>
+          {exporting ? "Exporting…" : "Export"}
         </button>
         {!sample && !confirming && (
           <button type="button" className="btn sm" disabled={pending || locked} title={locked ? "Locked by an Active Run" : undefined} onClick={() => setConfirming(true)}>
@@ -44,6 +64,11 @@ export function FlowRowActions({ flowId, sample, locked }: { flowId: string; sam
         )}
       </form>
       {confirming && <span className="small faint">Delete this Flow? This cannot be undone.</span>}
+      {exportError && (
+        <span className="err-text small" role="alert">
+          {exportError}
+        </span>
+      )}
       {state.error && (
         <span className="err-text small" role="alert">
           {state.error}
