@@ -1,5 +1,7 @@
 # Clauderon v1 — milestone specs
 
+> **Pods to Machines (2026-11-20):** written for Pods (one Docker container per Member on a Pod Host). Pods and the Host Agent are replaced by each Member's own Machine and the Agent ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md), [ADR 0007](../adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md)). Read Pod as Machine, Pod Host as the Member's computer, Host Agent as Agent. Where this disagrees with the ADRs or the code, they win. M4 is already updated.
+
 > **Status:** draft for review · **Date:** 2026-11-16 · **Source of truth for scope:** [v1 requirements](../requirements/v1-requirements.md). Where a spec and the requirements disagree, the requirements win and the spec is fixed.
 > **Schedule:** [seven-day roadmap](../roadmap/v1-seven-day-plan.md). The milestones here follow its split.
 

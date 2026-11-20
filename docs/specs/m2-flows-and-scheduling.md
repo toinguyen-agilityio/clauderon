@@ -1,5 +1,7 @@
 # M2 — Flows and scheduling
 
+> **Pods to Machines (2026-11-20):** written for Pods (one Docker container per Member on a Pod Host). Pods and the Host Agent are replaced by each Member's own Machine and the Agent ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md), [ADR 0007](../adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md)). Read Pod as Machine, Pod Host as the Member's computer, Host Agent as Agent. Where this disagrees with the ADRs or the code, they win. M4 is already updated.
+
 > **Roadmap:** Day 4 · **Check:** **A2**, **A3**, **A6**.
 > **Depends on:** [M1](m1-walking-skeleton.md). A second Member with a Google account on the allowlist, their own Claude subscription and gh login (A6).
 
