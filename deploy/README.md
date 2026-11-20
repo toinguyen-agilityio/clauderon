@@ -1,28 +1,30 @@
 # Deploying Clauderon
 
-The web app, the Gateway and Postgres run as one Docker Compose stack on one always-on host. Tailscale Serve publishes the web app and the Gateway to the team's tailnet with HTTPS. Runs do not execute here: each Member pairs their own computer, their Machine, whose Agent connects out to the Gateway. Why: [ADR 0005](../docs/adr/0005-self-host-the-app-on-the-pod-host.md), [ADR 0006](../docs/adr/0006-each-member-runs-on-their-own-machine.md).
+The web app, the Gateway and Postgres run as one Docker Compose stack on one always-on host. A Cloudflare Tunnel, run by the stack's `cloudflared` container, publishes the web app and the Gateway to the internet with HTTPS; it connects out, so the host opens no port. Google sign-in and the email allowlist are the only gate. Runs do not execute here: each Member pairs their own computer, their Machine, whose Agent connects out to the Gateway. Why: [ADR 0005](../docs/adr/0005-self-host-the-app-on-the-pod-host.md), [ADR 0006](../docs/adr/0006-each-member-runs-on-their-own-machine.md).
 
 ```
-Member's browser ──https──▶ <host>.ts.net:443  ─▶ web      127.0.0.1:3000
-Member's browser ──wss────▶ <host>.ts.net:8443 ─▶ gateway  127.0.0.1:4000
-Member's Agent   ──wss────▶ <host>.ts.net:8443 ─▶ gateway  (/agent, /pair)
-web, gateway ──▶ postgres (container only, never published)
+Member's browser ──https──▶ WEB_HOSTNAME     ──▶ Cloudflare ══tunnel══▶ cloudflared ──▶ web:3000
+Member's browser ──wss────▶ GATEWAY_HOSTNAME ──▶ Cloudflare ══tunnel══▶ cloudflared ──▶ gateway:4000
+Member's Agent   ──wss────▶ GATEWAY_HOSTNAME ──▶ (same; /agent, /pair)
+cloudflared opens the tunnel outbound; web, gateway ──▶ postgres (container only, never published)
 ```
 
-All commands run from the repository root on the host. Publishing through a Cloudflare Tunnel instead of Tailscale (ADR 0006) comes later.
+All commands run from the repository root on the host.
 
 ## Quick deploy
 
 Once the machine is prepared (sections 1 and 2), one command does sections 3 to 5 and checks the result:
 
 ```sh
-deploy/deploy.sh           # first run creates deploy/.env.production with secrets and URLs, then lists what to fill in
-deploy/deploy.sh           # build, migrate, start, publish over Tailscale Serve
+deploy/deploy.sh           # first run creates deploy/.env.production with secrets, then lists what to fill in
+cloudflared tunnel login   # once: opens the browser, pick the domain
+deploy/deploy.sh tunnel    # once: creates the tunnel and both DNS records, saves the token
+deploy/deploy.sh           # build, migrate, start with the tunnel, check the public URLs
 deploy/deploy.sh status    # what runs and the URL
-deploy/deploy.sh down      # stop the stack and the Serve routes; the database is kept
+deploy/deploy.sh down      # stop the stack and the tunnel; the database is kept
 ```
 
-It is safe to run again after `git pull`. It stops with a clear message when Docker or Tailscale is not running, when this machine is in another tailnet than `PUBLIC_URL`, or when a setting is missing. Backups (section 7) are installed once by hand; the script says so when they are missing.
+It is safe to run again after `git pull`. It stops with a clear message when Docker is not running or a setting is missing. Backups (section 7) are installed once by hand; the script says so when they are missing.
 
 ## 1. Prepare the machine (once)
 
@@ -31,15 +33,12 @@ It is safe to run again after `git pull`. It stops with a clear message when Doc
 - The machine never sleeps (System Settings → Energy: prevent automatic sleeping; or `sudo pmset -a sleep 0 disablesleep 1`).
 - Docker Desktop set to start at login. Docker Desktop is free only for companies under 250 employees and US$10M revenue; above that, use Colima or OrbStack.
 - `git clone` of this repository.
-- Tailscale, in a tailnet owned by the admin's Gmail account:
-  - In the admin console, enable MagicDNS and HTTPS certificates.
-  - In the access controls, add `"tagOwners": {"tag:pod-host": ["autogroup:admin"]}`, then on this Mac run `sudo tailscale up --advertise-tags=tag:pod-host`. A tagged device does not take a user seat, so the free plan's six seats stay for Members.
-  - Invite every Member's Gmail. Each installs Tailscale and signs in.
-  - The free plan is meant for non-commercial use (see ADR 0005). If a Member's company VPN breaks Tailscale routes, check `tailscale status` and the VPN's split-tunnel settings.
+- `cloudflared` (`brew install cloudflared`), only to create the tunnel; the stack runs its own `cloudflared` container.
 
 ## 2. Outside accounts (once)
 
-- **Google OAuth client** (type Web application). Members sign in with personal Gmail accounts, so the consent screen's audience is **External**; request only `openid`, `email` and `profile`, then **Publish app** so its status is In production. These non-sensitive scopes need no Google verification, and no test-user list has to be kept: the app's allowlist decides who gets in. Authorized redirect URI: `https://<host>.<tailnet>.ts.net/api/auth/callback/google`. Find the host name with `tailscale status --self` or in the admin console.
+- **A domain on Cloudflare** (the free plan is enough): its DNS must be served by Cloudflare. Pick two hostnames one level under it, e.g. `clauderon.example.com` for the web app and `clauderon-gateway.example.com` for the Gateway; deeper names such as `gw.clauderon.example.com` are not covered by Cloudflare's free certificate.
+- **Google OAuth client** (type Web application). Members sign in with personal Gmail accounts, so the consent screen's audience is **External**; request only `openid`, `email` and `profile`, then **Publish app** so its status is In production. These non-sensitive scopes need no Google verification, and no test-user list has to be kept: the app's allowlist decides who gets in. Authorized redirect URI: `https://<WEB_HOSTNAME>/api/auth/callback/google`.
 - **GitHub token**: a fine-grained, read-only token for the team's repositories.
 
 ## 3. Configure
@@ -57,11 +56,12 @@ openssl rand -base64 32   # once each for POSTGRES_PASSWORD, SESSION_SECRET
 | `POSTGRES_PASSWORD` | postgres, migrate, web, gateway | Random secret |
 | `SESSION_SECRET` | web, gateway | Random secret; rotating it signs everyone out |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | web | From the OAuth client |
-| `PUBLIC_URL` | web (`AUTH_URL`) | `https://<host>.<tailnet>.ts.net` |
-| `PUBLIC_GATEWAY_URL` | web (`GATEWAY_URL` for browsers and the pair command it shows) | `wss://<host>.<tailnet>.ts.net:8443` |
+| `WEB_HOSTNAME` | web (`AUTH_URL` = `https://<WEB_HOSTNAME>`), gateway, cloudflared | e.g. `clauderon.example.com` |
+| `GATEWAY_HOSTNAME` | web (`GATEWAY_URL` = `wss://<GATEWAY_HOSTNAME>` for browsers and Agents), cloudflared | e.g. `clauderon-gateway.example.com` |
+| `CLOUDFLARE_TUNNEL_TOKEN` | cloudflared | Filled in by `deploy/deploy.sh tunnel` |
 | `OPERATOR_EMAILS` | web, gateway | Comma-separated Operator emails |
 | `GITHUB_TOKEN` | web, gateway | Read-only token |
-| `WEB_HOST_PORT`, `GATEWAY_HOST_PORT` | compose | Ports on 127.0.0.1, default 3000 and 4000 |
+| `WEB_HOST_PORT`, `GATEWAY_HOST_PORT` | compose | Ports on 127.0.0.1 for checks on the host, default 3000 and 4000 |
 
 ## 4. Start the stack
 
@@ -70,32 +70,35 @@ docker compose -f deploy/compose.yml --env-file deploy/.env.production up -d --b
 docker compose -f deploy/compose.yml --env-file deploy/.env.production ps
 ```
 
-Compose runs migrations first, then the Gateway, then the web app once the Gateway is healthy. Every service restarts on its own after a crash or a reboot.
+Compose runs migrations first, then the Gateway, then the web app once the Gateway is healthy, then `cloudflared`. Every service restarts on its own after a crash or a reboot.
 
-## 5. Publish with Tailscale Serve
+## 5. Publish with a Cloudflare Tunnel
 
 ```sh
-tailscale serve --bg --https=443 http://127.0.0.1:3000    # WEB_HOST_PORT
-tailscale serve --bg --https=8443 http://127.0.0.1:4000   # GATEWAY_HOST_PORT
-tailscale serve status
+cloudflared tunnel login     # pick the domain; saves ~/.cloudflared/cert.pem
+deploy/deploy.sh tunnel
 ```
 
-Serve only reaches devices in the tailnet; do not use `tailscale funnel`, which would put the app on the internet.
+This creates a locally managed tunnel named `clauderon` (`TUNNEL_NAME` changes it), adds a proxied CNAME for `WEB_HOSTNAME` and `GATEWAY_HOSTNAME` pointing at it, and writes the tunnel's token into `deploy/.env.production`. It never overwrites an existing DNS record. The routes live in `deploy/compose.yml` (`configs.cloudflared`): `WEB_HOSTNAME` → `web:3000`, `GATEWAY_HOSTNAME` → `gateway:4000`, anything else → 404. Do not add Cloudflare Access in front: the Agent's WebSocket could not pass it (ADR 0006).
+
+### Moving from Tailscale Serve
+
+The URLs change, so: add the new redirect URI to the Google OAuth client, set `WEB_HOSTNAME`, `GATEWAY_HOSTNAME` and the token, delete `PUBLIC_URL` and `PUBLIC_GATEWAY_URL` from the env file, run `deploy/deploy.sh`, then `tailscale serve reset` to stop the old routes. Every Member runs the install command from the Machines page again, since their Agent still points at the old address.
 
 ## 6. Members pair their Machines
 
 Nothing to install on the host. Each Member copies the one line the Machines page shows into a terminal on their own computer (it needs git and gh; on Windows, Git for Windows for Git Bash):
 
 ```sh
-curl -fsSL https://<host>.<tailnet>.ts.net/agent/install.sh | sh        # macOS, Linux
-irm https://<host>.<tailnet>.ts.net/agent/install.ps1 | iex             # Windows PowerShell
+curl -fsSL https://<WEB_HOSTNAME>/agent/install.sh | sh        # macOS, Linux
+irm https://<WEB_HOSTNAME>/agent/install.ps1 | iex             # Windows PowerShell
 ```
 
 It installs into `~/.clauderon` only, with no sudo: the Agent's own Node 22 from nodejs.org and the Agent bundle the web app serves (`/agent/agent.mjs`, built into the web image), both checked against their SHA-256. When git or gh is missing it stops and prints the command that installs it on that OS. It logs in to GitHub if needed, offers to log in to Claude Code, opens the browser on the Approve page (or keeps a pairing that still works), installs a launchd agent, systemd user unit or per-user Run key (Windows; no administrator needed) that runs the Agent whenever the Member is logged in (log: `~/.clauderon/agent.log`), and ends with the doctor, whose report also shows on the Machine page. Running it again repairs the install and replaces an old one (a `~/.clauderon/app` clone). Bundled Agents update themselves to the web app's bundle after each deploy. Why: [ADR 0007](../docs/adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md).
 
 On the computer: `~/.clauderon/node/bin/node ~/.clauderon/agent/agent.mjs doctor` checks it again; `… uninstall-service` stops the Agent.
 
-By hand, from a clone: `pnpm --filter @clauderon/host-agent pair https://<host>.<tailnet>.ts.net`, which pairs and then runs the Agent in that terminal.
+By hand, from a clone: `pnpm --filter @clauderon/host-agent pair https://<WEB_HOSTNAME>`, which pairs and then runs the Agent in that terminal.
 
 Moving from Pods: deploying this interrupts every open Run, and the old Pods are no longer used. On a host that ran the Host Agent, remove it with `sudo launchctl bootout system/com.clauderon.host-agent` on macOS or `sudo systemctl disable --now clauderon-host-agent` on Linux, then delete the `clauderon-pod-*` containers and `clauderon-ws-*` volumes once nobody needs their Workspaces.
 
@@ -137,5 +140,6 @@ Migrations run before the new Gateway starts. A Gateway restart is a short drop:
 
 - `docker compose -f deploy/compose.yml --env-file deploy/.env.production logs -f gateway web`
 - Agent logs: `~/.clauderon/agent.log` when it runs as a service, else the terminal where the Member runs it. An Agent that prints that the Gateway no longer accepts it was unpaired or paired on another computer: pair again.
-- Sign-in fails with a redirect error: the OAuth redirect URI must match `PUBLIC_URL` exactly.
-- Live logs or Agents do not connect: `PUBLIC_GATEWAY_URL` must be `wss://…:8443` and `tailscale serve status` must list port 8443.
+- Sign-in fails with a redirect error: the OAuth redirect URI must be exactly `https://<WEB_HOSTNAME>/api/auth/callback/google`.
+- The public URL gives a Cloudflare error (1033, 502): `docker compose … logs cloudflared`; the tunnel must show registered connections, and both hostnames must be CNAMEs to `<tunnel id>.cfargotunnel.com` (`cloudflared tunnel info clauderon`).
+- Live logs or Agents do not connect: `https://<GATEWAY_HOSTNAME>/health` must answer `{"ok":true}`.
