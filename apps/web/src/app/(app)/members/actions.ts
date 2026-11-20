@@ -43,7 +43,7 @@ export async function removeMemberAction(_state: ConfirmState, form: FormData): 
       runsHref: runsOf(result.machineId),
     };
   }
-  return { error: result.reason === "operator" ? "Operator emails come from configuration and cannot be removed." : "That email is no longer on the team." };
+  return { error: result.reason === "operator" ? "Owner emails come from configuration and cannot be removed." : "That email is no longer on the team." };
 }
 
 export async function removeMachineAction(_state: ConfirmState, form: FormData): Promise<ConfirmState> {
