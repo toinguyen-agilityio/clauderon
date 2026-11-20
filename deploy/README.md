@@ -120,6 +120,21 @@ deploy/backup.sh restore <path to clauderon-….dump>
 
 Log chunks older than 90 days are deleted by the Gateway every day; Runs, Outputs and Artifacts are kept.
 
+## Demo on Render
+
+For trying Clauderon without a host, [`render.yaml`](../render.yaml) at the repo root is a Render Blueprint: a free Postgres, the Gateway and the web app, in Singapore, deployed from `main` on every push. It is a demo only: free web services sleep after 15 minutes without traffic and take about a minute to wake (an Agent's socket drops and reconnects, and a Run in progress can fail), the free database expires after 30 days with its data, and a workspace's 750 free instance hours a month do not cover two services running all month.
+
+1. In the Render dashboard: **New → Blueprint**, connect the GitHub repository, pick `main`. Render asks for the values marked `sync: false`: `OPERATOR_EMAILS`, `GITHUB_TOKEN` (may stay empty), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Leave `WEB_URL` and `GATEWAY_URL` empty for now.
+2. When both services are created, note their URLs (`https://clauderon-web….onrender.com`, `https://clauderon-gateway….onrender.com`), then set:
+   - on `clauderon-gateway`: `WEB_URL` = the web URL;
+   - on `clauderon-web`: `GATEWAY_URL` = the Gateway URL with `wss://` instead of `https://`.
+
+   Saving redeploys each service.
+3. Add `https://<web URL host>/api/auth/callback/google` to the Google OAuth client's redirect URIs.
+4. Check `https://<gateway URL host>/health` answers `{"ok":true}`, sign in on the web URL, and pair Machines from its Machines page.
+
+The Gateway runs migrations before it starts (`pnpm start:gateway`), since free services have no pre-deploy step. A custom domain can be added to each service later; Agents paired before that must run the installer again.
+
 ## Updating
 
 ```sh

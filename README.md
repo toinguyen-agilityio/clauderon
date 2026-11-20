@@ -99,7 +99,7 @@ There are no screenshots in the repository yet. To click through the screens, op
 | Contracts | zod schemas in `packages/protocol` |
 | Testing | Vitest against a real Postgres (no database mocks) |
 | Tooling | ESLint, `tsx` |
-| Deployment | Docker Compose, Cloudflare Tunnel (`cloudflared`) |
+| Deployment | Docker Compose, Cloudflare Tunnel (`cloudflared`); a free Render Blueprint (`render.yaml`) for demos |
 | On each Machine | Claude Code CLI, GitHub CLI (`gh`), git, bash / Git Bash |
 
 ## Project structure
