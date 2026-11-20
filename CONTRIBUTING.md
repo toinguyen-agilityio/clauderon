@@ -16,8 +16,8 @@ Thanks for helping. Read [CONTEXT.md](CONTEXT.md) first and use its terms exactl
 | Branch | Purpose |
 | --- | --- |
 | `staging` | Default branch. All feature and fix pull requests merge here. Never deleted. |
-| `release/<date or version>` | Cut from `staging` to ship. Merged into `main`, then deleted. |
-| `main` | What has been released. Every merge into `main` is a release. |
+| `release/v<version>` | Cut from `staging` to ship, for example `release/v0.2.0`. Merged into `main`, then deleted. |
+| `main` | What has been released. Every merge into `main` is a release and gets a version tag. |
 
 ## Commits
 
@@ -39,12 +39,22 @@ The title is a Conventional Commit line. The body follows [the template](.github
 - **Test plan**: how you checked it.
 - `Closes #N` when the pull request meets the ticket's Acceptance Criteria, `Refs #N` when only part of it does ([after a merge](docs/agents/ticket-status-after-merge.md)).
 
+## Versions
+
+[Semantic Versioning 2.0.0](https://semver.org/): `vMAJOR.MINOR.PATCH`, tagged on `main` (for example `v0.2.1`).
+
+- **While the version is `0.y.z`** (MVP, before the first stable release `v1.0.0`): a breaking change or a new feature bumps MINOR, anything else bumps PATCH. Going to `v1.0.0` is a decision the team makes, never automatic.
+- **From `v1.0.0`:** a breaking change bumps MAJOR, a new feature bumps MINOR, fixes and everything else bump PATCH.
+- The bump comes from the Conventional Commits merged since the last tag: `!` or a `BREAKING CHANGE:` footer is breaking, `feat` is a feature, the rest (`fix`, `perf`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`) is PATCH. Take the highest one.
+- The first release is `v0.1.0`. Every merge into `main` is a release, so a release with only docs or chores is still a PATCH.
+
 ## Releases
 
-1. Cut `release/<date or version>` from `staging`.
+1. Work out the next version (see Versions) and cut `release/v<version>` from `staging`.
 2. Refresh the repo graph on that branch (see [.claude/rules/release.md](.claude/rules/release.md)): `graphify update .`, then commit `graphify-out/graph.json` and `GRAPH_REPORT.md` as `chore(graph): refresh repo graph` if they changed.
-3. Open a pull request from the release branch into `main` and merge it. The branch is deleted by the merge; `staging` is not.
-4. Merge `main` back into `staging` (`chore: sync main into staging`) so the next release does not diverge.
+3. Open a pull request from the release branch into `main`, titled `chore(release): v<version>`, and merge it. The branch is deleted by the merge; `staging` is not.
+4. Tag the merge commit on `main` and publish the release: `gh release create v<version> --target <merge commit sha> --title v<version> --generate-notes`. This creates the annotated tag and the GitHub Release with notes from the merged pull requests.
+5. Merge `main` back into `staging` (`chore: sync main into staging`) so the next release does not diverge.
 
 ## Repo graph for Claude
 
