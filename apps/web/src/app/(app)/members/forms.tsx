@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { useActionState, useEffect, useId, useRef } from "react";
-import { closeOnBackdrop } from "../../../components/dialog";
+import { useActionState } from "react";
+import { Confirm } from "../../../components/confirm";
 import { Icon } from "../../../components/icons";
-import { addEmail, removeMachineAction, removeMemberAction, type ConfirmState, type FormState } from "./actions";
+import { addEmail, removeMachineAction, removeMemberAction, type FormState } from "./actions";
 
 export function AddEmailForm() {
   const [state, action, pending] = useActionState<FormState, FormData>(addEmail, { error: null });
@@ -21,63 +20,6 @@ export function AddEmailForm() {
         </span>
       )}
     </form>
-  );
-}
-
-type ConfirmProps = {
-  trigger: string;
-  title: string;
-  confirm: string;
-  pendingLabel: string;
-  action: (state: ConfirmState, form: FormData) => Promise<ConfirmState>;
-  fields: Record<string, string>;
-  children: React.ReactNode;
-};
-
-/** A destructive row action behind a confirm dialog; a refusal stays in the dialog with a link to the blocking Runs. */
-function Confirm({ trigger, title, confirm, pendingLabel, action, fields, children }: ConfirmProps) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
-  const [state, formAction, pending] = useActionState<ConfirmState, FormData>(action, { error: null });
-  useEffect(() => {
-    if (state.done) ref.current?.close();
-  }, [state]);
-
-  return (
-    <>
-      <button type="button" className="btn sm danger" onClick={() => ref.current?.showModal()}>
-        {trigger}
-      </button>
-      <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby={titleId}>
-        <form action={formAction} className="modal-in">
-          <div className="modal-h">
-            <h2 id={titleId}>{title}</h2>
-            <button type="button" className="btn ghost sm" aria-label="Close" onClick={() => ref.current?.close()}>
-              {Icon.x}
-            </button>
-          </div>
-          <div className="modal-b">
-            {Object.entries(fields).map(([name, value]) => (
-              <input key={name} type="hidden" name={name} value={value} />
-            ))}
-            {children}
-            {state.error && (
-              <p className="err-text" role="alert">
-                {state.error} {state.runsHref && <Link href={state.runsHref}>View their Runs</Link>}
-              </p>
-            )}
-          </div>
-          <div className="modal-f">
-            <button type="button" className="btn" onClick={() => ref.current?.close()}>
-              Cancel
-            </button>
-            <button type="submit" className="btn danger solid" disabled={pending}>
-              {pending ? pendingLabel : confirm}
-            </button>
-          </div>
-        </form>
-      </dialog>
-    </>
   );
 }
 

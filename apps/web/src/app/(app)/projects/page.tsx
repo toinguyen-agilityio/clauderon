@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ago } from "../../../components/format";
 import { Icon } from "../../../components/icons";
-import { viewProjects } from "../../../server/projects";
+import { canManageProjects, viewProjects } from "../../../server/projects";
 import { deps, requireMember } from "../../../server/runtime";
-import { EnableForm, SyncForm } from "./forms";
+import { EnableForm, RemoveProjectForm, SyncForm } from "./forms";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +30,9 @@ function SyncStatus({ p, now }: { p: ProjectRow; now: Date }) {
 }
 
 export default async function ProjectsPage() {
-  await requireMember();
+  const viewer = await requireMember();
   const projects = await viewProjects(deps());
+  const canManage = canManageProjects(deps(), viewer);
   const now = new Date();
   // Every Project shares one owner (PRJ-2), so it is named once.
   const owner = projects[0]?.owner;
@@ -59,7 +60,7 @@ export default async function ProjectsPage() {
         {projects.length === 0 && (
           <div className="empty">
             <b>No Project yet</b>
-            Enable a repository below, then Sync to pull its issues in as Tickets.
+            {canManage ? "Enable a repository below, then Sync to pull its issues in as Tickets." : "An Operator enables repositories as Projects."}
           </div>
         )}
 
@@ -94,6 +95,7 @@ export default async function ProjectsPage() {
 
               <div className="proj-actions">
                 <SyncForm projectId={p.id} />
+                {canManage && <RemoveProjectForm projectId={p.id} name={`${p.owner}/${p.repo}`} />}
               </div>
 
               {p.syncError && (
@@ -106,7 +108,7 @@ export default async function ProjectsPage() {
           ))}
         </ul>
 
-        <EnableForm />
+        {canManage && <EnableForm />}
       </section>
 
       <aside className="proj-notes">

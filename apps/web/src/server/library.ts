@@ -26,8 +26,6 @@ function refusal(result: Extract<ChangeNodeResult, { ok: false }>): string {
   switch (result.reason) {
     case "not-found":
       return "That Node no longer exists.";
-    case "sample":
-      return "Sample Nodes are read-only.";
     case "locked":
       return `${result.flow.name} uses this Node and is locked by Run ${result.lock.runId} (${result.lock.state.replaceAll("_", " ")}). Try again when that Run ends.`;
     case "in-use":
@@ -64,7 +62,7 @@ export async function updateMyNode(deps: AppDeps, viewer: Viewer, nodeId: string
   return { ok: true, flows: result.flows, withProblems: await withProblems(deps, usedBy.map((u) => u.flowId)) };
 }
 
-/** Delete (FLW-9): refused for samples, while a Flow uses it, and while a using Flow is locked. Audit `node.delete`. */
+/** Delete (FLW-9): samples included; refused while a Flow uses it, and while a using Flow is locked. Audit `node.delete`. */
 export async function deleteMyNode(deps: AppDeps, viewer: Viewer, nodeId: string): Promise<NodeOutcome> {
   const name = (await listLibraryRows(deps.db)).find((n) => n.id === nodeId)?.name;
   const result = await deleteNode(deps.db, nodeId);

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NodeKind, OutputType } from "@clauderon/core";
 import { Icon } from "../../../../components/icons";
@@ -62,8 +61,8 @@ function NodeCard({ node, onOpen, onClone, cloning }: { node: LibraryNodeView; o
     </button>
       {/* The Ticket sample cannot be cloned: a Flow has exactly one Ticket Node. */}
       {node.isSample && node.kind !== "ticket" && (
-        <button type="button" className="btn sm lib-clone" disabled={cloning} aria-label={`Clone ${node.name}`} onClick={onClone}>
-          {cloning ? "Cloning…" : "Clone"}
+        <button type="button" className="btn sm icon lib-clone" disabled={cloning} aria-label={`Clone ${node.name}`} data-tip={cloning ? "Cloning…" : "Clone"} onClick={onClone}>
+          {cloning ? Icon.spin : Icon.copy}
         </button>
       )}
     </div>
@@ -94,20 +93,9 @@ function NodeDialog({ node, onClose }: { node: LibraryNodeView | null; onClose: 
             <>
               <NodeForm
                 initial={{ id: node.id, name: node.name, kind: node.kind, instructions: node.instructions, command: node.command, inputs: node.inputs, outputs: node.outputs }}
-                readOnly={node.isSample}
                 usedBy={node.usedBy}
                 onClose={() => ref.current?.close()}
               />
-              {node.usedBy.length > 0 && (
-                <p className="small faint">
-                  {node.usedBy.map((u, i) => (
-                    <span key={u.flowId}>
-                      {i > 0 && " · "}
-                      <Link href={`/flows/${u.flowId}`}>Open {u.name}</Link>
-                    </span>
-                  ))}
-                </p>
-              )}
             </>
           ) : (
             <NodeForm initial={EMPTY_NODE} onClose={() => ref.current?.close()} />

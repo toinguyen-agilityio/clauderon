@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { NodeInput, NodeKind, NodeOutput } from "@clauderon/core";
 import type { Db } from "./client";
 import { flow, flowEdge, flowNode, node } from "./schema";
@@ -6,7 +6,8 @@ import { flow, flowEdge, flowNode, node } from "./schema";
 // Sample Nodes and Flows of requirements §4.4 (FLW-8), keyed by slug so
 // seeding again updates them instead of adding copies.
 
-const SEEDED_BY = "seed@clauderon";
+/** The author of a sample nobody has changed yet; the pages show no author for it. */
+export const SEEDED_BY = "seed@clauderon";
 
 type SampleNode = {
   slug: string;
@@ -151,38 +152,43 @@ export const sampleFlows: SampleFlow[] = [
   },
 ];
 
-/** Idempotent: safe to run on every deploy. */
+/**
+ * Idempotent: safe to run on every deploy. Samples are editable (FLW-8), so
+ * seeding only adds the sample Nodes and Flows that are missing, matched by
+ * slug, and never overwrites a Member's changes. A deleted sample comes back.
+ */
 export async function seedSamples(db: Db, now: Date = new Date()): Promise<void> {
   await db.transaction(async (tx) => {
-    const nodeIds = new Map<string, string>();
-    for (const sample of sampleNodes) {
-      const values = {
-        slug: sample.slug,
-        name: sample.name,
-        kind: sample.kind,
-        instructions: sample.instructions,
-        command: sample.command ?? null,
-        inputs: sample.inputs,
-        outputs: sample.outputs,
-        isSample: true,
-        updatedByEmail: SEEDED_BY,
-        updatedAt: now,
-      };
-      const [row] = await tx
-        .insert(node)
-        .values(values)
-        .onConflictDoUpdate({ target: node.slug, set: values })
-        .returning({ id: node.id });
-      nodeIds.set(sample.slug, row!.id);
-    }
+    const sampleNodeSlugs = sampleNodes.map((n) => n.slug);
+    await tx
+      .insert(node)
+      .values(
+        sampleNodes.map((sample) => ({
+          slug: sample.slug,
+          name: sample.name,
+          kind: sample.kind,
+          instructions: sample.instructions,
+          command: sample.command ?? null,
+          inputs: sample.inputs,
+          outputs: sample.outputs,
+          isSample: true,
+          updatedByEmail: SEEDED_BY,
+          updatedAt: now,
+        })),
+      )
+      .onConflictDoNothing({ target: node.slug });
+    const nodeRows = await tx.select({ id: node.id, slug: node.slug }).from(node).where(inArray(node.slug, sampleNodeSlugs));
+    const nodeIds = new Map(nodeRows.map((r) => [r.slug!, r.id]));
 
     for (const sample of sampleFlows) {
-      const values = { slug: sample.slug, name: sample.name, isSample: true, updatedByEmail: SEEDED_BY, updatedAt: now };
-      const [row] = await tx.insert(flow).values(values).onConflictDoUpdate({ target: flow.slug, set: values }).returning({ id: flow.id });
-      const flowId = row!.id;
+      const [row] = await tx
+        .insert(flow)
+        .values({ slug: sample.slug, name: sample.name, isSample: true, updatedByEmail: SEEDED_BY, updatedAt: now })
+        .onConflictDoNothing({ target: flow.slug })
+        .returning({ id: flow.id });
+      if (!row) continue; // already there, possibly edited: keep it as it is
+      const flowId = row.id;
 
-      // Samples are read-only and Runs keep a snapshot, so placements are rebuilt.
-      await tx.delete(flowNode).where(eq(flowNode.flowId, flowId));
       const placementIds = new Map<string, string>();
       for (const p of sample.nodes) {
         const [placed] = await tx

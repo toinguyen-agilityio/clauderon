@@ -42,7 +42,7 @@ export default async function MembersPage() {
             Everyone who can sign in with Google, and their Machine.{" "}
             {canManage
               ? "Removing a member ends their sessions at once and removes their Machine; their Runs and audit entries are kept."
-              : "Operators add and remove members."}
+              : "Owners add and remove members."}
           </p>
         </div>
       </div>
@@ -84,8 +84,8 @@ export default async function MembersPage() {
                           <span className="mono faint">{m.email}</span>
                         </div>
                         {m.operator && (
-                          <span className="tag" title="Set in the app's configuration; manages members">
-                            Operator
+                          <span className="tag" title="Set in the app's configuration; manages members and Projects">
+                            Owner
                           </span>
                         )}
                       </div>

@@ -14,7 +14,7 @@ const SCOPES: { scope: FlowScope; label: string }[] = [
 
 const EMPTY: Record<FlowScope, string> = {
   all: "No Flows yet. Samples arrive with the seed.",
-  mine: "No Flows of your own yet. Clone a sample to start one.",
+  mine: "No Flows of your own yet. Create one, or clone a sample.",
   samples: "No sample Flows yet. They arrive with the seed.",
   problems: "No Flow has problems.",
 };
@@ -65,16 +65,18 @@ function FlowCard({ flow: f }: { flow: FlowRowView }) {
         </div>
         <Pipeline nodes={f.nodes} />
         <div className="flow-meta small">
-          <span className={`pill ${f.problems === 0 ? "ok" : "fail"}`}>{problemsLabel(f.problems)}</span>
+          {f.problems > 0 && <span className="pill fail">{problemsLabel(f.problems)}</span>}
           <span className="faint">
             {f.nodeCount} Node{f.nodeCount === 1 ? "" : "s"}
           </span>
-          <span className="faint" title={f.updatedTitle}>
-            {f.updatedBy} · {f.updatedLabel}
-          </span>
+          {f.updatedBy && (
+            <span className="faint" title={f.updatedTitle}>
+              {f.updatedBy} · {f.updatedLabel}
+            </span>
+          )}
         </div>
       </div>
-      <FlowRowActions flowId={f.id} sample={f.isSample} locked={f.lock !== null} />
+      <FlowRowActions flowId={f.id} name={f.name} locked={f.lock !== null} />
     </article>
   );
 }
@@ -108,7 +110,7 @@ export function FlowsList({ flows }: { flows: FlowRowView[] }) {
                 <path d="M5.5 10.5 2.5 13.5" strokeLinecap="round" />
               </svg>
               <span>Samples</span>
-              <span className="flow-section-note">pinned, read-only: clone one to change it</span>
+              <span className="flow-section-note">pinned; seeded with the app, editable like any Flow</span>
               <span className="n">{groups.samples.length}</span>
             </h2>
             {groups.samples.map((f) => (
@@ -126,7 +128,7 @@ export function FlowsList({ flows }: { flows: FlowRowView[] }) {
             {groups.mine.map((f) => (
               <FlowCard key={f.id} flow={f} />
             ))}
-            {groups.mine.length === 0 && <div className="flow-none small faint">No Flows of your own yet. Clone a sample to start one.</div>}
+            {groups.mine.length === 0 && <div className="flow-none small faint">No Flows of your own yet. Create one, or clone a sample.</div>}
           </section>
         )}
         {shown.length === 0 && (

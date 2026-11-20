@@ -107,6 +107,21 @@ export async function listFlowRows(db: Db): Promise<FlowListRow[]> {
 }
 
 /**
+ * Creates a new, non-sample Flow with the library's Ticket Node already placed,
+ * since every Flow starts with exactly one (FLW-5). The seeded Ticket is
+ * preferred; if the library has no Ticket Node the Flow starts empty.
+ */
+export async function createFlow(db: Db, name: string, actorEmail: string, now: Date): Promise<{ id: string; name: string }> {
+  return db.transaction(async (tx) => {
+    const tickets = await tx.select({ id: node.id, slug: node.slug }).from(node).where(eq(node.kind, "ticket")).orderBy(asc(node.createdAt));
+    const ticket = tickets.find((t) => t.slug === "ticket") ?? tickets[0];
+    const [created] = await tx.insert(flow).values({ name, isSample: false, updatedByEmail: actorEmail, updatedAt: now }).returning();
+    if (ticket) await tx.insert(flowNode).values({ flowId: created!.id, nodeId: ticket.id, x: 0, y: 0 });
+    return { id: created!.id, name: created!.name };
+  });
+}
+
+/**
  * Copies a Flow, its placements and edges into a new non-sample Flow named
  * `<name> (copy)` (FLW-8). Library Nodes are shared, not copied.
  */
@@ -151,18 +166,17 @@ export async function cloneFlow(db: Db, flowId: string, actorEmail: string, now:
 
 export type DeleteFlowResult =
   | { ok: true; name: string }
-  | { ok: false; reason: "not-found" | "sample" | "has-runs" }
+  | { ok: false; reason: "not-found" | "has-runs" }
   | { ok: false; reason: "locked"; lock: FlowLock };
 
 /**
- * Deletes a Flow (FLW-9), refused for samples (FLW-8), for a Flow locked by an
+ * Deletes a Flow (FLW-9), samples included, refused for a Flow locked by an
  * Active Run (FLW-7) and for one that has Runs in its history, since each Run
  * keeps its Flow's id. Checked here, not only in the page.
  */
 export async function deleteFlow(db: Db, flowId: string): Promise<DeleteFlowResult> {
   const [row] = await db.select().from(flow).where(eq(flow.id, flowId));
   if (!row) return { ok: false, reason: "not-found" };
-  if (row.isSample) return { ok: false, reason: "sample" };
   const lock = (await flowLocks(db, [flowId])).get(flowId);
   if (lock) return { ok: false, reason: "locked", lock };
   const [{ n } = { n: 0 }] = await db.select({ n: sql<number>`count(*)::int` }).from(run).where(eq(run.flowId, flowId));
@@ -210,20 +224,19 @@ export async function loadFlowDetail(db: Db, flowId: string) {
 
 export type SaveFlowResult =
   | { ok: true }
-  | { ok: false; reason: "not-found" | "sample" | "bad-ids" }
+  | { ok: false; reason: "not-found" | "bad-ids" }
   | { ok: false; reason: "locked"; lock: FlowLock };
 
 /**
- * Stores a Flow's graph (FLW-3, FLW-6): a sample or a Flow locked by an Active
- * Run is refused here, on the server, not only in the editor (FLW-7). The graph
+ * Stores a Flow's graph (FLW-3, FLW-6), samples included: a Flow locked by an
+ * Active Run is refused here, on the server, not only in the editor (FLW-7). The graph
  * is saved even with problems so work is not lost (FLW-5); Start refuses it.
  */
 export async function saveFlow(db: Db, flowId: string, input: FlowGraphInput, actorEmail: string, now: Date): Promise<SaveFlowResult> {
   return db.transaction(async (tx) => {
     const [row] = await tx.select().from(flow).where(eq(flow.id, flowId)).for("update");
     if (!row) return { ok: false, reason: "not-found" };
-    if (row.isSample) return { ok: false, reason: "sample" };
-    const lock = (await flowLocks(tx as unknown as Db, [flowId])).get(flowId);
+      const lock = (await flowLocks(tx as unknown as Db, [flowId])).get(flowId);
     if (lock) return { ok: false, reason: "locked", lock };
 
     // Placement ids come from the browser; one that belongs to another Flow would clash.
