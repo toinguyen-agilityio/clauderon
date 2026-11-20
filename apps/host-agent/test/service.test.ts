@@ -1,5 +1,7 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { installService, launchdPlist, serviceArgs, systemdUnit, uninstallService, windowsHidden, windowsLauncher, windowsRunCommand, type ServiceSpec } from "../src/service";
 
 // A bundled Agent (ADR 0007): its own Node and agent.mjs under the home.
@@ -65,5 +67,35 @@ describe("Agent service (ADR 0006)", () => {
     calls.length = 0;
     await uninstallService("win32", run);
     expect(calls.map((c) => c.slice(0, 2))).toEqual([["reg", "delete"]]);
+  });
+
+  describe("launchd install", () => {
+    const home = process.env.HOME;
+    afterEach(() => void (process.env.HOME = home));
+    const fakeHome = () => (process.env.HOME = mkdtempSync(join(tmpdir(), "clauderon-launchd-")));
+
+    // bootout returns before the old Agent has exited, and bootstrap fails with
+    // "5: Input/output error" until it has, so a reinstall retries bootstrap.
+    it("retries bootstrap while the replaced Agent is still exiting", async () => {
+      fakeHome();
+      const calls: string[] = [];
+      let failures = 2;
+      const run = async (_file: string, args: readonly string[]) => {
+        calls.push(args[0]!);
+        if (args[0] === "bootstrap" && failures-- > 0) throw new Error("Bootstrap failed: 5: Input/output error");
+      };
+      const pauses: number[] = [];
+      await installService({ ...spec, home: join(process.env.HOME!, ".clauderon") }, "darwin", run, () => {}, async (ms) => void pauses.push(ms));
+      expect(calls).toEqual(["bootout", "bootstrap", "bootstrap", "bootstrap"]);
+      expect(pauses).toHaveLength(2);
+    });
+
+    it("gives up with the last error when bootstrap keeps failing", async () => {
+      fakeHome();
+      const run = async (_file: string, args: readonly string[]) => {
+        if (args[0] === "bootstrap") throw new Error("Bootstrap failed: 5: Input/output error");
+      };
+      await expect(installService({ ...spec, home: join(process.env.HOME!, ".clauderon") }, "darwin", run, () => {}, async () => {})).rejects.toThrow("Bootstrap failed: 5");
+    });
   });
 });
