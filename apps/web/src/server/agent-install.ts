@@ -188,7 +188,13 @@ function Warn($text) { Write-Host "warning: $text" -ForegroundColor Yellow }
 function Has($command) { [bool](Get-Command $command -ErrorAction SilentlyContinue) }
 function Need($command, $fix) { if (-not (Has $command)) { throw "$command is missing. Install it, then run this again: $fix" } }
 function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed" } }
-function Sha256($path) { (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLower() }
+# .NET directly, not Get-FileHash or Expand-Archive: Windows PowerShell started from PowerShell 7
+# inherits a module path where those cmdlets fail to load.
+function Sha256($path) {
+  $stream = [IO.File]::OpenRead($path)
+  try { ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($stream)) -replace "-", "").ToLower() } finally { $stream.Dispose() }
+}
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $Arch = switch ($env:PROCESSOR_ARCHITECTURE) { "AMD64" { "x64" } "ARM64" { "arm64" } default { throw "no Agent build for this processor ($env:PROCESSOR_ARCHITECTURE)" } }
 
@@ -213,7 +219,7 @@ try {
     $Expected, $File = $Line -split "\\s+"
     Invoke-WebRequest -UseBasicParsing "$Base/$File" -OutFile (Join-Path $Tmp $File)
     if ((Sha256 (Join-Path $Tmp $File)) -ne $Expected) { throw "the Node download does not match its SHA-256; run this again" }
-    Expand-Archive -Path (Join-Path $Tmp $File) -DestinationPath (Join-Path $Tmp "node")
+    [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $Tmp $File), (Join-Path $Tmp "node"))
     if (Test-Path $NodeDir) { Remove-Item -Recurse -Force $NodeDir }
     Move-Item (Join-Path (Join-Path $Tmp "node") ($File -replace "\\.zip$", "")) $NodeDir
     Say "Node $(& $Node -v) installed in $NodeDir"
