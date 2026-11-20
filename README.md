@@ -5,7 +5,7 @@
 **Turn GitHub issues into reviewable pull requests.**
 Pick issues, run each one through a configurable Flow of Claude Code, shell and human steps on your own computer, and review the result.
 
-[![CI](https://github.com/toinguyen-agilityio/clauderon/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/toinguyen-agilityio/clauderon/actions/workflows/ci.yml)
+[![CI](https://github.com/toinguyen-agilityio/clauderon/actions/workflows/ci.yml/badge.svg?branch=staging)](https://github.com/toinguyen-agilityio/clauderon/actions/workflows/ci.yml)
 ![Node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-ESM-3178C6?logo=typescript&logoColor=white)
@@ -290,6 +290,7 @@ CI runs lint, typecheck and tests against Postgres, plus the Agent's tests, its 
 | [docs/roadmap/v1-seven-day-plan.md](docs/roadmap/v1-seven-day-plan.md) | The v1 delivery plan by milestone |
 | [docs/agents/](docs/agents/) | How coding agents use this repo: issue tracker, triage labels, domain docs |
 | [DESIGN.md](DESIGN.md) | UI design notes |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, commit, pull request and release conventions |
 | [CLAUDE.md](CLAUDE.md) | Guidance for Claude Code working in this repository |
 
 <details>
@@ -324,10 +325,4 @@ Clauderon runs an AI agent with broad permissions on people's computers. Read [A
 
 ## Contributing
 
-1. Read [CONTEXT.md](CONTEXT.md) and use its terms exactly in code, UI and tests (`Member`, not *user*; `Node`, not *step*).
-2. Pick or file an issue. Issues use the triage labels in [docs/agents/triage-labels.md](docs/agents/triage-labels.md); milestone work follows the [specs](docs/specs/README.md).
-3. Branch as `feat/…`, `fix/…` or `chore/…`, and keep each pull request to one focused change.
-4. Write [Conventional Commits](https://www.conventionalcommits.org/) (`feat(web): …`, `fix(agent): …`).
-5. Add tests for new behaviour, and run `pnpm lint`, `pnpm typecheck` and `pnpm test` before opening a pull request.
-6. Document new configuration in [.env.example](.env.example), and never commit secrets or `.env` files.
-7. Keep [packages/protocol](packages/protocol) and the database schema backward compatible: web and Gateway restart separately.
+Branches, commits, pull request bodies and releases are described in [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests go into `staging`.
