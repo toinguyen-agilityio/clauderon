@@ -99,7 +99,7 @@ There are no screenshots in the repository yet. To click through the screens, op
 | Contracts | zod schemas in `packages/protocol` |
 | Testing | Vitest against a real Postgres (no database mocks) |
 | Tooling | ESLint, `tsx` |
-| Deployment | Docker Compose, Tailscale Serve |
+| Deployment | Docker Compose, Cloudflare Tunnel (`cloudflared`) |
 | On each Machine | Claude Code CLI, GitHub CLI (`gh`), git, bash / Git Bash |
 
 ## Project structure
@@ -231,12 +231,13 @@ Secrets live only in the environment, never in the database. Local development r
 | --- | --- |
 | `POSTGRES_PASSWORD` | Password of the stack's Postgres container (random secret). |
 | `SESSION_SECRET` | As above (random secret). |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth client; redirect URI `<PUBLIC_URL>/api/auth/callback/google`. |
-| `PUBLIC_URL` | HTTPS URL of the web app; becomes `AUTH_URL` and the Gateway's `WEB_URL`. |
-| `PUBLIC_GATEWAY_URL` | `wss://…:8443` URL of the Gateway; becomes the web app's `GATEWAY_URL`. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth client; redirect URI `https://<WEB_HOSTNAME>/api/auth/callback/google`. |
+| `WEB_HOSTNAME` | Public hostname of the web app, e.g. `clauderon.example.com`; `https://<WEB_HOSTNAME>` becomes `AUTH_URL` and the Gateway's `WEB_URL`. |
+| `GATEWAY_HOSTNAME` | Public hostname of the Gateway; `wss://<GATEWAY_HOSTNAME>` becomes the web app's `GATEWAY_URL`. |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Token of the Cloudflare Tunnel that publishes both; `deploy/deploy.sh tunnel` fills it in. |
 | `OPERATOR_EMAILS` | As above. |
 | `GITHUB_TOKEN` | As above. |
-| `WEB_HOST_PORT`, `GATEWAY_HOST_PORT` | Ports on `127.0.0.1` for web and Gateway. Default `3000` and `4000`. |
+| `WEB_HOST_PORT`, `GATEWAY_HOST_PORT` | Ports on `127.0.0.1` for checks on the host. Default `3000` and `4000`. |
 
 <details>
 <summary><strong>Agent variables</strong> (on a Member's Machine)</summary>
@@ -320,7 +321,7 @@ Clauderon runs an AI agent with broad permissions on people's computers. Read [A
 - **Credentials stay with the Member.** The app never reads, stores or forwards Claude or OAuth tokens; the Agent only checks login status. A Machine token is stored only as its SHA-256 hash.
 - **Read-only GitHub access.** The app holds one read-only token; every write to GitHub happens on the Starter's Machine.
 - **Secrets in the environment only.** No secrets in the database, and known token patterns are masked before any log line is stored or streamed.
-- **Network.** Machines need no inbound ports. Keep the stack inside the tailnet; Postgres is never published.
+- **Network.** The app is on the internet through a Cloudflare Tunnel, so Google sign-in and the allowlist are the only gate. Neither the host nor the Machines open an inbound port; Postgres is never published.
 
 ## Contributing
 
