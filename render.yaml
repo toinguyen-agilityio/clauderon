@@ -66,6 +66,9 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      # This service's own https://… URL; behind Render's proxy the app sees localhost.
+      - key: AUTH_URL
+        sync: false
       # The Gateway service's URL with wss:// in place of https://.
       - key: GATEWAY_URL
         sync: false
