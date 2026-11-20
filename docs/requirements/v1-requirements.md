@@ -145,8 +145,9 @@ Priority: **Must** / **Should** / **Could**.
 | MEM-3 | The allowlist is stored in the database and holds exact email addresses only, never a whole domain, compared case-insensitively. The **Operator** emails, set in the app's configuration, are always allowed, so the Operator cannot be locked out. The first sign-in of an allowed email creates the Member. Every request and every open WebSocket and terminal connection checks the session's email against the allowlist, so removing an email takes effect at once. Removing an email also removes the Member's Machine ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md)), so its Agent is disconnected and its token stops working, and is refused while that Machine has Active Runs; the Member's Runs and audit entries are kept. | Must |
 | MEM-4 | **Members page**, readable by every Member: each allowed email with the Member's name and picture, status (Active once signed in, Invited until then, Removed while a removed Member's Machine is left), Operator tag, last sign-in, Machine status and Active Runs. Only the Operator adds an email, removes one (behind a confirm that warns the Machine is removed too, with a link to the blocking Runs when refused), and removes another Member's Machine. Every change is recorded in the audit log. The old Allowlist address redirects here. | Must |
 | MEM-2 | Every member can approve, reject, answer, cancel and retry any Run. Starting a Run and opening a Pod's terminal are tied to the Member's own Pod (POD-3, POD-9). | Must |
-| PRJ-1 | Enable a GitHub repository as a Project by picking it from the repositories the app's token can read, then choosing its base branch from the repository's branches. | Must |
+| PRJ-1 | The **Operator** enables a GitHub repository as a Project by picking it from the repositories the app's token can read, then choosing its base branch from the repository's branches. Every Member reads and Syncs the Projects. | Must |
 | PRJ-2 | One fine-grained personal access token for the app, with Issues: read and Pull requests: read on the Projects' repositories, kept in the app's configuration and never stored in the database. One token reads the repositories of one owner, so every Project belongs to that owner. | Must |
+| PRJ-3 | The **Operator** removes a Project behind a confirm: its Tickets and their Runs (logs and Outputs included) are deleted from the app, nothing changes on GitHub, and the removal is recorded in the audit log. Refused while the Project has Active Runs. | Should |
 
 ### 4.2 Pods
 
@@ -293,7 +294,7 @@ A Run holds a Slot only while Running or Waiting for human.
 | --- | --- | --- |
 | Sign in | Sign in with Google button; access denied page for emails not on the allowlist | Sign in, sign out |
 | Members | Every allowed email with name, status, Operator tag, last sign-in, Machine and Active Runs (every Member reads it) | Operator: add an email, remove one (removes the Machine too), remove a Member's Machine |
-| Projects | Enabled repositories | Enable a repo from the token's list, pick its base branch, Sync |
+| Projects | Enabled repositories | Sync; Operator: enable a repo from the token's list and pick its base branch, remove a Project |
 | Tickets | Tickets per Project with derived status | Search, filter, select, Start |
 | Start dialog | Flow, mode, extra instructions, selected Tickets with author warnings, the Starter's Pod with its Slots | Start the Batch |
 | Flows | Flow list, Node library, canvas editor with problems badge and lock holder | Clone a sample, add Nodes, connect Outputs, save |

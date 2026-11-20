@@ -2,8 +2,9 @@
 
 import { useActionState, useEffect, useState } from "react";
 import type { Repository } from "@clauderon/core";
+import { Confirm } from "../../../components/confirm";
 import { Icon } from "../../../components/icons";
-import { enableAction, loadBranches, loadRepositories, syncAction, type EnableState, type SyncState } from "./actions";
+import { enableAction, loadBranches, loadRepositories, removeProjectAction, syncAction, type EnableState, type SyncState } from "./actions";
 
 /** Enable a repository (PRJ-1): pick one the app's token reads, then its base branch. */
 export function EnableForm() {
@@ -78,5 +79,24 @@ export function SyncForm({ projectId }: { projectId: string }) {
         {pending ? "Syncing…" : "Sync"}
       </button>
     </form>
+  );
+}
+
+export function RemoveProjectForm({ projectId, name }: { projectId: string; name: string }) {
+  return (
+    <Confirm
+      trigger="Remove"
+      title={`Remove ${name}?`}
+      confirm="Remove Project"
+      pendingLabel="Removing…"
+      action={removeProjectAction}
+      fields={{ projectId }}
+      linkLabel="View its Tickets"
+    >
+      <p>
+        Its Tickets and their Runs, with logs and Outputs, are deleted from this app. Nothing changes on GitHub, and the clones on Members&apos; Machines stay.
+      </p>
+      <p className="small muted">Enable it again to Sync its issues back in. Refused while the Project has Active Runs.</p>
+    </Confirm>
   );
 }

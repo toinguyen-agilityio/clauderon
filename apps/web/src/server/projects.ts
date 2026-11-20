@@ -3,16 +3,19 @@ import {
   enableProject,
   getProject,
   getRunContext,
+  isOperator,
   listTicketsWithRuns,
   listProjects,
   openTicketsMissingFrom,
   recordAudit,
   recordSync,
+  removeProject,
   runsWithPullRequests,
   setPullRequestState,
   setTicketIssue,
   upsertTickets,
   type EnableResult,
+  type RemoveProjectResult,
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
 
@@ -46,18 +49,28 @@ export async function enableableRepositories(deps: AppDeps): Promise<Repository[
 
 export type EnableRepositoryResult = EnableResult | { ok: false; reason: "not-readable" | "no-branch" };
 
+/** Only an Operator enables or removes a Project; every Member reads and Syncs them. */
+export const canManageProjects = (deps: AppDeps, viewer: Viewer) => isOperator(viewer.email, deps.operators);
+
 /** Enable a repository with its base branch (PRJ-1). */
 export async function enableRepository(
   deps: AppDeps,
   viewer: Viewer,
   input: { owner: string; repo: string; baseBranch: string },
-): Promise<EnableRepositoryResult> {
+): Promise<EnableRepositoryResult | "not-found"> {
+  if (!canManageProjects(deps, viewer)) return "not-found";
   const repos = await deps.github.listRepositories();
   const repository = repos.find((r) => r.owner === input.owner && r.repo === input.repo);
   if (!repository) return { ok: false, reason: "not-readable" };
   const branches = await deps.github.listBranches(repository.owner, repository.repo);
   if (!branches.includes(input.baseBranch)) return { ok: false, reason: "no-branch" };
   return enableProject(deps.db, viewer.email, { owner: repository.owner, repo: repository.repo, baseBranch: input.baseBranch });
+}
+
+/** Remove a Project with its Tickets and ended Runs; refused while it has Active Runs. */
+export async function removeRepository(deps: AppDeps, viewer: Viewer, projectId: string): Promise<RemoveProjectResult | "not-found"> {
+  if (!canManageProjects(deps, viewer)) return "not-found";
+  return removeProject(deps.db, viewer.email, projectId);
 }
 
 export type SyncResult = { ok: true; summary: { added: number; updated: number; closed: number } } | { ok: false; error: string };

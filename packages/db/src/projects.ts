@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, inArray, isNotNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, notExists, notInArray } from "drizzle-orm";
 import type { Issue } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
-import { project, run, ticket } from "./schema";
+import { batch, project, run, ticket } from "./schema";
 
 // Projects and Tickets (spec M1 §3). GitHub stays the source of truth: Sync
 // only copies issues in, and Ticket Status is derived, never stored.
@@ -45,6 +45,48 @@ export async function enableProject(
       detail: { repository: `${row.owner}/${row.repo}`, baseBranch: row.baseBranch },
     });
     return { ok: true, project: row } as const;
+  });
+}
+
+export type RemoveProjectResult =
+  | { ok: true; tickets: number; runs: number }
+  | { ok: false; reason: "not-found" }
+  | { ok: false; reason: "active-runs"; activeRuns: number };
+
+/**
+ * Removes a Project with its Tickets and their Runs (Attempts, Outputs and
+ * logs cascade). Refused while any of its Runs is Active. The Tickets are
+ * locked first, so a Run started meanwhile waits and then fails on its
+ * missing Ticket instead of outliving the Project.
+ */
+export async function removeProject(db: Db, actorEmail: string, projectId: string): Promise<RemoveProjectResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(projectId)) return { ok: false, reason: "not-found" };
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select().from(project).where(eq(project.id, projectId)).for("update");
+    if (!row) return { ok: false, reason: "not-found" } as const;
+    const tickets = await tx.select({ id: ticket.id }).from(ticket).where(eq(ticket.projectId, projectId)).for("update");
+    const ticketIds = tickets.map((t) => t.id);
+    const runs =
+      ticketIds.length === 0 ? [] : await tx.select({ id: run.id, state: run.state, batchId: run.batchId }).from(run).where(inArray(run.ticketId, ticketIds));
+    const activeRuns = runs.filter((r) => r.state !== "succeeded" && r.state !== "cancelled").length;
+    if (activeRuns > 0) return { ok: false, reason: "active-runs", activeRuns } as const;
+
+    if (runs.length > 0) {
+      await tx.delete(run).where(inArray(run.ticketId, ticketIds));
+      // A Batch may hold other Projects' Tickets; only the ones left empty go.
+      const batchIds = [...new Set(runs.map((r) => r.batchId))];
+      await tx.delete(batch).where(and(inArray(batch.id, batchIds), notExists(tx.select({ id: run.id }).from(run).where(eq(run.batchId, batch.id)))));
+    }
+    await tx.delete(ticket).where(eq(ticket.projectId, projectId));
+    await tx.delete(project).where(eq(project.id, projectId));
+    await recordAudit(tx, {
+      actorEmail,
+      action: "project.remove",
+      subjectType: "project",
+      subjectId: row.id,
+      detail: { repository: `${row.owner}/${row.repo}`, tickets: ticketIds.length, runs: runs.length },
+    });
+    return { ok: true, tickets: ticketIds.length, runs: runs.length } as const;
   });
 }
 

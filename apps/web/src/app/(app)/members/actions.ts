@@ -2,14 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
+import type { ConfirmState } from "../../../components/confirm";
 import { addToAllowlist } from "../../../server/access";
 import { removeMachine } from "../../../server/machines";
 import { removeMember } from "../../../server/members";
 import { deps, requireMember } from "../../../server/runtime";
 
 export type FormState = { error: string | null };
-/** `runsHref` links to the Runs that block removing a Member or their Machine. */
-export type ConfirmState = { error: string | null; runsHref?: string; done?: boolean };
 
 const ADD_ERRORS = {
   "invalid-email": "Enter a full email address, like name@example.com.",
@@ -44,7 +43,7 @@ export async function removeMemberAction(_state: ConfirmState, form: FormData): 
       runsHref: runsOf(result.machineId),
     };
   }
-  return { error: result.reason === "operator" ? "Operator emails come from configuration and cannot be removed." : "That email is no longer on the team." };
+  return { error: result.reason === "operator" ? "Owner emails come from configuration and cannot be removed." : "That email is no longer on the team." };
 }
 
 export async function removeMachineAction(_state: ConfirmState, form: FormData): Promise<ConfirmState> {
