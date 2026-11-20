@@ -1,0 +1,254 @@
+{
+ "kind": "explore",
+ "title": "Clauderon workflow and architecture",
+ "subtitle": "How a GitHub issue becomes a pull request, and the parts that carry it",
+ "slug": "clauderon-readme",
+ "source": "README.md, ADR 0006, ADR 0007",
+ "summary": "A Member starts a Flow on a Ticket. The Gateway's Run engine executes the Flow's Nodes one at a time on the Starter's own Machine, pausing at Human Nodes, and the Run ends with a pull request opened under the Starter's own `gh` login.",
+ "diagrams": [
+  {
+   "title": "How it works",
+   "caption": "Ticket \u2192 Flow \u2192 Run \u2192 Nodes on the Starter's Machine \u2192 pull request",
+   "nodes": [
+    {
+     "id": "ticket",
+     "label": "Ticket",
+     "sub": "GitHub issue, synced",
+     "kind": "external",
+     "col": 0,
+     "row": 1
+    },
+    {
+     "id": "flow",
+     "label": "Flow",
+     "sub": "typed DAG of Nodes",
+     "kind": "config",
+     "col": 1,
+     "row": 1
+    },
+    {
+     "id": "run",
+     "label": "Run engine",
+     "sub": "one Node at a time",
+     "kind": "backend",
+     "col": 2,
+     "row": 1,
+     "w": 180
+    },
+    {
+     "id": "agent",
+     "label": "Agent Node",
+     "sub": "claude -p in the worktree",
+     "kind": "ai",
+     "col": 3,
+     "row": 0,
+     "w": 190
+    },
+    {
+     "id": "cmd",
+     "label": "Command Node",
+     "sub": "bash: tests, lint",
+     "kind": "cli",
+     "col": 3,
+     "row": 1,
+     "w": 190
+    },
+    {
+     "id": "human",
+     "label": "Human Node",
+     "sub": "Approve \u00b7 Grill \u00b7 Needs you",
+     "kind": "user",
+     "col": 3,
+     "row": 2.4,
+     "w": 190
+    },
+    {
+     "id": "pr",
+     "label": "Pull request",
+     "sub": "opened as the Starter",
+     "kind": "external",
+     "col": 4,
+     "row": 1
+    }
+   ],
+   "edges": [
+    {
+     "from": "ticket",
+     "to": "flow",
+     "label": "Start"
+    },
+    {
+     "from": "flow",
+     "to": "run",
+     "label": "one Run each"
+    },
+    {
+     "from": "run",
+     "to": "agent",
+     "label": "run Node"
+    },
+    {
+     "from": "run",
+     "to": "cmd",
+     "label": "run Node"
+    },
+    {
+     "from": "run",
+     "to": "human",
+     "label": "wait",
+     "style": "dashed"
+    },
+    {
+     "from": "cmd",
+     "to": "pr",
+     "label": "push, gh pr",
+     "style": "emphasis"
+    }
+   ],
+   "groups": [
+    {
+     "label": "Starter's Machine",
+     "kind": "client",
+     "nodes": [
+      "agent",
+      "cmd"
+     ]
+    },
+    {
+     "label": "Web app",
+     "kind": "frontend",
+     "nodes": [
+      "human"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Architecture",
+   "caption": "One self-hosted stack; every Run executes on a Member's own Machine",
+   "nodes": [
+    {
+     "id": "browser",
+     "label": "Browser",
+     "sub": "Member's web UI",
+     "kind": "client",
+     "col": 0,
+     "row": 0
+    },
+    {
+     "id": "agent",
+     "label": "Agent",
+     "sub": "apps/host-agent",
+     "kind": "agent",
+     "col": 0,
+     "row": 2.6
+    },
+    {
+     "id": "web",
+     "label": "Web app",
+     "sub": "Next.js \u00b7 Auth.js",
+     "kind": "frontend",
+     "col": 1,
+     "row": 0
+    },
+    {
+     "id": "gateway",
+     "label": "Gateway",
+     "sub": "sockets \u00b7 Run engine",
+     "kind": "backend",
+     "col": 1,
+     "row": 1
+    },
+    {
+     "id": "tools",
+     "label": "Claude Code \u00b7 gh \u00b7 git",
+     "sub": "worktree in ~/.clauderon",
+     "kind": "ai",
+     "col": 1,
+     "row": 2.6,
+     "w": 236
+    },
+    {
+     "id": "db",
+     "label": "Postgres 16",
+     "sub": "no secrets",
+     "kind": "database",
+     "col": 2,
+     "row": 0.5
+    },
+    {
+     "id": "github",
+     "label": "GitHub",
+     "sub": "issues \u00b7 repos \u00b7 PRs",
+     "kind": "external",
+     "col": 3,
+     "row": 1.6
+    }
+   ],
+   "edges": [
+    {
+     "from": "browser",
+     "to": "web",
+     "label": "HTTPS"
+    },
+    {
+     "from": "browser",
+     "to": "gateway",
+     "label": "WSS logs"
+    },
+    {
+     "from": "agent",
+     "to": "gateway",
+     "label": "outbound WSS",
+     "style": "emphasis"
+    },
+    {
+     "from": "agent",
+     "to": "tools",
+     "label": "spawn"
+    },
+    {
+     "from": "web",
+     "to": "db",
+     "label": "command rows"
+    },
+    {
+     "from": "gateway",
+     "to": "db",
+     "label": "LISTEN"
+    },
+    {
+     "from": "web",
+     "to": "github",
+     "label": "read-only",
+     "style": "dashed"
+    },
+    {
+     "from": "tools",
+     "to": "github",
+     "label": "push, open PR",
+     "style": "emphasis"
+    }
+   ],
+   "groups": [
+    {
+     "label": "Self-hosted stack",
+     "kind": "cloud",
+     "nodes": [
+      "web",
+      "gateway",
+      "db"
+     ]
+    },
+    {
+     "label": "Member's Machine",
+     "kind": "client",
+     "nodes": [
+      "agent",
+      "tools"
+     ]
+    }
+   ]
+  }
+ ]
+}
