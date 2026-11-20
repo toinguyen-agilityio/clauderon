@@ -13,7 +13,7 @@ import {
   type TestDatabase,
 } from "@clauderon/testing";
 import type { AppDeps } from "../src/server/deps";
-import { cloneMyFlow, deleteMyFlow, editorData, exportMyFlow, importMyFlow, saveMyFlow, viewFlows } from "../src/server/flows";
+import { cloneMyFlow, createMyFlow, deleteMyFlow, editorData, exportMyFlow, importMyFlow, saveMyFlow, viewFlows } from "../src/server/flows";
 import { startDialog } from "../src/server/start";
 import { cloneMyNode, createMyNode, deleteMyNode, updateMyNode, viewLibrary } from "../src/server/library";
 
@@ -52,7 +52,7 @@ async function withDryRun(flowId: string) {
 }
 
 describe("Flows page (spec M2 §2)", () => {
-  it("lists samples read-only apart from Flows, each with Node count and no problems", async () => {
+  it("lists samples apart from Flows, each with Node count and no problems", async () => {
     await sampleFlowId(db);
     const { samples, flows } = await viewFlows(deps);
     expect(samples.map((f) => f.name).sort()).toEqual(["Basic ticket delivery", "Plan and deliver"]);
@@ -63,7 +63,7 @@ describe("Flows page (spec M2 §2)", () => {
     expect(samples.every((f) => f.nodes.length === f.nodeCount && f.nodes[0]?.kind === "ticket")).toBe(true);
   });
 
-  it("T2-7: clone copies the placements and edges into an editable Flow named '<name> (copy)'; samples cannot be deleted", async () => {
+  it("T2-7: clone copies the placements and edges into an editable Flow named '<name> (copy)'; a sample can be deleted too", async () => {
     const flowId = await sampleFlowId(db);
     const ann = await memberRow(db, "ann@example.com");
     const nodesBefore = (await db.select().from(schema.node)).length;
@@ -84,9 +84,9 @@ describe("Flows page (spec M2 §2)", () => {
     // Library Nodes are shared, not copied.
     expect(await db.select().from(schema.node)).toHaveLength(nodesBefore);
 
-    expect(await deleteMyFlow(deps, ann, flowId)).toEqual({ ok: false, error: "Sample Flows cannot be deleted. Clone one to change it." });
     expect(await deleteMyFlow(deps, ann, copy.flowId)).toEqual({ ok: true });
-    expect(await actions()).toEqual(["flow.create", "flow.delete"]);
+    expect(await deleteMyFlow(deps, ann, flowId)).toEqual({ ok: true });
+    expect(await actions()).toEqual(["flow.create", "flow.delete", "flow.delete"]);
   });
 
   it("T2-5: a Flow with an Active Dry-run Run shows the lock, refuses delete on the server, and can still be cloned", async () => {
@@ -111,6 +111,23 @@ describe("Flows page (spec M2 §2)", () => {
     expect((await viewFlows(deps)).flows).toHaveLength(2);
   });
 
+  it("New Flow: starts with the Ticket Node placed, opens editable, and a taken name gets 'Copy of'", async () => {
+    await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    expect(await createMyFlow(deps, ann, "   ")).toEqual({ ok: false, error: "Give the Flow a name." });
+    const made = await createMyFlow(deps, ann, "  My flow ");
+    if (!made.ok) throw new Error("create failed");
+    expect(made.name).toBe("My flow");
+    const data = (await editorData(deps, made.flowId))!;
+    expect(data.readOnly).toBe(false);
+    expect(data.flow.isSample).toBe(false);
+    const library = await loadLibrary(db);
+    expect(data.graph.nodes.map((n) => library.find((l) => l.id === n.nodeId)!.kind)).toEqual(["ticket"]);
+    expect(data.graph.edges).toEqual([]);
+    expect(await createMyFlow(deps, ann, "basic TICKET delivery")).toMatchObject({ ok: true, name: "Copy of basic TICKET delivery" });
+    expect(await actions()).toEqual(["flow.create", "flow.create"]);
+  });
+
   it("a Flow whose Runs have all ended is kept while it has Runs in its history", async () => {
     const flowId = await sampleFlowId(db);
     const { ann } = await withDryRun(flowId);
@@ -132,13 +149,13 @@ describe("Canvas editor save (spec M2 §3)", () => {
     return { ann, flowId, copyId: copy.flowId };
   }
 
-  it("a sample opens read-only and its save is refused on the server", async () => {
+  it("a sample opens editable and its save is stored", async () => {
     const flowId = await sampleFlowId(db);
     const ann = await memberRow(db, "ann@example.com");
     const data = (await editorData(deps, flowId))!;
-    expect(data.readOnly).toBe(true);
-    const refused = await saveMyFlow(deps, ann, flowId, { name: "x", ...data.graph });
-    expect(refused).toEqual({ ok: false, error: "Sample Flows are read-only. Clone one to change it." });
+    expect(data.readOnly).toBe(false);
+    expect(await saveMyFlow(deps, ann, flowId, { name: "Edited sample", ...data.graph })).toEqual({ ok: true, problems: 0 });
+    expect((await loadFlowDetail(db, flowId))!.flow).toMatchObject({ name: "Edited sample", isSample: true });
   });
 
   it("saves a moved Node and a new name, with an audit entry, and keeps the Flow startable", async () => {
@@ -396,7 +413,7 @@ describe("Node library (spec M2 §4)", () => {
     expect((await viewLibrary(deps)).find((n) => n.id === lintId)!.command).toBe("npm run lint");
   });
 
-  it("a Node still used by a Flow cannot be deleted; an unused one can; samples are read-only", async () => {
+  it("a Node still used by a Flow cannot be deleted; an unused one can; samples included", async () => {
     const { ann, lintId } = await flowUsingLint();
     expect(await deleteMyNode(deps, ann, lintId)).toMatchObject({ ok: false, error: expect.stringContaining("Used by Basic ticket delivery (copy)") });
     const spare = await createMyNode(deps, ann, lint({ name: "Spare" }));
@@ -404,9 +421,11 @@ describe("Node library (spec M2 §4)", () => {
     const spareId = (await viewLibrary(deps)).find((n) => n.name === "Spare")!.id;
     expect(await deleteMyNode(deps, ann, spareId)).toEqual({ ok: true, flows: 0, withProblems: 0 });
 
-    const sampleNode = (await viewLibrary(deps)).find((n) => n.isSample)!;
-    expect(await updateMyNode(deps, ann, sampleNode.id, lint())).toEqual({ ok: false, error: "Sample Nodes are read-only." });
-    expect(await deleteMyNode(deps, ann, sampleNode.id)).toEqual({ ok: false, error: "Sample Nodes are read-only." });
+    // "Draft a plan" is a sample no sample Flow places, so it can be edited and then deleted.
+    const sampleNode = (await viewLibrary(deps)).find((n) => n.isSample && n.name === "Draft a plan")!;
+    expect(sampleNode.usedBy).toEqual([]);
+    expect(await updateMyNode(deps, ann, sampleNode.id, lint({ name: "Draft a plan v2" }))).toEqual({ ok: true, flows: 0, withProblems: 0 });
+    expect(await deleteMyNode(deps, ann, sampleNode.id)).toEqual({ ok: true, flows: 0, withProblems: 0 });
   });
 
   it("T2-11: every Flow and Node change writes an audit entry with the Member's email", async () => {

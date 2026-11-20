@@ -51,7 +51,7 @@ export async function createNode(db: Db, definition: NodeDefinition, actorEmail:
 
 export type ChangeNodeResult =
   | { ok: true; flows: number }
-  | { ok: false; reason: "not-found" | "sample" }
+  | { ok: false; reason: "not-found" }
   | { ok: false; reason: "locked"; flow: { id: string; name: string }; lock: FlowLock }
   | { ok: false; reason: "in-use"; flows: { id: string; name: string }[] };
 
@@ -64,23 +64,21 @@ async function lockedUse(db: Db, nodeId: string) {
 
 /**
  * Edits a Node (FLW-9). It changes every Flow that uses it, so it is refused
- * while any of them is locked (FLW-10), naming the Flow and the Run; a sample
- * is refused too. Returns how many Flows it changed.
+ * while any of them is locked (FLW-10), naming the Flow and the Run. Samples
+ * are edited like any Node. Returns how many Flows it changed.
  */
 export async function updateNode(db: Db, nodeId: string, definition: NodeDefinition, actorEmail: string, now: Date): Promise<ChangeNodeResult> {
   const { row, locked } = await lockedUse(db, nodeId);
   if (!row) return { ok: false, reason: "not-found" };
-  if (row.isSample) return { ok: false, reason: "sample" };
   if (locked) return { ok: false, reason: "locked", flow: { id: locked.flowId, name: locked.name }, lock: locked.lock! };
   await db.update(node).set({ ...definition, updatedByEmail: actorEmail, updatedAt: now }).where(eq(node.id, nodeId));
   return { ok: true, flows: row.usedBy.length };
 }
 
-/** Deletes a Node (FLW-9): refused for a sample, a locked use (FLW-10) and any Flow that still uses it. */
+/** Deletes a Node (FLW-9): refused for a locked use (FLW-10) and any Flow that still uses it. */
 export async function deleteNode(db: Db, nodeId: string): Promise<ChangeNodeResult> {
   const { row, locked } = await lockedUse(db, nodeId);
   if (!row) return { ok: false, reason: "not-found" };
-  if (row.isSample) return { ok: false, reason: "sample" };
   if (locked) return { ok: false, reason: "locked", flow: { id: locked.flowId, name: locked.name }, lock: locked.lock! };
   if (row.usedBy.length > 0) return { ok: false, reason: "in-use", flows: row.usedBy.map((u) => ({ id: u.flowId, name: u.name })) };
   await db.delete(node).where(eq(node.id, nodeId));

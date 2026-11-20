@@ -14,11 +14,7 @@ export default async function FlowPage({ params }: { params: Promise<{ id: strin
   if (!data) notFound();
 
   // The editor runs edge to edge; why it is read-only floats over the canvas.
-  const notice = data.flow.isSample ? (
-    <div className="fe-notice info" data-testid="sample-banner">
-      <b>Sample Flows are read-only.</b> Clone it from the Flows page to change it.
-    </div>
-  ) : data.lock ? (
+  const notice = data.lock ? (
     <div className="fe-notice wait" data-testid="lock-banner">
       <b>
         Locked by Run <Link href={`/runs/${data.lock.runId}`}>{data.lock.runId.slice(0, 6)}</Link> ({data.lock.state.replaceAll("_", " ")}).

@@ -192,8 +192,8 @@ Priority: **Must** / **Should** / **Could**.
 | FLW-5 | Validate before saving: exactly one Ticket Node (the entry, which emits the `issue` for any Node that needs it), at least one end Node, no cycles, no required input left unconnected. A Flow with problems shows an "N problems" badge and cannot start Runs. | Must |
 | FLW-6 | Node panel, for a Node placed in a Flow: its name, extra instructions for this Flow, optional Outputs on or off. | Must |
 | FLW-7 | A Flow cannot be edited or deleted while any Active Run (Dry-run included) uses it; it can still be viewed and cloned, and the editor shows which Run holds the lock. There are no Flow versions. | Must |
-| FLW-8 | Seed the sample Nodes and Flows below. Samples are read-only; members **clone** them to edit. | Must |
-| FLW-9 | Any Member can edit or delete any Flow or library Node that is not a sample; every change is recorded in the audit log. | Must |
+| FLW-8 | Seed the sample Nodes and Flows below. Samples are edited and deleted like any Flow or Node (still subject to FLW-7 and FLW-10) and can be cloned. Seeding again only adds the samples that are missing; it never overwrites a Member's changes. | Must |
+| FLW-9 | Any Member can create a new Flow (it starts with the Ticket Node placed) and edit or delete any Flow or library Node, samples included; every change is recorded in the audit log. | Must |
 | FLW-10 | A library Node cannot be edited while a Flow that uses it is locked. Editing a library Node changes every Flow that uses it. | Must |
 
 Output Types for v1: `issue`, `plan`, `branch`, `test-result`, `pull-request`, `summary`, `screenshot`.
