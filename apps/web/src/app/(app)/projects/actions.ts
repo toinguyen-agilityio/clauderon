@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { enableRepository, enableableRepositories, syncProject } from "../../../server/projects";
+import { notFound } from "next/navigation";
+import type { ConfirmState } from "../../../components/confirm";
+import { canManageProjects, enableRepository, enableableRepositories, removeRepository, syncProject } from "../../../server/projects";
 import { deps, requireMember } from "../../../server/runtime";
 
 export type EnableState = { error: string | null };
@@ -15,7 +17,7 @@ const ENABLE_ERRORS = {
 } as const;
 
 export async function loadRepositories() {
-  await requireMember();
+  if (!canManageProjects(deps(), await requireMember())) notFound();
   try {
     return { repositories: await enableableRepositories(deps()), error: null };
   } catch (error) {
@@ -24,7 +26,7 @@ export async function loadRepositories() {
 }
 
 export async function loadBranches(owner: string, repo: string): Promise<string[]> {
-  await requireMember();
+  if (!canManageProjects(deps(), await requireMember())) notFound();
   return deps().github.listBranches(owner, repo);
 }
 
@@ -32,6 +34,7 @@ export async function enableAction(_state: EnableState, form: FormData): Promise
   const member = await requireMember();
   const [owner, repo] = String(form.get("repository") ?? "").split("/");
   const result = await enableRepository(deps(), member, { owner: owner ?? "", repo: repo ?? "", baseBranch: String(form.get("baseBranch") ?? "") });
+  if (result === "not-found") notFound();
   revalidatePath("/projects");
   return { error: result.ok ? null : ENABLE_ERRORS[result.reason] };
 }
@@ -45,4 +48,21 @@ export async function syncAction(_state: SyncState, form: FormData): Promise<Syn
   if (!result.ok) return { message: null, error: result.error };
   const { added, updated, closed } = result.summary;
   return { message: `${added} added, ${updated} updated, ${closed} closed`, error: null };
+}
+
+export async function removeProjectAction(_state: ConfirmState, form: FormData): Promise<ConfirmState> {
+  const member = await requireMember();
+  const projectId = String(form.get("projectId") ?? "");
+  const result = await removeRepository(deps(), member, projectId);
+  if (result === "not-found") notFound();
+  revalidatePath("/projects");
+  revalidatePath("/tickets");
+  revalidatePath("/runs");
+  if (result.ok) return { error: null, done: true };
+  if (result.reason === "not-found") return { error: null, done: true };
+  const n = result.activeRuns;
+  return {
+    error: `It still has ${n} Active ${n === 1 ? "Run" : "Runs"}. Cancel ${n === 1 ? "it" : "them"} or wait until ${n === 1 ? "it ends" : "they end"}, then remove again.`,
+    runsHref: `/tickets?project=${projectId}`,
+  };
 }

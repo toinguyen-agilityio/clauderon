@@ -23,7 +23,7 @@ import {
   viewMachine,
   viewMachines,
 } from "../src/server/machines";
-import { enableRepository, enableableRepositories, syncProject } from "../src/server/projects";
+import { enableRepository, enableableRepositories, removeRepository, syncProject } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
 import { startDialog, startRuns } from "../src/server/start";
 import { viewTickets } from "../src/server/tickets";
@@ -194,6 +194,7 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     github.addRepository({ owner: "acme", repo: "api", defaultBranch: "trunk" });
     github.addRepository({ owner: "other", repo: "web", defaultBranch: "main" });
     const ann = await memberRow(db, "ann@example.com");
+    deps.operators = ["ann@example.com"];
 
     expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(["acme/api", "acme/web", "other/web"]);
     expect(await enableRepository(deps, ann, { owner: "acme", repo: "web", baseBranch: "nope" })).toEqual({ ok: false, reason: "no-branch" });
@@ -201,6 +202,55 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(["acme/api"]);
     expect(await enableRepository(deps, ann, { owner: "other", repo: "web", baseBranch: "main" })).toEqual({ ok: false, reason: "other-owner" });
     expect(await actions()).toEqual(["project.enable"]);
+  });
+
+  it("only an Operator enables a Project", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    const bob = await memberRow(db, "bob@example.com");
+    expect(await enableRepository(deps, bob, { owner: "acme", repo: "web", baseBranch: "main" })).toBe("not-found");
+    expect(await db.select().from(schema.project)).toEqual([]);
+  });
+
+  it("an Operator removes a Project with its Tickets and ended Runs; refused while a Run is Active", async () => {
+    const op = await memberRow(db, "op@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    deps.operators = ["op@example.com"];
+    const machine = await machineRow(db, bob.id);
+    const project = await projectRow(db);
+    const other = await projectRow(db, "acme", "api");
+    const ticket = await ticketRow(db, project.id, 1);
+    const kept = await ticketRow(db, other.id, 2);
+    // One Batch across both Projects: it stays for the other Project's Run.
+    await startSampleBatch(db, bob, machine.id, [ticket.id, kept.id], deps.clock.now());
+
+    expect(await removeRepository(deps, bob, project.id)).toBe("not-found");
+    for (const state of ["queued", "failed", "interrupted"] as const) {
+      await db.update(schema.run).set({ state }).where(sql`ticket_id = ${ticket.id}`);
+      expect(await removeRepository(deps, op, project.id)).toEqual({ ok: false, reason: "active-runs", activeRuns: 1 });
+    }
+
+    await db.update(schema.run).set({ state: "succeeded" }).where(sql`ticket_id = ${ticket.id}`);
+    expect(await removeRepository(deps, op, project.id)).toEqual({ ok: true, tickets: 1, runs: 1 });
+    expect((await db.select().from(schema.project)).map((p) => p.id)).toEqual([other.id]);
+    expect((await db.select().from(schema.ticket)).map((t) => t.id)).toEqual([kept.id]);
+    expect((await db.select().from(schema.run)).map((r) => r.ticketId)).toEqual([kept.id]);
+    expect(await db.select().from(schema.batch)).toHaveLength(1);
+    expect(await actions()).toContain("project.remove");
+    expect(await removeRepository(deps, op, project.id)).toEqual({ ok: false, reason: "not-found" });
+  });
+
+  it("removing a Project's last Run also drops its emptied Batch", async () => {
+    const op = await memberRow(db, "op@example.com");
+    deps.operators = ["op@example.com"];
+    const machine = await machineRow(db, op.id);
+    const project = await projectRow(db);
+    const ticket = await ticketRow(db, project.id, 1);
+    await startSampleBatch(db, op, machine.id, [ticket.id], deps.clock.now());
+    await db.update(schema.run).set({ state: "cancelled" });
+
+    expect(await removeRepository(deps, op, project.id)).toEqual({ ok: true, tickets: 1, runs: 1 });
+    expect(await db.select().from(schema.batch)).toEqual([]);
+    expect(await db.select().from(schema.attempt)).toEqual([]);
   });
 
   it("T1-7: Sync adds open issues, marks a vanished one Closed, records author association, and starts no Run", async () => {
