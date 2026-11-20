@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { mask } from "@clauderon/core";
 import { detached, errorText, type AgentLink, type Log } from "./link";
-import { runScript, runText, type System } from "./system";
+import { run, runScript, runText, type System } from "./system";
 
 /** Where the Agent keeps its clones and worktrees, never the Member's own checkouts (ADR 0006). */
 export const projectDir = (home: string, owner: string, repo: string) => join(home, "projects", owner, repo);
@@ -19,7 +19,8 @@ const GIT_IDENTITY = [
 /**
  * `workspace.prepare` (spec M1 §4.2, POD-10): clone the Project once with the
  * Member's gh login, otherwise fetch the base; then a worktree and branch per
- * Run.
+ * Run. `workspace.cleanup` (RUN-14) removes that worktree and its local branch
+ * once the Run is Succeeded or Cancelled.
  */
 export function registerWorkspaceHandlers(link: AgentLink, system: System, { home, log }: { home: string; log: Log }): void {
   // One prepare at a time per clone: a Batch starts several Runs of the same
@@ -57,6 +58,36 @@ export function registerWorkspaceHandlers(link: AgentLink, system: System, { hom
         const text = mask(errorText(error));
         log(`workspace ${runId}: ${text}`);
         link.send("workspace.failed", { runId, error: text });
+      }
+    }),
+  );
+
+  link.on(
+    "workspace.cleanup",
+    detached(async ({ runId, worktreePath, owner, repo, branch }) => {
+      try {
+        for (const value of [owner, repo, branch, runId]) {
+          if (!SAFE.test(value) || value.includes("..")) throw new Error(`Refusing unsafe name ${JSON.stringify(value)}`);
+        }
+        // Only the worktree this Agent made for the Run: never a path the message names.
+        const path = worktreeDir(home, runId);
+        if (worktreePath !== path) throw new Error(`Refusing to clean up ${JSON.stringify(worktreePath)}`);
+        const dir = projectDir(home, owner, repo);
+        const git = (args: string[]) => runText(system, ["git", "-C", dir, ...args]);
+
+        await oneAtATime(dir, async () => {
+          if (await system.exists(join(dir, ".git"))) {
+            if (await system.exists(path)) await git(["worktree", "remove", "--force", path]);
+            await git(["worktree", "prune"]);
+            // The pushed branch stays on GitHub; only the local one goes.
+            if ((await run(system, ["git", "-C", dir, "show-ref", "--verify", "--quiet", `refs/heads/${branch}`])) === 0) await git(["branch", "-D", branch]);
+          }
+          if (await system.exists(path)) await system.remove(path);
+        });
+        link.send("workspace.cleaned", { runId });
+      } catch (error) {
+        // Not acknowledged: the Gateway asks again when the Agent next connects.
+        log(`workspace cleanup ${runId}: ${mask(errorText(error))}`);
       }
     }),
   );
