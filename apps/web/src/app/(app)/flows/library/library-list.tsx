@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NodeKind, OutputType } from "@clauderon/core";
 import { Icon } from "../../../../components/icons";
@@ -97,16 +96,6 @@ function NodeDialog({ node, onClose }: { node: LibraryNodeView | null; onClose: 
                 usedBy={node.usedBy}
                 onClose={() => ref.current?.close()}
               />
-              {node.usedBy.length > 0 && (
-                <p className="small faint">
-                  {node.usedBy.map((u, i) => (
-                    <span key={u.flowId}>
-                      {i > 0 && " · "}
-                      <Link href={`/flows/${u.flowId}`}>Open {u.name}</Link>
-                    </span>
-                  ))}
-                </p>
-              )}
             </>
           ) : (
             <NodeForm initial={EMPTY_NODE} onClose={() => ref.current?.close()} />
