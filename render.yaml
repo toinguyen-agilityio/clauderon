@@ -1,0 +1,71 @@
+# Render Blueprint for a free demo of Clauderon (deploy/README.md, "Demo on Render").
+# Free instances sleep after 15 minutes without traffic and the free database
+# expires after 30 days, so this is for trying the app, not for the team's
+# production; the self-hosted stack in deploy/ stays the supported deploy.
+#
+# Both services build the last stage of deploy/Dockerfile (the web image, which
+# also holds the Gateway's source) and differ only in their command.
+
+envVarGroups:
+  - name: clauderon-shared
+    envVars:
+      # Web and Gateway must share the same value.
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: OPERATOR_EMAILS
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+
+databases:
+  - name: clauderon-db
+    plan: free
+    region: singapore
+    databaseName: clauderon
+    user: clauderon
+    postgresMajorVersion: "16"
+    # Reachable from the services only.
+    ipAllowList: []
+
+services:
+  - type: web
+    name: clauderon-gateway
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    # Free instances have no pre-deploy step, so migrations run before the Gateway starts.
+    dockerCommand: pnpm start:gateway
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: clauderon-shared
+      - key: DATABASE_URL
+        fromDatabase: { name: clauderon-db, property: connectionString }
+      - key: GATEWAY_PORT
+        value: "10000"
+      # The web service's https://… URL, known after its first deploy.
+      - key: WEB_URL
+        sync: false
+
+  - type: web
+    name: clauderon-web
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    healthCheckPath: /sign-in
+    envVars:
+      - fromGroup: clauderon-shared
+      - key: DATABASE_URL
+        fromDatabase: { name: clauderon-db, property: connectionString }
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # The Gateway service's URL with wss:// in place of https://.
+      - key: GATEWAY_URL
+        sync: false
