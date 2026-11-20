@@ -572,17 +572,36 @@ dialog.modal.lib-dialog { width: min(980px, calc(100vw - 32px)); }
 .pill.merged { background: color-mix(in srgb, var(--violet) 14%, transparent); color: var(--t-plan); }
 
 .nf { display: flex; flex-direction: column; gap: 16px; }
-.nf-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.nf-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
 .nf-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.nf-namekind { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; }
-.nf-kindhelp { margin: -4px 0 0; }
-.nf-instructions { min-height: 190px; overflow: hidden; resize: vertical; }
+.nf-namekind { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 10px; }
+.nf-kindhelp { margin: -6px 0 0; display: flex; gap: 8px; align-items: baseline; line-height: 1.45; }
+.nf-kindhelp .tag { flex: none; }
+.nf-instructions { min-height: 160px; overflow: hidden; resize: vertical; line-height: 1.5; }
 .nf-command { resize: vertical; white-space: pre; overflow-x: auto; }
 .nf-count { text-align: right; font-variant-numeric: tabular-nums; }
 .nf-label { font-weight: 600; font-size: 12.5px; }
-.nf-ports { display: flex; flex-direction: column; gap: 8px; }
-.nf-prow { display: grid; grid-template-columns: minmax(0, 1fr) 132px auto auto; gap: 8px; align-items: center; }
-.nf-flag { gap: 6px; white-space: nowrap; color: var(--fg2); }
+.nf-ports { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel); }
+.nf-ports-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.nf-ports-h .btn { margin-right: -6px; }
+.nf-ports-empty { margin: 0; padding: 6px 0 2px; }
+.nf-ptable { display: flex; flex-direction: column; gap: 6px; }
+.nf-prow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 128px) 64px 30px; gap: 8px; align-items: center; }
+.nf-prow .input { height: 34px; }
+.nf-phead { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fg3); }
+.nf-phead > span:nth-child(3), .nf-flag { text-align: center; }
+.nf-flag { display: flex; justify-content: center; }
+.nf-flag input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.nf-used { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: var(--r-sm); background: var(--sunk); font-size: 12.5px; }
+.nf-used-label { font-weight: 600; color: var(--fg2); }
+.nf-used-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.nf-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); font-weight: 600; font-size: 12px; text-decoration: none; }
+.nf-chip:hover { border-color: var(--accent-text); color: var(--accent-text); text-decoration: none; }
+.nf-used-note { margin-left: auto; color: var(--wait); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.tip-start[data-tip]::after { left: 0; transform: translate(0, 2px); }
+.tip-start[data-tip]:hover::after, .tip-start[data-tip]:focus-within::after { opacity: 1; transform: translate(0, 0); }
+.tip-wide[data-tip]::after { white-space: normal; width: max-content; max-width: 280px; }
 .nf-help { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 14px; background: var(--sunk); }
 .nf-help summary { font-weight: 600; }
 .nf-help dl { margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
@@ -591,22 +610,21 @@ dialog.modal.lib-dialog { width: min(980px, calc(100vw - 32px)); }
 .nf-dl-h { margin: 12px 0 0; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg3); font-weight: 600; }
 .nf-confirm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--r-sm); background: var(--fail-bg); border: 1px solid color-mix(in srgb, var(--fail) 35%, transparent); font-size: 13px; }
 .nf-confirm .grow { flex: 1 1 260px; min-width: 0; }
-.nf-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 14px; }
-.nf-status { flex: 1 1 160px; min-width: 0; font-size: 12.5px; color: var(--fg2); overflow-wrap: anywhere; }
+.nf-actions { position: sticky; bottom: -18px; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px -20px -18px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--panel-solid); }
+.nf-status { flex: 1 1 160px; text-align: right; min-width: 0; font-size: 12.5px; color: var(--fg2); overflow-wrap: anywhere; }
 .nf-status.ok { color: var(--ok); }
 .nf-status.error { color: var(--fail); }
 .nf-dirty { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--wait); }
 .nf-dirty::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.nf-delete { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
 
 @media (max-width: 860px) {
   .lib-search { max-width: none; }
   .lib-groups { margin-left: 0; overflow-x: auto; max-width: 100%; }
   .nf-grid { grid-template-columns: minmax(0, 1fr); }
   .nf-namekind { grid-template-columns: minmax(0, 1fr); }
-  .nf-prow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .nf-prow .nf-flag, .nf-prow .btn { justify-self: start; }
-  .nf-delete { margin-left: 0; }
+  .nf-prow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 48px 30px; }
+  .nf-used-note { margin-left: 0; }
+  .nf-status { text-align: left; }
   .nf-dl-row { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -624,6 +642,22 @@ dialog.modal.lib-dialog { width: min(980px, calc(100vw - 32px)); }
 .flow-name { color: var(--fg); font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
 .flow-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .flow-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex: none; }
+.flow-actions .err-text, .flow-actions [role="status"] { max-width: 32ch; text-align: right; }
+
+/* Square icon-only buttons; the name shows in a tooltip on hover and keyboard focus. */
+.btn.icon { width: 30px; height: 30px; padding: 0; justify-content: center; }
+.btn.icon svg { width: 15px; height: 15px; }
+.btn.icon.danger:not(:disabled):hover { background: color-mix(in srgb, var(--fail) 10%, var(--panel)); }
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translate(-50%, 2px);
+  padding: 4px 8px; border-radius: 6px; background: var(--fg); color: var(--bg); font-size: 11.5px; font-weight: 600; line-height: 1.3;
+  white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 120ms var(--ease), transform 120ms var(--ease); z-index: 20;
+}
+[data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { [data-tip]::after { transition: none; } }
+
+dialog.modal.narrow { width: min(440px, calc(100vw - 32px)); }
 .flow-pipe { display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: center; list-style: none; margin: 0; padding: 0; }
 .flow-pipe li { display: inline-flex; align-items: center; gap: 4px; }
 .flow-arrow { color: var(--fg3); }

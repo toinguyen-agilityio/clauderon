@@ -80,6 +80,23 @@ export const Icon = {
       <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.75 9.5h6.5L12 4M6.75 6.5v4.5M9.25 6.5v4.5" />
     </svg>
   ),
+  pencil: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinejoin="round" aria-hidden="true">
+      <path d="M10.5 2.5l3 3-8 8H2.5v-3z" />
+      <path d="M9 4l3 3" />
+    </svg>
+  ),
+  eye: (
+    <svg viewBox="0 0 16 16" {...stroke} aria-hidden="true">
+      <path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" />
+      <circle cx="8" cy="8" r="2" />
+    </svg>
+  ),
+  download: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 2.5v8M4.75 7.5L8 10.75l3.25-3.25M2.5 13.5h11" />
+    </svg>
+  ),
   copy: (
     <svg viewBox="0 0 16 16" {...stroke}>
       <rect x="5" y="5" width="8.5" height="8.5" rx="1.25" />

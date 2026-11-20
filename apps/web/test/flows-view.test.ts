@@ -58,7 +58,6 @@ describe("Flows list (ticket: Flows UI)", () => {
   });
 
   it("words the problem count", () => {
-    expect(problemsLabel(0)).toBe("No problems");
     expect(problemsLabel(1)).toBe("1 problem");
     expect(problemsLabel(3)).toBe("3 problems");
   });

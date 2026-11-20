@@ -1,6 +1,7 @@
 import { buildFlowFile, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
 import {
   cloneFlow,
+  createFlow,
   deleteFlow,
   importFlow,
   listLibraryRows,
@@ -83,17 +84,31 @@ export async function cloneMyFlow(deps: AppDeps, viewer: Viewer, flowId: string)
   return { ok: true, flowId: copy.id, name: copy.name };
 }
 
+export type CreateFlowResult = { ok: true; flowId: string; name: string } | { ok: false; error: string };
+
+/**
+ * New Flow (FLW-9): any Member; it starts with the Ticket Node placed. A name already
+ * taken becomes "Copy of <name>" so two Flows are not confused. Audit `flow.create`.
+ */
+export async function createMyFlow(deps: AppDeps, viewer: Viewer, rawName: string): Promise<CreateFlowResult> {
+  const wanted = String(rawName ?? "").trim().slice(0, 120);
+  if (!wanted) return { ok: false, error: "Give the Flow a name." };
+  const names = (await listFlowRows(deps.db)).map((f) => f.name);
+  const name = names.some((x) => x.toLowerCase() === wanted.toLowerCase()) ? copyName(wanted, names) : wanted;
+  const created = await createFlow(deps.db, name, viewer.email, deps.clock.now());
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: created.id, detail: { name } });
+  return { ok: true, flowId: created.id, name: created.name };
+}
+
 export type DeleteFlowOutcome = { ok: true } | { ok: false; error: string };
 
-/** Delete (FLW-9): refused for samples, locked Flows and Flows with Runs. Audit `flow.delete`. */
+/** Delete (FLW-9): any Flow, samples included; refused for locked Flows and Flows with Runs. Audit `flow.delete`. */
 export async function deleteMyFlow(deps: AppDeps, viewer: Viewer, flowId: string): Promise<DeleteFlowOutcome> {
   const result = await deleteFlow(deps.db, flowId);
   if (!result.ok) {
     switch (result.reason) {
       case "not-found":
         return { ok: false, error: "That Flow no longer exists." };
-      case "sample":
-        return { ok: false, error: "Sample Flows cannot be deleted. Clone one to change it." };
       case "locked":
         return { ok: false, error: `Locked by Run ${result.lock.runId} (${result.lock.state.replaceAll("_", " ")}). It can be deleted when that Run ends.` };
       case "has-runs":
@@ -109,7 +124,7 @@ export type EditorData = {
   library: LibraryNode[];
   graph: Pick<FlowGraphInput, "nodes" | "edges">;
   lock: FlowLock | null;
-  /** Samples and locked Flows open read-only (FLW-7, FLW-8). */
+  /** Locked Flows open read-only (FLW-7). */
   readOnly: boolean;
 };
 
@@ -123,7 +138,7 @@ export async function editorData(deps: AppDeps, flowId: string): Promise<EditorD
     library,
     graph: { nodes: detail.nodes, edges: detail.edges },
     lock,
-    readOnly: detail.flow.isSample || lock !== null,
+    readOnly: lock !== null,
   };
 }
 
@@ -159,8 +174,8 @@ function cleanGraph(raw: FlowGraphInput): FlowGraphInput | null {
 export type SaveFlowOutcome = { ok: true; problems: number } | { ok: false; error: string };
 
 /**
- * Save (FLW-3, FLW-5): stores the graph even with problems, but a sample or a
- * locked Flow is refused on the server (FLW-7, FLW-8). Audit `flow.update`.
+ * Save (FLW-3, FLW-5): stores the graph even with problems, samples included,
+ * but a locked Flow is refused on the server (FLW-7). Audit `flow.update`.
  */
 export async function saveMyFlow(deps: AppDeps, viewer: Viewer, flowId: string, raw: FlowGraphInput): Promise<SaveFlowOutcome> {
   const graph = cleanGraph(raw);
@@ -170,8 +185,6 @@ export async function saveMyFlow(deps: AppDeps, viewer: Viewer, flowId: string, 
     switch (result.reason) {
       case "not-found":
         return { ok: false, error: "That Flow no longer exists." };
-      case "sample":
-        return { ok: false, error: "Sample Flows are read-only. Clone one to change it." };
       case "locked":
         return { ok: false, error: `Locked by Run ${result.lock.runId} (${result.lock.state.replaceAll("_", " ")}). Edit it when that Run ends.` };
       case "bad-ids":
@@ -224,7 +237,7 @@ const sameDefinition = (a: Definition, b: Definition) =>
  */
 export async function importMyFlow(deps: AppDeps, viewer: Viewer, text: string): Promise<ImportFlowResult> {
   const [rows, flowRows] = await Promise.all([listLibraryRows(deps.db), listFlowRows(deps.db)]);
-  const ticket = rows.find((n) => n.kind === "ticket" && n.isSample) ?? null;
+  const ticket = rows.find((n) => n.kind === "ticket" && n.isSample) ?? rows.find((n) => n.kind === "ticket") ?? null;
   const parsed = parseFlowFile(text, ticket);
   if (!parsed.ok) return parsed;
 

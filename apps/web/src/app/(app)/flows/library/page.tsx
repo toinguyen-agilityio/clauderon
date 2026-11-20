@@ -28,7 +28,7 @@ export default async function LibraryPage() {
         <div>
           <h1>Flows</h1>
           <p className="sub">
-            Every Node a Flow can place. Any Member can create, edit or delete a Node that is not a sample. Editing a Node changes every
+            Every Node a Flow can place. Any Member can create, edit or delete a Node, samples included. Editing a Node changes every
             Flow that uses it, and is refused while one of them is locked by an Active Run.
           </p>
         </div>

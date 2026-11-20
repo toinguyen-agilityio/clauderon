@@ -1,9 +1,11 @@
+import { SEEDED_BY } from "@clauderon/db";
 import { ago, formatTime } from "../../../components/format";
 import { viewFlows, type FlowView } from "../../../server/flows";
 import { viewLibrary } from "../../../server/library";
 import { deps, requireMember } from "../../../server/runtime";
 import { FlowsList } from "./flows-list";
 import { ImportFlow } from "./import-flow";
+import { NewFlow } from "./new-flow";
 import { FlowsTabs } from "./flows-tabs";
 import type { FlowRowView } from "./flows-view";
 
@@ -21,7 +23,8 @@ export default async function FlowsPage() {
     nodeCount: f.nodeCount,
     problems: f.problems,
     nodes: f.nodes,
-    updatedBy: f.updatedByEmail,
+    // A sample nobody has changed shows no author.
+    updatedBy: f.updatedByEmail === SEEDED_BY ? null : f.updatedByEmail,
     updatedLabel: ago(f.updatedAt, now),
     updatedTitle: formatTime(f.updatedAt),
     lock: f.lock ? { runId: f.lock.runId, state: f.lock.state } : null,
@@ -32,11 +35,14 @@ export default async function FlowsPage() {
         <div>
           <h1>Flows</h1>
           <p className="sub">
-            A Flow is the graph of Nodes a Run follows. Samples are read-only: clone one to change it. A Flow is locked while an Active
-            Run uses it.
+            A Flow is the graph of Nodes a Run follows. Any Member can create, edit or delete a Flow, samples included. A Flow is locked
+            while an Active Run uses it.
           </p>
         </div>
-        <ImportFlow />
+        <div className="row" style={{ gap: 8 }}>
+          <ImportFlow />
+          <NewFlow />
+        </div>
       </div>
 
       <FlowsTabs active="flows" flows={samples.length + flows.length} nodes={nodes.length} />

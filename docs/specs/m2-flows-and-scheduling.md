@@ -21,7 +21,7 @@
 
 ## 2. Flows page
 
-- `/flows`: two lists, **Samples** (read-only, with **Clone**) and **Flows** (with Edit, Clone, Delete). Each row: name, number of Nodes, problems count, last change by whom and when, and a lock badge naming the Run that holds it.
+- `/flows`: a **New Flow** button and two lists, **Samples** and **Flows**, each row with Edit, Clone, Delete. Each row: name, number of Nodes, problems count, last change by whom and when, and a lock badge naming the Run that holds it.
 - **Clone** copies the Flow, its placements and edges into a new non-sample Flow named `<name> (copy)`, with `cloned_from_id`. Library Nodes are shared, not copied. Locked Flows can be cloned.
 - **Delete** is refused for samples and for locked Flows. Audit: `flow.create`, `flow.update`, `flow.delete`.
 
@@ -33,7 +33,7 @@
 - **Problems badge:** "N problems" from `validateFlow`, live as the Flow changes; clicking it lists the problems and selects the Node or edge of each.
 - **Save** stores the Flow even with problems (so work is not lost), but a Flow with problems cannot be picked in the Start dialog (FLW-5).
 - **Node panel** (FLW-6), for the selected placement: label, extra instructions for this Flow, a switch per optional Output. Turning an Output off that has an edge is a problem.
-- Samples open read-only with a **Clone** button.
+- Samples open in the editor like any Flow; only a locked Flow opens read-only.
 
 ## 4. Node library (FLW-1, FLW-9, FLW-10)
 

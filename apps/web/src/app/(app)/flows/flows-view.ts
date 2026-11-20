@@ -12,7 +12,8 @@ export type FlowRowView = {
   nodeCount: number;
   problems: number;
   nodes: { name: string; kind: NodeKind }[];
-  updatedBy: string;
+  /** Null for a sample nobody has changed since the seed. */
+  updatedBy: string | null;
   /** "5 h ago", worked out on the server. */
   updatedLabel: string;
   /** The exact time, for a tooltip. */
@@ -43,7 +44,7 @@ export function scopeCounts(flows: readonly FlowRowView[]): Record<FlowScope, nu
   };
 }
 
-/** The samples (pinned on top, read-only) apart from the Flows a Member cloned or made, each keeping its order. */
+/** The samples (pinned on top) apart from the Flows a Member cloned or made, each keeping its order. */
 export function groupFlows<T extends Pick<FlowRowView, "isSample">>(flows: readonly T[]): { samples: T[]; mine: T[] } {
   return { samples: flows.filter((f) => f.isSample), mine: flows.filter((f) => !f.isSample) };
 }
@@ -53,4 +54,4 @@ export function pipelinePreview<T>(nodes: readonly T[], max = 6): { shown: T[]; 
   return { shown: nodes.slice(0, max), hidden: nodes.slice(max) };
 }
 
-export const problemsLabel = (n: number) => (n === 0 ? "No problems" : `${n} problem${n === 1 ? "" : "s"}`);
+export const problemsLabel = (n: number) => `${n} problem${n === 1 ? "" : "s"}`;

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cloneMyFlow, deleteMyFlow, exportMyFlow, importMyFlow, type ExportFlowResult, type ImportFlowResult } from "../../../server/flows";
+import { cloneMyFlow, createMyFlow, deleteMyFlow, exportMyFlow, importMyFlow, type CreateFlowResult, type ExportFlowResult, type ImportFlowResult } from "../../../server/flows";
 import { deps, requireMember } from "../../../server/runtime";
 
 export type FlowFormState = { error: string | null; notice: string | null; /** The Flow a clone just made, so the row can link to it. */ openFlowId: string | null };
@@ -21,6 +21,14 @@ export async function flowActionAction(_state: FlowFormState, form: FormData): P
     return result.ok ? { error: null, notice: "Flow deleted.", openFlowId: null } : { error: result.error, notice: null, openFlowId: null };
   }
   return { error: "Unknown action.", notice: null, openFlowId: null };
+}
+
+/** Creates an empty Flow (with the Ticket Node placed) for the editor to open. */
+export async function createFlowAction(name: string): Promise<CreateFlowResult> {
+  const member = await requireMember();
+  const result = await createMyFlow(deps(), member, name);
+  revalidatePath("/flows");
+  return result;
 }
 
 /** The file for one Flow; the browser turns it into a download. */
