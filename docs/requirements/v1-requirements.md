@@ -1,5 +1,7 @@
 # Clauderon — Requirements v1 (final)
 
+> **Pods to Machines (2026-11-20):** written for Pods (one Docker container per Member on a Pod Host). Pods and the Host Agent are replaced by each Member's own Machine and the Agent ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md), [ADR 0007](../adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md)). Read Pod as Machine, Pod Host as the Member's computer, Host Agent as Agent. Where this disagrees with the ADRs or the code, they win. M4 is already updated.
+
 > **Version:** v1 final · **Date:** 2026-11-12, updated 2026-11-13 (Pods are per-Member Docker containers on one Pod Host; sign-in with Google) and 2026-11-16 (answers to the spec questions) · **Status:** Requirements and spec decisions settled; no code yet.
 > **Sources:** merges two earlier drafts, a team draft and a practice draft, following the practice draft's outline; every point where they differed was settled on 2026-11-12. The 47 spec questions and the review of their answers ([PR #3](https://github.com/toinguyen-agilityio/clauderon/pull/3)) were settled on 2026-11-16. See [section 9](#9-decision-log).
 > **Next step:** review the [milestone specs](../specs/README.md), then publish each as a GitHub issue (section 12).

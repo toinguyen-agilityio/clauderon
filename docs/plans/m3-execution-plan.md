@@ -1,5 +1,7 @@
 # M3 execution plan — People in the loop
 
+> **Pods to Machines (2026-11-20):** written for Pods (one Docker container per Member on a Pod Host). Pods and the Host Agent are replaced by each Member's own Machine and the Agent ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md), [ADR 0007](../adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md)). Read Pod as Machine, Pod Host as the Member's computer, Host Agent as Agent. Where this disagrees with the ADRs or the code, they win. M4 is already updated.
+
 > Spec: [docs/specs/m3-people-in-the-loop.md](../specs/m3-people-in-the-loop.md) · Milestone issue #12 · Branch `feat/m3-people-in-the-loop`
 > Status legend: ☐ to do · ☑ done and tested. **Status (2026-11-18): implemented and verified locally on the branch; not yet committed, pushed or merged.**
 

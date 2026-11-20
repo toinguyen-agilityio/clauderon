@@ -1,5 +1,7 @@
 # M0 — Foundations
 
+> **Pods to Machines (2026-11-20):** written for Pods (one Docker container per Member on a Pod Host). Pods and the Host Agent are replaced by each Member's own Machine and the Agent ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md), [ADR 0007](../adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md)). Read Pod as Machine, Pod Host as the Member's computer, Host Agent as Agent. Where this disagrees with the ADRs or the code, they win. M4 is already updated.
+
 > **Roadmap:** Day 1 · **Check:** core unit tests pass; an email not on the allowlist is refused; the Host Agent shows as connected.
 > **Depends on:** prerequisites P2 (Google OAuth client), P4 (Pod Host on), P5 (hosting accounts) from the [roadmap](../roadmap/v1-seven-day-plan.md#2-before-day-1).
 > **Freezes:** the database schema and the Host Agent protocol. Later milestones add columns and messages; changing or removing one after M0 needs a note in the pull request and a review by both reviewers.
