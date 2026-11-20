@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { memberFromCookies } from "../../server/access";
-import { deps } from "../../server/runtime";
+import { deps, webUrl } from "../../server/runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -15,5 +15,6 @@ export async function GET(request: NextRequest) {
   const store = await cookies();
   const live = await memberFromCookies(deps(), (name) => store.get(name)?.value);
   const to = live ? target : `/sign-in?next=${encodeURIComponent(target)}`;
-  return NextResponse.redirect(new URL(to, request.url));
+  // Behind a proxy request.url is the app's own address (localhost:…), so use the public origin.
+  return NextResponse.redirect(new URL(to, webUrl(request.nextUrl.origin)));
 }
