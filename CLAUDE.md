@@ -13,7 +13,7 @@ pnpm workspace + Turborepo, Node >= 22, pnpm 10. Run from the repo root:
 ```sh
 pnpm install
 pnpm db:up                 # local Postgres 16 on port 54329 (docker compose)
-pnpm db:migrate            # apply Drizzle migrations; `pnpm db:seed` also seeds
+pnpm db:migrate            # apply Drizzle migrations; `pnpm db:seed` also seeds (these two do not read `.env`: export it first, e.g. `set -a; . ./.env; set +a`)
 pnpm dev                   # web (Next.js) and gateway in watch mode
 pnpm --filter @clauderon/host-agent pair http://localhost:3000  # pair this computer as your Machine and run the Agent
 pnpm --filter @clauderon/host-agent build   # bundle the Agent into apps/host-agent/dist (served at /agent/agent.mjs)
@@ -46,6 +46,10 @@ Rules that shape the code (details in the ADRs):
 - Each Run executes on its Starter's Machine, under that Member's own Claude Code login. Never read, store or forward Claude/OAuth tokens; the Agent only checks login status (`apps/host-agent/src/logins.ts`). A Machine token is stored only as its SHA-256 hash.
 - No secrets in the database; configuration comes from the environment (NFR-1). Mask known token patterns before any log line is stored or streamed.
 - Web and Gateway restart separately, so protocol and schema changes must stay compatible with both.
+
+## Contributing
+
+Branch, commit, pull request and release conventions are in `CONTRIBUTING.md`: PRs go into `staging`, releases are `release/*` branches into `main`, and the release rule in `.claude/rules/release.md` refreshes the committed repo graph (`graphify-out/`). For code questions, try `graphify query "<question>"` before reading many files.
 
 ## Next.js
 
