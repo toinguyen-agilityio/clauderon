@@ -13,7 +13,7 @@ Do not refresh or commit the graph on any other branch.
 Before cutting the branch, find the last tag (`git describe --tags --abbrev=0 origin/main`), list the commits since it, work out the next version and tell the user which one and why. Title the release PR `chore(release): v<version>`.
 
 After the release PR merges:
-1. Tag it: `gh release create v<version> --target <merge commit sha on main> --title v<version> --generate-notes`.
+1. Write a two or three line summary of the release for Members (and any breaking changes with what to do about them), then tag it: `gh release create v<version> --target <merge commit sha on main> --title v<version> --generate-notes --notes "<summary>"`. The generated part lists merged PRs grouped by label (.github/release.yml). See "Release notes" in CONTRIBUTING.md.
 2. Open or run a merge of `main` back into `staging` (`chore: sync main into staging`).
 3. Tell the user the tag and the sync.
 
