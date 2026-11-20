@@ -1,6 +1,6 @@
 # Releases and the repo graph
 
-Branch flow: feature and fix PRs go into `staging`. A release is a branch `release/<date or version>` cut from `staging` and merged into `main`. See CONTRIBUTING.md.
+Branch flow: feature and fix PRs go into `staging`. A release is a branch `release/v<version>` cut from `staging` and merged into `main`. Versions are SemVer (`vMAJOR.MINOR.PATCH`, first release `v0.1.0`, 0.y.z until the team decides on v1.0.0); see the Versions section of CONTRIBUTING.md for how to pick the bump from the Conventional Commits since the last tag.
 
 Before `gh pr create` from a `release/*` branch into `main`:
 
@@ -10,6 +10,11 @@ Before `gh pr create` from a `release/*` branch into `main`:
 
 Do not refresh or commit the graph on any other branch.
 
-After the release PR merges, open or run a merge of `main` back into `staging` (`chore: sync main into staging`) and say so to the user.
+Before cutting the branch, find the last tag (`git describe --tags --abbrev=0 origin/main`), list the commits since it, work out the next version and tell the user which one and why. Title the release PR `chore(release): v<version>`.
+
+After the release PR merges:
+1. Write a two or three line summary of the release for Members (and any breaking changes with what to do about them), then tag it: `gh release create v<version> --target <merge commit sha on main> --title v<version> --generate-notes --notes "<summary>"`. The generated part lists merged PRs grouped by label (.github/release.yml). See "Release notes" in CONTRIBUTING.md.
+2. Open or run a merge of `main` back into `staging` (`chore: sync main into staging`).
+3. Tell the user the tag and the sync.
 
 When answering questions about the code, prefer `graphify query "<question>"` or `graphify-out/GRAPH_REPORT.md` over reading many files.
