@@ -117,6 +117,57 @@ describe("workspace.prepare (T1-16, POD-10, RUN-3)", () => {
   });
 });
 
+describe("workspace.cleanup (RUN-14, T4-7)", () => {
+  const cleanup = (runId: string, branch: string) => ({ runId, worktreePath: run(runId), owner: "acme", repo: "web", branch });
+  const hasWorktree = () => {
+    system.paths.add(join(CLONE, ".git"));
+    system.paths.add(run("run-1"));
+  };
+
+  it("removes the Run's worktree and its local branch, then says so; the remote branch is left alone", async () => {
+    hasWorktree();
+    // The branch exists locally; git removes the directory.
+    system.script(({ argv }) => {
+      if (argv.includes("remove")) system.paths.delete(run("run-1"));
+      return undefined;
+    });
+    await link.deliver("workspace.cleanup", cleanup("run-1", "clauderon/1-a-run1"));
+
+    expect(system.commands().filter((c) => c.startsWith("git"))).toEqual([
+      `git -C ${CLONE} worktree remove --force ${run("run-1")}`,
+      `git -C ${CLONE} worktree prune`,
+      `git -C ${CLONE} show-ref --verify --quiet refs/heads/clauderon/1-a-run1`,
+      `git -C ${CLONE} branch -D clauderon/1-a-run1`,
+    ]);
+    expect(system.commands().join(" ")).not.toContain("push");
+    expect(link.of("workspace.cleaned")).toEqual([{ runId: "run-1" }]);
+  });
+
+  it("is a success when it was cleaned already: no worktree and no local branch", async () => {
+    system.paths.add(join(CLONE, ".git"));
+    system.script(({ argv }) => (argv.includes("show-ref") ? { exitCode: 1 } : undefined));
+    await link.deliver("workspace.cleanup", cleanup("run-1", "clauderon/1-a-run1"));
+    expect(system.commands().some((c) => c.includes("worktree remove") || c.includes("branch -D"))).toBe(false);
+    expect(link.of("workspace.cleaned")).toEqual([{ runId: "run-1" }]);
+  });
+
+  it("a failed removal is logged and not answered, so the Gateway asks again on the next connect", async () => {
+    hasWorktree();
+    system.script(({ argv }) => (argv.includes("remove") ? { exitCode: 1, stderr: "Permission denied" } : undefined));
+    await link.deliver("workspace.cleanup", cleanup("run-1", "clauderon/1-a-run1"));
+    expect(link.of("workspace.cleaned")).toEqual([]);
+    expect(link.of("workspace.failed")).toEqual([]);
+  });
+
+  it("refuses a path that is not the Run's own worktree, and unsafe names", async () => {
+    hasWorktree();
+    await link.deliver("workspace.cleanup", { ...cleanup("run-1", "clauderon/1-a-run1"), worktreePath: "/home/ann/Documents" });
+    await link.deliver("workspace.cleanup", cleanup("run-1", "x; rm -rf /"));
+    expect(system.execs).toHaveLength(0);
+    expect(link.of("workspace.cleaned")).toEqual([]);
+  });
+});
+
 /** Scripts git: HEAD moves when `commits` is set; the git dir is fixed. */
 function scriptGit(heads: string[]) {
   system.script(({ argv }) => {

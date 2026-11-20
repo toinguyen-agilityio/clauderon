@@ -36,6 +36,7 @@ import {
   moveRun,
   runningAttemptIds,
   runningRuns,
+  runsToCleanUp,
   runsOfMachine,
   setAttemptUsage,
   updateRun,
@@ -170,6 +171,16 @@ export class RunEngine {
     return this.serial(async () => {
       await updateRun(this.opts.db, runId, { worktreePath });
       await this.advance(runId);
+      // Cancelled while its Workspace was being prepared: the worktree is no use to anyone.
+      await this.cleanUp(runId);
+    });
+  }
+
+  /** The Agent removed a Run's worktree (RUN-14): nothing is left to clean up. */
+  workspaceCleaned({ runId }: Payload<"workspace.cleaned">): Promise<void> {
+    return this.serial(async () => {
+      const ctx = await getRunContext(this.opts.db, runId);
+      if (ctx && (ctx.run.state === "succeeded" || ctx.run.state === "cancelled")) await updateRun(this.opts.db, runId, { worktreePath: null });
     });
   }
 
@@ -426,10 +437,31 @@ export class RunEngine {
     }
   }
 
-  /** A Run ended: free its Slot for the next one (RUN-16, POD-3). */
+  /** A Run ended: remove its worktree if it is done with it, and free its Slot for the next one (RUN-16, POD-3). */
   private async ended(runId: string, machineId: string): Promise<void> {
     this.opts.live.runChanged(runId);
+    await this.cleanUp(runId);
     await this.scheduleNow(machineId);
+  }
+
+  /**
+   * RUN-14: a Succeeded or Cancelled Real Run gives its worktree and local
+   * branch back to the Machine; Failed and Interrupted Runs keep theirs for a
+   * Retry. Sent again on each connect until the Agent says it is done.
+   */
+  private async cleanUp(runId: string): Promise<void> {
+    const ctx = await getRunContext(this.opts.db, runId);
+    if (!ctx) return;
+    const { run } = ctx;
+    if (run.mode !== "real" || (run.state !== "succeeded" && run.state !== "cancelled")) return;
+    if (!run.machineId || !run.worktreePath || !run.branch) return;
+    this.opts.links.send(run.machineId, "workspace.cleanup", {
+      runId,
+      worktreePath: run.worktreePath,
+      owner: ctx.project.owner,
+      repo: ctx.project.repo,
+      branch: run.branch,
+    });
   }
 
   /**
@@ -501,6 +533,8 @@ export class RunEngine {
         this.opts.links.send(machineId, "node.kill", { attemptId });
       }
       await this.reconcile(machineId);
+      // A cleanup that failed, or never arrived, is asked for again (RUN-14).
+      for (const { id } of await runsToCleanUp(this.opts.db, machineId)) await this.cleanUp(id);
     });
   }
 
