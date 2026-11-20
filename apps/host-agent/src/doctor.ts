@@ -36,7 +36,7 @@ export function fixFor(id: string, platform: Platform): string | undefined {
     case "gateway.paired":
       return "Run the install command from the Machines page again: it pairs this computer anew.";
     case "gateway.reachable":
-      return "Check this computer reaches the Clauderon address (e.g. Tailscale is up: tailscale status).";
+      return "Check this computer reaches the Clauderon address (open it in a browser).";
     case "gateway.clock":
       return win ? "Settings → Time & language → Sync now" : mac ? "System Settings → General → Date & Time → Set automatically" : "sudo timedatectl set-ntp true";
     case "service":

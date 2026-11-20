@@ -30,7 +30,7 @@ pnpm --filter @clauderon/db generate                        # new migration afte
 
 ## Architecture
 
-Three deployables and four internal packages, all TypeScript ESM. Packages export source (`./src/index.ts`), with no build step. Web, Gateway and Postgres are self-hosted as one Docker Compose stack behind Tailscale (ADR 0005, `deploy/README.md`); each Member runs the Agent on their own Machine (ADR 0006).
+Three deployables and four internal packages, all TypeScript ESM. Packages export source (`./src/index.ts`), with no build step. Web, Gateway and Postgres are self-hosted as one Docker Compose stack and published through a Cloudflare Tunnel (ADR 0005, ADR 0006, `deploy/README.md`); each Member runs the Agent on their own Machine (ADR 0006).
 
 - `apps/web`: Next.js UI and ordinary API, Auth.js with Google sign-in. Everything needing a long-lived connection is delegated to the Gateway.
 - `apps/gateway`: always-on Node service. Holds one WebSocket per paired Machine (token auth, `/agent`), serves Pairing (`/pair`) and the browser sockets, watches the heartbeats and runs the **Run engine** (`run-engine.ts`), which executes a Flow's Nodes one at a time. Web and Gateway share one Postgres and talk through DB command rows (`packages/db/src/gateway-commands.ts`).

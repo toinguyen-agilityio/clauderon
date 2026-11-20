@@ -62,7 +62,7 @@ Three choices worth knowing:
 - **The app never writes to GitHub.** Pull requests are opened from each member's Pod under their own GitHub name, so ownership stays clear ([ADR 0001](adr/0001-pods-push-with-their-own-git-login.md)).
 - **One container per member** on a single team machine, each with its own logins, storage and CPU/RAM limits ([ADR 0003](adr/0003-pods-are-member-containers-on-one-pod-host.md)).
 - **Flows are simple graphs** with no loops, run one step at a time, with typed connections that are checked in the editor ([ADR 0002](adr/0002-flows-are-typed-dags-run-sequentially.md)).
-- **The web app works with an always-on Gateway** that holds the Pod Host's connection and the terminals and runs the Runs ([ADR 0004](adr/0004-web-app-on-vercel-with-an-always-on-gateway.md)); both run with Postgres on the Pod Host, reached over Tailscale ([ADR 0005](adr/0005-self-host-the-app-on-the-pod-host.md)).
+- **The web app works with an always-on Gateway** that holds the Pod Host's connection and the terminals and runs the Runs ([ADR 0004](adr/0004-web-app-on-vercel-with-an-always-on-gateway.md)); both run with Postgres on one self-hosted machine ([ADR 0005](adr/0005-self-host-the-app-on-the-pod-host.md)), published through a Cloudflare Tunnel ([ADR 0006](adr/0006-each-member-runs-on-their-own-machine.md)).
 
 ## What v1 includes, and what it leaves out
 

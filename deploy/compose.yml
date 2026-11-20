@@ -1,8 +1,9 @@
 # The self-hosted Clauderon stack (ADR 0005, ADR 0006).
 # Run from the repo root:
 #   docker compose -f deploy/compose.yml --env-file deploy/.env.production up -d --build
-# Web and Gateway listen on localhost only; Tailscale Serve publishes them
-# to the tailnet with HTTPS (see deploy/README.md). Postgres is never published.
+# A Cloudflare Tunnel publishes web and Gateway to the internet with HTTPS
+# (see deploy/README.md); it connects out, so no port is opened on the host.
+# Web and Gateway also listen on localhost for checks. Postgres is never published.
 # Not "clauderon": that is the dev compose project (the repo folder name), and
 # sharing it would let one stack replace or remove the other's containers.
 name: clauderon-prod
@@ -12,6 +13,8 @@ x-app-env: &app-env
   SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
   OPERATOR_EMAILS: ${OPERATOR_EMAILS:?set OPERATOR_EMAILS}
   GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+
+x-public-url: &public-url https://${WEB_HOSTNAME:?set WEB_HOSTNAME}
 
 services:
   postgres:
@@ -46,7 +49,7 @@ services:
       <<: *app-env
       GATEWAY_PORT: "4000"
       # Agents that pair open <WEB_URL>/pair?code=… to approve.
-      WEB_URL: ${PUBLIC_URL:?set PUBLIC_URL}
+      WEB_URL: *public-url
     ports:
       - "127.0.0.1:${GATEWAY_HOST_PORT:-4000}:4000"
     healthcheck:
@@ -65,13 +68,38 @@ services:
       <<: *app-env
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?set GOOGLE_CLIENT_SECRET}
-      AUTH_URL: ${PUBLIC_URL:?set PUBLIC_URL}
-      # The browser's WebSocket origin of the Gateway, through Tailscale Serve.
-      GATEWAY_URL: ${PUBLIC_GATEWAY_URL:?set PUBLIC_GATEWAY_URL}
+      AUTH_URL: *public-url
+      # The Gateway's public WebSocket origin, for browsers and Agents.
+      GATEWAY_URL: wss://${GATEWAY_HOSTNAME:?set GATEWAY_HOSTNAME}
     ports:
       - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
     depends_on:
       gateway: { condition: service_healthy }
+
+  # Publishes web and Gateway through the Cloudflare Tunnel whose token is in
+  # the env file (deploy/deploy.sh tunnel creates it and the DNS records).
+  cloudflared:
+    image: cloudflare/cloudflared:2026.2.0
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+    configs:
+      - source: cloudflared
+        target: /etc/cloudflared/config.yml
+    depends_on:
+      web: { condition: service_started }
+
+configs:
+  cloudflared:
+    # Ingress for a locally managed tunnel; the token only identifies it.
+    content: |
+      ingress:
+        - hostname: ${WEB_HOSTNAME}
+          service: http://web:3000
+        - hostname: ${GATEWAY_HOSTNAME}
+          service: http://gateway:4000
+        - service: http_status:404
 
 volumes:
   pgdata:
