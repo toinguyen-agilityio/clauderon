@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { installService, launchdPlist, serviceArgs, systemdUnit, uninstallService, windowsTaskCommand, type ServiceSpec } from "../src/service";
+import { installService, launchdPlist, serviceArgs, systemdUnit, uninstallService, windowsHidden, windowsLauncher, windowsRunCommand, type ServiceSpec } from "../src/service";
 
 // A bundled Agent (ADR 0007): its own Node and agent.mjs under the home.
 const spec: ServiceSpec = {
@@ -41,27 +41,29 @@ describe("Agent service (ADR 0006)", () => {
     expect(systemdUnit(spec)).not.toContain("Environment=PATH");
   });
 
-  it("Windows: one cmd line that sets the home and logs to a file", () => {
-    const home = "C:\\Users\\ann\\.clauderon";
-    const cmd = windowsTaskCommand({ node: `${home}\\node\\node.exe`, args: [`${home}\\agent\\agent.mjs`, "run"], cwd: home, home });
-    expect(cmd).toContain("set CLAUDERON_HOME=C:\\Users\\ann\\.clauderon&& set CLAUDERON_SERVICE=1&&");
-    expect(cmd).toContain('cd /d "C:\\Users\\ann\\.clauderon"');
-    expect(cmd).toContain('"C:\\Users\\ann\\.clauderon\\agent\\agent.mjs" "run"');
-    expect(cmd).toMatch(/>> "C:\\Users\\ann\\\.clauderon.agent\.log" 2>&1"$/);
+  it("Windows: the Run key starts a launcher script that sets the home and logs to a file", () => {
+    const home = join("C:", "Users", "Toi Nguyen", ".clauderon");
+    const s = { node: join(home, "node", "node.exe"), args: [join(home, "agent", "agent.mjs"), "run"], cwd: home, home };
+    expect(windowsRunCommand(s)).toBe(`wscript.exe //B //Nologo "${join(home, "agent-service.vbs")}"`);
+    expect(windowsHidden(s)).toBe(`CreateObject("WScript.Shell").Run """${join(home, "agent-service.cmd")}""", 0, False\r\n`);
+    const script = windowsLauncher(s);
+    expect(script).toContain(`set "CLAUDERON_HOME=${home}"`);
+    expect(script).toContain("set CLAUDERON_SERVICE=1");
+    expect(script).toContain(`cd /d "${home}"`);
+    expect(script).toContain(`"${join(home, "agent", "agent.mjs")}" "run" >> "${join(home, "agent.log")}" 2>&1`);
   });
 
-  it("installs and removes a Windows logon task under the Member's own user", async () => {
+  it("installs and removes a per-user Windows Run key, with no administrator rights", async () => {
     const calls: string[][] = [];
+    const launched: string[] = [];
     const run = async (file: string, args: readonly string[]) => void calls.push([file, ...args]);
-    await installService({ ...spec, home: `${process.cwd()}/.tmp-service-home` }, "win32", run);
-    expect(calls.map((c) => c.slice(0, 4))).toEqual([
-      ["schtasks", "/Create", "/F", "/SC"],
-      ["schtasks", "/Run", "/TN", "Clauderon Agent"],
-    ]);
-    expect(calls[0]).toContain("ONLOGON");
-    expect(calls[0]).not.toContain("/RU");
+    await installService({ ...spec, home: `${process.cwd()}/.tmp-service-home` }, "win32", run, (f) => void launched.push(f));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.slice(0, 2)).toEqual(["reg", "add"]);
+    expect(calls[0]![2]).toMatch(/^HKCU\\/);
+    expect(launched).toHaveLength(1);
     calls.length = 0;
     await uninstallService("win32", run);
-    expect(calls.map((c) => c[1])).toEqual(["/End", "/Delete"]);
+    expect(calls.map((c) => c.slice(0, 2))).toEqual([["reg", "delete"]]);
   });
 });

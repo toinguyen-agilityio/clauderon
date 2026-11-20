@@ -205,7 +205,7 @@ async function runCommand(): Promise<void> {
     restart();
   };
 
-  /** Starts the updated file: launchd and systemd restart an Agent that exits non-zero; a Scheduled Task does not, so it starts its successor. */
+  /** Starts the updated file: launchd and systemd restart an Agent that exits non-zero; the Windows Run key does not, so it starts its successor. */
   const restart = () => {
     agent.stop();
     void lock.release().finally(() => {
@@ -220,12 +220,16 @@ async function runCommand(): Promise<void> {
   registerWorkspaceHandlers(agent, system, { home, log });
   nodes = registerNodeHandlers(agent, system, { log, knownSecrets: [paired.token], home });
 
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  // As a service nobody is at its terminal: Ctrl-C or a closing console (SIGINT,
+  // SIGHUP, SIGBREAK) from some other window must not stop it, only SIGTERM does.
+  const stopSignals = process.env.CLAUDERON_SERVICE ? (["SIGTERM"] as const) : (["SIGINT", "SIGTERM"] as const);
+  for (const signal of stopSignals) {
     process.on(signal, () => {
       agent.stop();
       void lock.release().finally(() => process.exit(0));
     });
   }
+  if (process.env.CLAUDERON_SERVICE) for (const signal of ["SIGINT", "SIGHUP", "SIGBREAK"] as const) process.on(signal, () => {});
 
   await agent.start();
   log(`Agent ${VERSION} running for ${paired.gatewayUrl}, home ${home}. Leave it running to take Runs (Ctrl-C stops it).`);

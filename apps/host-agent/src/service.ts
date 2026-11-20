@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -7,12 +7,14 @@ import { promisify } from "node:util";
 
 // Runs the Agent whenever the Member is logged in (ADR 0006), under their own
 // user, so Runs use their own Claude Code and gh logins: a launchd user agent
-// on macOS, a systemd user unit on Linux, a logon Scheduled Task on Windows.
+// on macOS, a systemd user unit on Linux, a per-user Run key on Windows (a
+// logon Scheduled Task needs administrator rights, which the Member lacks).
 // Never root or a system service.
 
 export const SERVICE_LABEL = "com.clauderon.agent";
 const SYSTEMD_UNIT = "clauderon-agent.service";
-const WINDOWS_TASK = "Clauderon Agent";
+const WINDOWS_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+const WINDOWS_RUN_NAME = "Clauderon Agent";
 
 /** How the service starts the Agent: this Node with these arguments, from this directory, with this home. */
 export type ServiceSpec = {
@@ -106,15 +108,33 @@ WantedBy=default.target
 `;
 }
 
+/** The launcher script the Run key starts, so the key's value stays short and quoting stays in one place. */
+export const windowsLauncherPath = (spec: Pick<ServiceSpec, "home">) => join(spec.home, "agent-service.cmd");
+
+/** A tiny script that runs the launcher with no window at all: a visible console would stop the Agent when closed. */
+export const windowsHiddenPath = (spec: Pick<ServiceSpec, "home">) => join(spec.home, "agent-service.vbs");
+
+export const windowsHidden = (spec: Pick<ServiceSpec, "home">) =>
+  `CreateObject("WScript.Shell").Run """${windowsLauncherPath(spec)}""", 0, False\r\n`;
+
 /**
- * A `cmd` line for the Scheduled Task: sets the home, then runs the Agent,
- * logging to a file. A Scheduled Task does not restart a stopped program, so
- * an updated Agent starts its successor itself (main.ts).
+ * The Run key's value: starts the launcher (below) hidden. The launcher sets
+ * the home, then runs the Agent, logging to a file. Nothing restarts a stopped
+ * Agent, so an updated Agent starts its successor itself (main.ts).
  */
-export function windowsTaskCommand(spec: ServiceSpec): string {
+export const windowsRunCommand = (spec: Pick<ServiceSpec, "home">) => `wscript.exe //B //Nologo "${windowsHiddenPath(spec)}"`;
+
+export function windowsLauncher(spec: ServiceSpec): string {
   const quote = (a: string) => `"${a}"`;
   const run = serviceArgs(spec).map(quote).join(" ");
-  return `cmd /c "set CLAUDERON_HOME=${spec.home}&& set CLAUDERON_SERVICE=1&& cd /d ${quote(spec.cwd)} && ${run} >> ${quote(logFile(spec))} 2>&1"`;
+  return [
+    "@echo off",
+    `set "CLAUDERON_HOME=${spec.home}"`,
+    "set CLAUDERON_SERVICE=1",
+    `cd /d ${quote(spec.cwd)}`,
+    `${run} >> ${quote(logFile(spec))} 2>&1`,
+    "",
+  ].join("\r\n");
 }
 
 export const launchdPath = () => join(homedir(), "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
@@ -125,13 +145,18 @@ const exec: Exec = async (file, args) => {
   await promisify(execFile)(file, [...args]);
 };
 
+/** Starts the hidden launcher now, detached. */
+const launchDetached = (file: string) => {
+  spawn("wscript.exe", ["//B", "//Nologo", file], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+};
+
 async function write(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);
 }
 
 /** Installs, or replaces, the service and starts it now. Returns where its log goes. */
-export async function installService(spec: ServiceSpec, platform: NodeJS.Platform = process.platform, run: Exec = exec): Promise<string> {
+export async function installService(spec: ServiceSpec, platform: NodeJS.Platform = process.platform, run: Exec = exec, launch = launchDetached): Promise<string> {
   await mkdir(spec.home, { recursive: true });
   if (platform === "darwin") {
     const path = launchdPath();
@@ -145,8 +170,10 @@ export async function installService(spec: ServiceSpec, platform: NodeJS.Platfor
     await run("systemctl", ["--user", "enable", "--now", SYSTEMD_UNIT]);
     await run("systemctl", ["--user", "restart", SYSTEMD_UNIT]);
   } else if (platform === "win32") {
-    await run("schtasks", ["/Create", "/F", "/SC", "ONLOGON", "/TN", WINDOWS_TASK, "/TR", windowsTaskCommand(spec)]);
-    await run("schtasks", ["/Run", "/TN", WINDOWS_TASK]);
+    await write(windowsLauncherPath(spec), windowsLauncher(spec));
+    await write(windowsHiddenPath(spec), windowsHidden(spec));
+    await run("reg", ["add", WINDOWS_RUN_KEY, "/v", WINDOWS_RUN_NAME, "/t", "REG_SZ", "/d", windowsRunCommand(spec), "/f"]);
+    launch(windowsHiddenPath(spec));
   } else {
     throw new Error(`no service support for ${platform}: run the Agent with start instead`);
   }
@@ -157,7 +184,7 @@ export async function installService(spec: ServiceSpec, platform: NodeJS.Platfor
 export async function serviceInstalled(platform: NodeJS.Platform = process.platform, run: Exec = exec): Promise<boolean | null> {
   if (platform === "darwin") return existsSync(launchdPath());
   if (platform === "linux") return existsSync(systemdPath());
-  if (platform === "win32") return run("schtasks", ["/Query", "/TN", WINDOWS_TASK]).then(
+  if (platform === "win32") return run("reg", ["query", WINDOWS_RUN_KEY, "/v", WINDOWS_RUN_NAME]).then(
     () => true,
     () => false,
   );
@@ -174,7 +201,6 @@ export async function uninstallService(platform: NodeJS.Platform = process.platf
     await rm(systemdPath(), { force: true });
     await run("systemctl", ["--user", "daemon-reload"]).catch(() => {});
   } else if (platform === "win32") {
-    await run("schtasks", ["/End", "/TN", WINDOWS_TASK]).catch(() => {});
-    await run("schtasks", ["/Delete", "/F", "/TN", WINDOWS_TASK]).catch(() => {});
+    await run("reg", ["delete", WINDOWS_RUN_KEY, "/v", WINDOWS_RUN_NAME, "/f"]).catch(() => {});
   }
 }
