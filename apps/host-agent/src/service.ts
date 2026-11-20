@@ -155,15 +155,27 @@ async function write(path: string, content: string): Promise<void> {
   await writeFile(path, content);
 }
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 /** Installs, or replaces, the service and starts it now. Returns where its log goes. */
-export async function installService(spec: ServiceSpec, platform: NodeJS.Platform = process.platform, run: Exec = exec, launch = launchDetached): Promise<string> {
+export async function installService(spec: ServiceSpec, platform: NodeJS.Platform = process.platform, run: Exec = exec, launch = launchDetached, pause = sleep): Promise<string> {
   await mkdir(spec.home, { recursive: true });
   if (platform === "darwin") {
     const path = launchdPath();
     const domain = `gui/${process.getuid?.() ?? 0}`;
     await run("launchctl", ["bootout", `${domain}/${SERVICE_LABEL}`]).catch(() => {});
     await write(path, launchdPlist(spec));
-    await run("launchctl", ["bootstrap", domain, path]);
+    // bootout returns before the replaced Agent has exited, and until it has,
+    // bootstrap fails with "5: Input/output error"; so retry for a few seconds.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await run("launchctl", ["bootstrap", domain, path]);
+        break;
+      } catch (error) {
+        if (attempt >= 10) throw error;
+        await pause(500);
+      }
+    }
   } else if (platform === "linux") {
     await write(systemdPath(), systemdUnit(spec));
     await run("systemctl", ["--user", "daemon-reload"]);
