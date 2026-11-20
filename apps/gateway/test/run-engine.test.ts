@@ -83,7 +83,7 @@ describe("Run engine", () => {
     expect(attempts[1]).toMatchObject({ inputTokens: 100, outputTokens: 20, claudeSessionId: "s1" });
 
     // The check for the newly connected Agent, the login check before the Run, then the workspace, then the Nodes in order.
-    expect(agent.received.map((e) => e.type)).toEqual(["machine.checkLogins", "machine.checkLogins", "workspace.prepare", "node.run", "node.run", "node.run"]);
+    expect(agent.received.map((e) => e.type)).toEqual(["machine.checkLogins", "machine.checkLogins", "workspace.prepare", "node.run", "node.run", "node.run", "workspace.cleanup"]);
     const [code, tests, pr] = agent.of("node.run");
     expect(code!.prompt).toContain("Use small commits.");
     expect(code!.prompt).toContain("## issue");
@@ -281,6 +281,88 @@ describe("Cancel (RUN-8, spec M3 §5)", () => {
     expect((await getRun(db, failing))!.state).toBe("cancelled");
     expect(await cancelRun(db, failing, member.email, clock.now())).toEqual({ ok: false, reason: "ended" });
     expect(await cancelRun(db, "00000000-0000-0000-0000-000000000000", member.email, clock.now())).toEqual({ ok: false, reason: "not-found" });
+  });
+});
+
+describe("Worktree cleanup (RUN-14, T4-7)", () => {
+  it("T4-7: a Succeeded Run sends workspace.cleanup once; the Agent's answer clears the worktree and it is not asked again", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush, gatewaySide, reconnect } = await setup();
+    succeedEverything(agent);
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now());
+    if (!start.ok) throw new Error("start failed");
+    await gateway.engine.schedule(machine.id);
+    await flush();
+
+    const run = (await getRun(db, start.runIds[0]!))!;
+    expect(run.state).toBe("succeeded");
+    expect(agent.of("workspace.cleanup")).toEqual([
+      { runId: run.id, worktreePath: `/workspace/runs/${run.id}`, owner: "acme", repo: "web", branch: run.branch },
+    ]);
+    expect(agent.received.at(-1)!.type).toBe("workspace.cleanup");
+
+    agent.send("workspace.cleaned", { runId: run.id });
+    await flush();
+    expect(await getRun(db, run.id)).toMatchObject({ state: "succeeded", worktreePath: null, branch: run.branch });
+
+    gatewaySide.cut();
+    await flush();
+    reconnect();
+    await flush();
+    expect(agent.of("workspace.cleanup")).toHaveLength(1);
+  });
+
+  it("T4-7: a cleanup the Agent never answered is sent again when it next connects", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush, gatewaySide, reconnect } = await setup();
+    succeedEverything(agent);
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now());
+    if (!start.ok) throw new Error("start failed");
+    await gateway.engine.schedule(machine.id);
+    await flush();
+    expect(agent.of("workspace.cleanup")).toHaveLength(1);
+
+    gatewaySide.cut();
+    await flush();
+    reconnect();
+    await flush();
+    expect(agent.of("workspace.cleanup")).toHaveLength(2);
+    expect(agent.of("workspace.cleanup")[1]).toEqual(agent.of("workspace.cleanup")[0]);
+  });
+
+  it("T4-7: a Cancelled Run sends workspace.cleanup; a Failed Run keeps its worktree, also across a reconnect", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush, gatewaySide, reconnect } = await setup(2, 2);
+    succeedEverything(agent);
+    const nodes: { attemptId: string }[] = [];
+    agent.respond("node.run", (run, a) => {
+      nodes.push(run);
+      if (nodes.length > 1) a.send("node.result", { attemptId: run.attemptId, exitCode: 1, error: "Command exited 1" });
+    });
+    const start = await startSampleBatch(db, member, machine.id, tickets.map((t) => t.id), clock.now());
+    if (!start.ok) throw new Error("start failed");
+    const [first, second] = start.runIds as [string, string];
+    await gateway.engine.schedule(machine.id);
+    await flush();
+    expect((await getRun(db, second))!.state).toBe("failed");
+    expect(agent.of("workspace.cleanup")).toEqual([]);
+
+    const cancelled = await cancelRun(db, first, member.email, clock.now());
+    if (!cancelled.ok) throw new Error("cancel failed");
+    await gateway.machines.command({ type: "run.cancel", machineId: machine.id, runId: first, attemptIds: cancelled.cancelledAttemptIds });
+    await flush();
+    expect(agent.of("workspace.cleanup").map((c) => c.runId)).toEqual([first]);
+
+    gatewaySide.cut();
+    await flush();
+    reconnect();
+    await flush();
+    expect(agent.of("workspace.cleanup").map((c) => c.runId)).toEqual([first, first]);
+    expect((await getRun(db, second))!.worktreePath).toBe(`/workspace/runs/${second}`);
+  });
+
+  it("T4-7: a Dry-run has no worktree and sends nothing", async () => {
+    const { gateway, agent, flush, machine } = await setup();
+    await gateway.engine.schedule(machine.id);
+    await flush();
+    expect(agent.of("workspace.cleanup")).toEqual([]);
   });
 });
 

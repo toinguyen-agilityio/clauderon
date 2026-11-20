@@ -47,6 +47,7 @@ export function createGateway(opts: GatewayOptions) {
   links.on("machine.doctor", (p, machineId) => machines.doctor(p, machineId));
   links.on("workspace.ready", (p) => engine.workspaceReady(p));
   links.on("workspace.failed", (p) => engine.workspaceFailed(p));
+  links.on("workspace.cleaned", (p) => engine.workspaceCleaned(p));
   links.on("node.log", (p) => engine.nodeLog(p));
   links.on("node.usage", (p) => engine.nodeUsage(p));
   links.on("node.result", (p) => engine.nodeResult(p));

@@ -1,5 +1,7 @@
 # M1 — Walking skeleton
 
+> **Pods to Machines (2026-11-20):** written for Pods (one Docker container per Member on a Pod Host). Pods and the Host Agent are replaced by each Member's own Machine and the Agent ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md), [ADR 0007](../adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md)). Read Pod as Machine, Pod Host as the Member's computer, Host Agent as Agent. Where this disagrees with the ADRs or the code, they win. M4 is already updated.
+
 > **Roadmap:** Day 2 (Pods and Tickets) and Day 3 (first real pull request) · **Check:** **A7**, a Pod reaches Pod Ready, Sync pulls real issues (Day 2); **A1** (Day 3).
 > **Depends on:** [M0](m0-foundations.md); prerequisites P1, P3 and P6 (company repo approval or a sandbox repository, the read-only GitHub token, a sandbox repository with a test command).
 

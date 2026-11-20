@@ -1,5 +1,7 @@
 # Clauderon v1 — seven-day roadmap
 
+> **Pods to Machines (2026-11-20):** written for Pods (one Docker container per Member on a Pod Host). Pods and the Host Agent are replaced by each Member's own Machine and the Agent ([ADR 0006](../adr/0006-each-member-runs-on-their-own-machine.md), [ADR 0007](../adr/0007-the-agent-ships-as-one-bundle-with-its-own-node.md)). Read Pod as Machine, Pod Host as the Member's computer, Host Agent as Agent. Where this disagrees with the ADRs or the code, they win. M4 is already updated.
+
 > **Status:** proposal · **Date:** 2026-11-16 · **Scope:** everything in [v1 requirements](../requirements/v1-requirements.md), milestones M0–M4 in seven working days.
 > **Assumption:** the team works with AI coding agents: people write the contracts, review every pull request and run the checks; agents write most of the code and tests.
 > **Visual roadmap:** [Clauderon v1 Roadmap](https://claude.ai/artifact/T4AJv1hxGDNFb9Ktea7GV9) (hosted as a Claude artifact; source in [clauderon-v1-roadmap.html](clauderon-v1-roadmap.html)).

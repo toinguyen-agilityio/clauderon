@@ -121,6 +121,14 @@ export async function runsOfMachine(db: Db, machineId: string, states: readonly 
     .where(and(eq(run.machineId, machineId), inArray(run.state, [...states])));
 }
 
+/** Ended Real Runs of a Machine that still have a worktree to remove (RUN-14): Succeeded or Cancelled only. */
+export async function runsToCleanUp(db: Db, machineId: string) {
+  return db
+    .select({ id: run.id })
+    .from(run)
+    .where(and(eq(run.machineId, machineId), eq(run.mode, "real"), inArray(run.state, ["succeeded", "cancelled"]), isNotNull(run.worktreePath)));
+}
+
 export async function updateRun(db: Db, runId: string, patch: Partial<Omit<Run, "id">>): Promise<void> {
   await db.update(run).set(patch).where(eq(run.id, runId));
 }

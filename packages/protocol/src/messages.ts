@@ -48,7 +48,10 @@ export const messageSchemas = {
   }),
   "workspace.ready": z.object({ runId: z.string(), worktreePath: z.string() }),
   "workspace.failed": z.object({ runId: z.string(), error: z.string() }),
-  "workspace.cleanup": z.object({ runId: z.string(), worktreePath: z.string() }),
+  /** A Run ended Succeeded or Cancelled (RUN-14): remove its worktree and local branch; the pushed branch stays on GitHub. */
+  "workspace.cleanup": z.object({ runId: z.string(), worktreePath: z.string(), owner: z.string(), repo: z.string(), branch: z.string() }),
+  /** The worktree and local branch are gone (or were already); until then the Gateway asks again on each connect. */
+  "workspace.cleaned": z.object({ runId: z.string() }),
   "node.run": z.object({
     attemptId: z.string(),
     runId: z.string(),

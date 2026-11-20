@@ -1,6 +1,6 @@
 # Updating tickets after a PR merge
 
-Applies right after `gh pr merge` succeeds (a hook reminds Claude). First confirm the PR really merged: `gh pr view <n> --json state,body,closingIssuesReferences`.
+PRs merge into `staging`, the default branch, so `Closes #N` closes the ticket on that merge. A release PR (`release/*` into `main`) closes nothing itself. Applies right after `gh pr merge` succeeds (a hook reminds Claude). First confirm the PR really merged: `gh pr view <n> --json state,body,closingIssuesReferences`.
 
 For each linked ticket (`closingIssuesReferences`, or `#N` in the PR body):
 
