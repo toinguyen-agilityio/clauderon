@@ -81,12 +81,29 @@ export function groupCounts(nodes: readonly Pick<LibraryNodeView, "kind">[]): { 
   return KIND_GROUPS.filter((g) => counts.has(g)).map((group) => ({ group, count: counts.get(group)! }));
 }
 
-/** The footer of a library card, e.g. "Human · Grill · in 2 Flows" or "Agent · in no Flow". */
-export function cardMeta(node: Pick<LibraryNodeView, "kind" | "usedBy">): string {
-  const group = kindGroupOf(node.kind);
-  const kind = group === "human" ? `${KIND_GROUP_LABEL.human} · ${node.kind[0]!.toUpperCase()}${node.kind.slice(1)}` : KIND_GROUP_LABEL[group];
-  const n = node.usedBy.length;
-  return `${kind} · ${n === 0 ? "in no Flow" : `in ${n} Flow${n === 1 ? "" : "s"}`}`;
+/** The Nodes under their Kind group, in the groups' fixed order; only groups that have any. */
+export function groupNodes<T extends Pick<LibraryNodeView, "kind">>(nodes: readonly T[]): { group: KindGroup; nodes: T[] }[] {
+  return KIND_GROUPS.map((group) => ({ group, nodes: nodes.filter((n) => kindGroupOf(n.kind) === group) })).filter((g) => g.nodes.length > 0);
+}
+
+/** How many Flows place a Node, for its card: "Used in 2 Flows", or "Not used in any Flow". */
+export function usageLabel(usedBy: readonly LibraryUse[]): string {
+  const n = usedBy.length;
+  return n === 0 ? "Not used in any Flow" : `Used in ${n} Flow${n === 1 ? "" : "s"}`;
+}
+
+/** A Node's Kind in words, e.g. "Agent" or "Human · Grill". */
+export function kindLabel(kind: NodeKind): string {
+  const group = kindGroupOf(kind);
+  return group === "human" ? `${KIND_GROUP_LABEL.human} · ${kind[0]!.toUpperCase()}${kind.slice(1)}` : KIND_GROUP_LABEL[group];
+}
+
+/**
+ * A port given another Output Type. Its name follows the type while it still is the old
+ * type's name (or empty), so the common case, a port named after its type, needs no typing.
+ */
+export function retypePort<P extends { name: string; type: OutputType }>(port: P, type: OutputType): P {
+  return { ...port, type, name: port.name.trim() === "" || port.name === port.type ? type : port.name };
 }
 
 /** Why Save is not available yet (the same rules the server applies), or null when the form can be saved. */

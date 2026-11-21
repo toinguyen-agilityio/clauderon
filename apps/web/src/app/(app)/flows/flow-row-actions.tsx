@@ -7,8 +7,8 @@ import { Icon } from "../../../components/icons";
 import { exportFlowAction, flowActionAction, type FlowFormState } from "./actions";
 
 /**
- * Edit, Clone, Export and Delete on one Flow, samples included (FLW-8, FLW-9), as icon buttons whose
- * name shows on hover. Delete asks in a dialog first; a Flow that an Active Run locks cannot be deleted,
+ * Clone, Export and Delete on one Flow, samples included (FLW-8, FLW-9), as quiet icon buttons whose
+ * name shows on hover; the row itself opens the Flow. Delete asks in a dialog first; a Flow that an Active Run locks cannot be deleted,
  * and says why.
  */
 export function FlowRowActions({ flowId, name, locked }: { flowId: string; name: string; locked: boolean }) {
@@ -37,23 +37,19 @@ export function FlowRowActions({ flowId, name, locked }: { flowId: string; name:
     if (state.error || state.notice) confirm.current?.close();
   }, [state]);
 
-  const open = locked ? "View" : "Edit";
   return (
     <div className="flow-actions">
       <form action={action} className="row" style={{ gap: 6 }}>
         <input type="hidden" name="flowId" value={flowId} />
-        <Link className="btn sm icon primary" href={`/flows/${flowId}`} aria-label={`${open} ${name}`} data-tip={open}>
-          {locked ? Icon.eye : Icon.pencil}
-        </Link>
-        <button type="submit" name="action" value="clone" className="btn sm icon" disabled={pending} aria-label={`Clone ${name}`} data-tip="Clone">
+        <button type="submit" name="action" value="clone" className="btn sm icon ghost" disabled={pending} aria-label={`Clone ${name}`} data-tip="Clone">
           {Icon.copy}
         </button>
-        <button type="button" className="btn sm icon" disabled={exporting} aria-label={`Export ${name}`} data-tip={exporting ? "Exporting…" : "Export"} onClick={() => void exportFlow()}>
+        <button type="button" className="btn sm icon ghost" disabled={exporting} aria-label={`Export ${name}`} data-tip={exporting ? "Exporting…" : "Export"} onClick={() => void exportFlow()}>
           {exporting ? Icon.spin : Icon.download}
         </button>
         <button
           type="button"
-          className="btn sm icon danger"
+          className="btn sm icon ghost danger-hover"
           disabled={pending || locked}
           aria-label={`Delete ${name}`}
           data-tip={locked ? "Locked by an Active Run" : "Delete"}

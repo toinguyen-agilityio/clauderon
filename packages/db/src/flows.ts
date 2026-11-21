@@ -86,6 +86,8 @@ export type FlowListRow = {
   isSample: boolean;
   clonedFromId: string | null;
   updatedByEmail: string;
+  /** The Member's name, when one signed in with that email has a name. */
+  updatedByName: string | null;
   updatedAt: Date;
   nodeCount: number;
 };
@@ -99,6 +101,7 @@ export async function listFlowRows(db: Db): Promise<FlowListRow[]> {
       isSample: flow.isSample,
       clonedFromId: flow.clonedFromId,
       updatedByEmail: flow.updatedByEmail,
+      updatedByName: sql<string | null>`(select member.name from member where member.email = "flow"."updated_by_email")`,
       updatedAt: flow.updatedAt,
       nodeCount: sql<number>`(select count(*)::int from flow_node where flow_node.flow_id = "flow"."id")`,
     })

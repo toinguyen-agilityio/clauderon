@@ -17,6 +17,7 @@ import {
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
 import { copyName } from "../app/(app)/flows/library/library-view";
+import { layerOf } from "../app/(app)/flows/[id]/flow-layout";
 
 // The Flows page (spec M2 §2, FLW-7 … FLW-9) as plain functions over the
 // database, so tests drive them directly and pages and actions stay thin.
@@ -38,9 +39,13 @@ export type FlowView = {
   isSample: boolean;
   nodeCount: number;
   problems: number;
-  /** The Nodes of the Flow in the order a Run executes them (canvas order if the Flow has a cycle). */
-  nodes: { name: string; kind: NodeKind }[];
+  /**
+   * The Nodes of the Flow in the order a Run executes them (canvas order if the Flow has a
+   * cycle), each with its step: Nodes on the same step can run side by side.
+   */
+  nodes: { name: string; kind: NodeKind; step: number }[];
   updatedByEmail: string;
+  updatedByName: string | null;
   updatedAt: Date;
   lock: FlowLock | null;
 };
@@ -56,6 +61,10 @@ export async function viewFlows(deps: AppDeps) {
   const libraryById = new Map(library.map((n) => [n.id, n]));
   for (const r of rows) {
     const graph = await loadFlow(deps.db, r.id);
+    const steps = layerOf(
+      graph.nodes.map((n) => n.id),
+      graph.edges.map((e) => ({ from: e.fromFlowNodeId, to: e.toFlowNodeId })),
+    );
     flows.push({
       id: r.id,
       name: r.name,
@@ -64,9 +73,10 @@ export async function viewFlows(deps: AppDeps) {
       problems: validateFlow(graph, library).length,
       nodes: executionOrder(graph).flatMap((n) => {
         const lib = libraryById.get(n.nodeId);
-        return lib ? [{ name: lib.name, kind: lib.kind }] : [];
+        return lib ? [{ name: lib.name, kind: lib.kind, step: steps.get(n.id) ?? 0 }] : [];
       }),
       updatedByEmail: r.updatedByEmail,
+      updatedByName: r.updatedByName,
       updatedAt: r.updatedAt,
       lock: locks.get(r.id) ?? null,
     });

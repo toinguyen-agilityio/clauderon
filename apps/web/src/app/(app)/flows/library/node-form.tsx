@@ -1,11 +1,13 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { CREATABLE_KINDS, NODE_KINDS, OUTPUT_TYPES, type NodeInput, type NodeOutput } from "@clauderon/core";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { CREATABLE_KINDS, OUTPUT_TYPES, type NodeInput, type NodeOutput, type OutputType } from "@clauderon/core";
 import { Icon } from "../../../../components/icons";
+import { outputColor } from "../../../../components/state-pill";
+import { kindIcon } from "../[id]/flow-icons";
+import { KIND_LABEL, NodeView } from "../[id]/flow-node";
 import { deleteNodeAction, saveNodeAction } from "./actions";
-import { INSTRUCTIONS_MAX, KIND_HELP, TYPE_HELP, deleteBlocker, sameValue, saveBlocker, saveOutcome, type LibraryUse, type NodeFormValue } from "./library-view";
+import { INSTRUCTIONS_MAX, KIND_HELP, TYPE_HELP, deleteBlocker, retypePort, sameValue, saveBlocker, saveOutcome, type LibraryUse, type NodeFormValue } from "./library-view";
 
 export type { NodeFormValue } from "./library-view";
 
@@ -13,7 +15,12 @@ export const EMPTY_NODE: NodeFormValue = { id: null, name: "", kind: "agent", in
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** Create or edit a library Node (FLW-1, FLW-9), samples included. */
+/**
+ * Create or edit a library Node (FLW-1, FLW-9), samples included: its name, its Kind (four
+ * choices, each saying what it does), its instructions or command, and its ports, each led
+ * by its Output Type. A preview shows the Node as it will look on the canvas, and the footer
+ * says how many Flows a save changes.
+ */
 export function NodeForm({
   initial,
   readOnly = false,
@@ -104,34 +111,36 @@ export function NodeForm({
         {rows.length === 0 ? (
           <p className="faint small nf-ports-empty">{empty}</p>
         ) : (
-          <div className="nf-ptable" role="table" aria-label={title}>
-            <div className="nf-prow nf-phead" role="row">
-              <span role="columnheader">Name</span>
-              <span role="columnheader">Type</span>
-              <span role="columnheader">{flagLabel}</span>
-              <span aria-hidden="true" />
-            </div>
+          <div className="nf-plist">
             {rows.map((p, i) => (
-              <div key={i} className="nf-prow" role="row">
-                <input className="input" aria-label={`${one} ${i + 1} name`} placeholder="name" value={p.name} readOnly={readOnly} onChange={(e) => update(i, { name: e.target.value })} />
-                <select className="input" aria-label={`${one} ${i + 1} type`} title={TYPE_HELP[p.type]} value={p.type} disabled={readOnly} onChange={(e) => update(i, { type: e.target.value as NodeInput["type"] })}>
-                  {OUTPUT_TYPES.map((t) => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </select>
-                <span className="nf-flag">
-                  <input
-                    type="checkbox"
-                    aria-label={`${one} ${i + 1} ${flagLabel.toLowerCase()}`}
-                    checked={flagOf(p)}
-                    disabled={readOnly}
-                    onChange={(e) => update(i, which === "inputs" ? { required: e.target.checked } : { optional: e.target.checked })}
-                  />
+              <div key={i} className="nf-prow" style={{ "--c": outputColor(p.type) } as CSSProperties}>
+                <span className="nf-type">
+                  <i aria-hidden="true" />
+                  <select aria-label={`${one} ${i + 1} type`} value={p.type} disabled={readOnly} onChange={(e) => update(i, retypePort(p, e.target.value as OutputType))}>
+                    {OUTPUT_TYPES.map((t) => (
+                      <option key={t}>{t}</option>
+                    ))}
+                  </select>
                 </span>
+                <input className="input mono" aria-label={`${one} ${i + 1} name`} placeholder={p.type} value={p.name} readOnly={readOnly} onChange={(e) => update(i, { name: e.target.value })} />
+                <label className="nf-flag">
+                  <span className="fe-switch">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-label={`${one} ${i + 1} ${flagLabel.toLowerCase()}`}
+                      checked={flagOf(p)}
+                      disabled={readOnly}
+                      onChange={(e) => update(i, which === "inputs" ? { required: e.target.checked } : { optional: e.target.checked })}
+                    />
+                    <span aria-hidden="true" />
+                  </span>
+                  {flagLabel}
+                </label>
                 {!readOnly ? (
                   <button
                     type="button"
-                    className="btn ghost sm icon danger"
+                    className="btn ghost sm icon danger-hover"
                     aria-label={`Remove ${one} ${i + 1}`}
                     data-tip="Remove"
                     onClick={() => set(which === "inputs" ? { inputs: value.inputs.filter((_, j) => j !== i) } : { outputs: value.outputs.filter((_, j) => j !== i) })}
@@ -141,6 +150,7 @@ export function NodeForm({
                 ) : (
                   <span />
                 )}
+                <span className="nf-what">{TYPE_HELP[p.type]}</span>
               </div>
             ))}
           </div>
@@ -149,61 +159,57 @@ export function NodeForm({
     );
   };
 
+  // The Node as the canvas will draw it: a port with no name yet shows under its type.
+  const preview = {
+    id: value.id ?? "new",
+    name: value.name.trim() || "New Node",
+    kind: value.kind,
+    inputs: value.inputs.map((p) => ({ ...p, name: p.name.trim() || p.type })),
+    outputs: value.outputs.map((p) => ({ ...p, name: p.name.trim() || p.type })),
+  };
+
   return (
     <div className="nf" data-testid={value.id ? "node-edit" : "node-new"}>
       {readOnly && <div className="banner info">This Node is read-only.</div>}
-      {!isNew && usedBy.length > 0 && (
-        <div className="nf-used">
-          <span className="nf-used-label">Used in</span>
-          <span className="nf-used-list">
-            {usedBy.map((u) => (
-              <Link key={u.flowId} className="nf-chip" href={`/flows/${u.flowId}`}>
-                {u.name}
-                {u.locked && <span className="tag dry">locked</span>}
-              </Link>
-            ))}
-          </span>
-          {!readOnly && <span className="nf-used-note">Saving changes {usedBy.length === 1 ? "this Flow" : `all ${plural(usedBy.length, "Flow")}`}.</span>}
-        </div>
-      )}
-
       <div className="nf-grid">
         <div className="nf-col">
-          <div className="nf-namekind">
-            <div className="field">
-              <label htmlFor={`name-${value.id ?? "new"}`}>Name</label>
-              <input
-                id={`name-${value.id ?? "new"}`}
-                className="input"
-                aria-label="Node name"
-                placeholder="e.g. Write release notes"
-                value={value.name}
-                readOnly={readOnly}
-                maxLength={120}
-                onChange={(e) => set({ name: e.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor={`kind-${value.id ?? "new"}`}>Kind</label>
-              <select
-                id={`kind-${value.id ?? "new"}`}
-                className="input"
-                aria-label="Kind"
-                value={value.kind}
-                disabled={readOnly || value.kind === "ticket"}
-                onChange={(e) => set({ kind: e.target.value as NodeFormValue["kind"] })}
-              >
-                {(readOnly ? NODE_KINDS : CREATABLE_KINDS).map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="field">
+            <label htmlFor={`name-${value.id ?? "new"}`}>Name</label>
+            <input
+              id={`name-${value.id ?? "new"}`}
+              className="input"
+              aria-label="Node name"
+              placeholder="e.g. Write release notes"
+              value={value.name}
+              readOnly={readOnly}
+              maxLength={120}
+              onChange={(e) => set({ name: e.target.value })}
+            />
           </div>
-          <p className="hint nf-kindhelp">
-            <span className={`tag k-${value.kind}`}>{value.kind}</span> {KIND_HELP[value.kind]}
-          </p>
+          <fieldset className="field nf-kinds-field">
+            <legend>Kind</legend>
+            {value.kind === "ticket" ? (
+              <p className="nf-kind-fixed">
+                <span className="nf-kind-ic k-ticket" aria-hidden="true">
+                  {kindIcon("ticket")}
+                </span>
+                Ticket, built in: it cannot change Kind.
+              </p>
+            ) : (
+              <div className="nf-kinds">
+                {CREATABLE_KINDS.map((k) => (
+                  <label key={k} className={`nf-kind k-${k}`}>
+                    <input type="radio" name={`kind-${value.id ?? "new"}`} value={k} checked={value.kind === k} disabled={readOnly} onChange={() => set({ kind: k })} />
+                    <span className="nf-kind-ic" aria-hidden="true">
+                      {kindIcon(k)}
+                    </span>
+                    {KIND_LABEL[k] ?? k}
+                  </label>
+                ))}
+              </div>
+            )}
+            <span className="hint">{KIND_HELP[value.kind]}</span>
+          </fieldset>
 
           {value.kind === "command" ? (
             <div className="field">
@@ -250,7 +256,7 @@ export function NodeForm({
             "Required",
             (p) => (p as NodeInput).required,
             updateInput,
-            () => set({ inputs: [...value.inputs, { name: "", type: "issue", required: true }] }),
+            () => set({ inputs: [...value.inputs, { name: "issue", type: "issue", required: true }] }),
             readOnly || value.kind === "ticket" ? "No Inputs. This Node starts a Flow." : "No Inputs yet.",
           )}
           {ports(
@@ -259,31 +265,27 @@ export function NodeForm({
             "Optional",
             (p) => (p as NodeOutput).optional,
             updateOutput,
-            () => set({ outputs: [...value.outputs, { name: "", type: "summary", optional: false }] }),
+            () => set({ outputs: [...value.outputs, { name: "summary", type: "summary", optional: false }] }),
             "No Outputs yet.",
           )}
 
-          <details className="nf-help">
-            <summary className="small">What do Kinds and Output Types mean?</summary>
-            <h4 className="nf-dl-h">Kinds</h4>
-            <dl>
-              {NODE_KINDS.map((k) => (
-                <div key={k} className="nf-dl-row">
-                  <dt className="mono">{k}</dt>
-                  <dd>{KIND_HELP[k]}</dd>
-                </div>
-              ))}
-            </dl>
-            <h4 className="nf-dl-h">Output Types</h4>
-            <dl>
-              {OUTPUT_TYPES.map((t) => (
-                <div key={t} className="nf-dl-row">
-                  <dt className="mono">{t}</dt>
-                  <dd>{TYPE_HELP[t]}</dd>
-                </div>
-              ))}
-            </dl>
-          </details>
+          <section className="nf-preview" aria-label="On the canvas">
+            <span className="nf-preview-cap">On the canvas</span>
+            <NodeView
+              id="preview"
+              lib={preview}
+              placement={{ id: "preview", nodeId: preview.id, x: 0, y: 0, label: null, extraInstructions: "", enabledOptionalOutputs: preview.outputs.filter((o) => o.optional).map((o) => o.name) }}
+              selected={false}
+              focused={false}
+              readOnly
+              problems={[]}
+              wire={null}
+              renaming={false}
+              onRename={() => {}}
+              onAction={() => {}}
+              onAdd={() => {}}
+            />
+          </section>
         </div>
       </div>
 
@@ -303,21 +305,21 @@ export function NodeForm({
 
       <div className="nf-actions">
         {!readOnly && !isNew && (
-          <span className={cantDelete ? "tip-start tip-wide" : undefined} data-tip={cantDelete ?? undefined}>
+          <>
             <button type="button" className="btn ghost danger" disabled={pending || !!cantDelete || confirmDelete} aria-describedby={cantDelete ? `del-why-${value.id}` : undefined} onClick={() => setConfirmDelete(true)}>
               {Icon.trash} Delete
             </button>
             {cantDelete && (
-              <span id={`del-why-${value.id}`} className="sr-only">
-                {cantDelete}
+              <span id={`del-why-${value.id}`} className="nf-why">
+                {usedBy.length === 1 ? "Take it out of the Flow that uses it first." : `Take it out of the ${plural(usedBy.length, "Flow")} that use it first.`}
               </span>
             )}
-          </span>
+          </>
         )}
         <span className={`nf-status ${status?.kind ?? ""}`} role={message?.kind === "error" ? "alert" : "status"}>
           {status?.text}
         </span>
-        {dirty && !readOnly && <span className="nf-dirty">Unsaved changes</span>}
+        {dirty && !readOnly && <span className="nf-dirty">{!isNew && usedBy.length > 0 ? `Saving updates ${usedBy.length === 1 ? "1 Flow" : plural(usedBy.length, "Flow")}` : "Unsaved changes"}</span>}
         {onClose && (
           <button type="button" className="btn" disabled={pending} onClick={onClose}>
             {isNew && !readOnly ? "Cancel" : "Close"}

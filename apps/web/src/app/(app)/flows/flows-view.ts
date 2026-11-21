@@ -11,8 +11,9 @@ export type FlowRowView = {
   isSample: boolean;
   nodeCount: number;
   problems: number;
-  nodes: { name: string; kind: NodeKind }[];
-  /** Null for a sample nobody has changed since the seed. */
+  /** In run order; `step` groups the Nodes that can run side by side. */
+  nodes: { name: string; kind: NodeKind; step: number }[];
+  /** The Member's name, or their email when they have none. Null for a sample nobody has changed since the seed. */
   updatedBy: string | null;
   /** "5 h ago", worked out on the server. */
   updatedLabel: string;
@@ -49,9 +50,11 @@ export function groupFlows<T extends Pick<FlowRowView, "isSample">>(flows: reado
   return { samples: flows.filter((f) => f.isSample), mine: flows.filter((f) => !f.isSample) };
 }
 
-/** The first Nodes of a Flow to draw in a row, and how many were left out. */
-export function pipelinePreview<T>(nodes: readonly T[], max = 6): { shown: T[]; hidden: T[] } {
-  return { shown: nodes.slice(0, max), hidden: nodes.slice(max) };
+/** A Flow's Nodes grouped by step, in step order: each group can run side by side. */
+export function flowSteps<T extends { step: number }>(nodes: readonly T[]): T[][] {
+  const steps: T[][] = [];
+  for (const n of nodes) (steps[n.step] ??= []).push(n);
+  return steps.filter((s) => s !== undefined);
 }
 
 export const problemsLabel = (n: number) => `${n} problem${n === 1 ? "" : "s"}`;

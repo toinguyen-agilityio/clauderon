@@ -24,7 +24,7 @@ export default async function FlowsPage() {
     problems: f.problems,
     nodes: f.nodes,
     // A sample nobody has changed shows no author.
-    updatedBy: f.updatedByEmail === SEEDED_BY ? null : f.updatedByEmail,
+    updatedBy: f.updatedByEmail === SEEDED_BY ? null : (f.updatedByName ?? f.updatedByEmail),
     updatedLabel: ago(f.updatedAt, now),
     updatedTitle: formatTime(f.updatedAt),
     lock: f.lock ? { runId: f.lock.runId, state: f.lock.state } : null,

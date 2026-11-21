@@ -106,15 +106,17 @@ type SamplePlacement = { key: string; node: string; x: number; y: number; enable
 type SampleEdge = [from: string, output: string, to: string, input: string];
 type SampleFlow = { slug: string; name: string; nodes: SamplePlacement[]; edges: SampleEdge[] };
 
+// Placed left to right, as the editor's Tidy up lays them out: Outputs sit on a Node's
+// right side and inputs on its left, so wires then run forward instead of looping.
 export const sampleFlows: SampleFlow[] = [
   {
     slug: "basic-ticket-delivery",
     name: "Basic ticket delivery",
     nodes: [
-      { key: "ticket", node: "ticket", x: 0, y: 0 },
-      { key: "code", node: "code-a-change", x: 0, y: 160, enabledOptionalOutputs: ["summary"] },
-      { key: "tests", node: "run-tests", x: 0, y: 320 },
-      { key: "pr", node: "open-a-pull-request", x: 0, y: 480, enabledOptionalOutputs: ["pull-request"] },
+      { key: "ticket", node: "ticket", x: 0, y: 40 },
+      { key: "code", node: "code-a-change", x: 216, y: 0, enabledOptionalOutputs: ["summary"] },
+      { key: "tests", node: "run-tests", x: 520, y: 0 },
+      { key: "pr", node: "open-a-pull-request", x: 824, y: 0, enabledOptionalOutputs: ["pull-request"] },
     ],
     edges: [
       ["ticket", "issue", "code", "issue"],
@@ -128,14 +130,14 @@ export const sampleFlows: SampleFlow[] = [
     slug: "plan-and-deliver",
     name: "Plan and deliver",
     nodes: [
-      { key: "ticket", node: "ticket", x: 0, y: 0 },
-      { key: "grill", node: "grill-a-plan", x: 0, y: 160 },
-      { key: "approvePlan", node: "approve-a-plan", x: 0, y: 320 },
-      { key: "code", node: "code-a-change", x: 0, y: 480, enabledOptionalOutputs: ["summary"] },
-      { key: "tests", node: "run-tests", x: -160, y: 640 },
-      { key: "shots", node: "capture-screenshots", x: 160, y: 640 },
-      { key: "pr", node: "open-a-pull-request", x: 0, y: 800, enabledOptionalOutputs: ["pull-request"] },
-      { key: "approvePr", node: "approve-the-pull-request", x: 0, y: 960 },
+      { key: "ticket", node: "ticket", x: 0, y: 136 },
+      { key: "grill", node: "grill-a-plan", x: 216, y: 112 },
+      { key: "approvePlan", node: "approve-a-plan", x: 520, y: 112 },
+      { key: "code", node: "code-a-change", x: 824, y: 104, enabledOptionalOutputs: ["summary"] },
+      { key: "tests", node: "run-tests", x: 1128, y: 0 },
+      { key: "shots", node: "capture-screenshots", x: 1128, y: 208 },
+      { key: "pr", node: "open-a-pull-request", x: 1432, y: 80, enabledOptionalOutputs: ["pull-request"] },
+      { key: "approvePr", node: "approve-the-pull-request", x: 1736, y: 120 },
     ],
     edges: [
       ["ticket", "issue", "grill", "issue"],

@@ -61,6 +61,14 @@ describe("Flows page (spec M2 §2)", () => {
     expect(samples.every((f) => f.nodeCount > 0)).toBe(true);
     // each Flow lists its Nodes for the row preview, the entry Ticket first
     expect(samples.every((f) => f.nodes.length === f.nodeCount && f.nodes[0]?.kind === "ticket")).toBe(true);
+    // with its step: the Nodes that run side by side share one
+    const plan = samples.find((f) => f.name === "Plan and deliver")!;
+    const stepOf = (name: string) => plan.nodes.find((n) => n.name === name)?.step;
+    expect(stepOf("Ticket")).toBe(0);
+    expect(stepOf("Run tests")).toBe(stepOf("Capture screenshots"));
+    expect(stepOf("Open a pull request")).toBe(stepOf("Run tests")! + 1);
+    // the editing Member's name when they have one, else null
+    expect(samples.every((f) => f.updatedByName === null)).toBe(true);
   });
 
   it("T2-7: clone copies the placements and edges into an editable Flow named '<name> (copy)'; a sample can be deleted too", async () => {

@@ -16,24 +16,10 @@ export const LAYOUT_GAP_Y = 40;
 export function layeredLayout(nodes: readonly LayoutNode[], edges: readonly LayoutEdge[]): Map<string, { x: number; y: number }> {
   const result = new Map<string, { x: number; y: number }>();
   if (nodes.length === 0) return result;
-  const ids = new Set(nodes.map((n) => n.id));
-  const incoming = new Map(nodes.map((n) => [n.id, [] as string[]]));
-  for (const e of edges) if (ids.has(e.from) && ids.has(e.to) && e.from !== e.to) incoming.get(e.to)!.push(e.from);
-
-  // Column = length of the longest path from a Node with no incoming edges.
-  const column = new Map<string, number>();
-  const visiting = new Set<string>();
-  const columnOf = (id: string): number => {
-    const known = column.get(id);
-    if (known !== undefined) return known;
-    if (visiting.has(id)) return 0;
-    visiting.add(id);
-    const c = Math.max(-1, ...incoming.get(id)!.map(columnOf)) + 1;
-    visiting.delete(id);
-    column.set(id, c);
-    return c;
-  };
-  for (const n of nodes) columnOf(n.id);
+  const column = layerOf(
+    nodes.map((n) => n.id),
+    edges,
+  );
 
   const columns: LayoutNode[][] = [];
   for (const n of nodes) (columns[column.get(n.id)!] ??= []).push(n);
@@ -56,4 +42,42 @@ export function layeredLayout(nodes: readonly LayoutNode[], edges: readonly Layo
     x += Math.max(...col.map((n) => n.w)) + LAYOUT_GAP_X;
   }
   return result;
+}
+
+/**
+ * The step of each Node: the length of the longest path that reaches it from a Node
+ * with no incoming edges. Nodes on the same step can run side by side. Edges in a cycle
+ * are ignored, as in the layout.
+ */
+export function layerOf(ids: readonly string[], edges: readonly LayoutEdge[]): Map<string, number> {
+  const known = new Set(ids);
+  const incoming = new Map(ids.map((id) => [id, [] as string[]]));
+  for (const e of edges) if (known.has(e.from) && known.has(e.to) && e.from !== e.to) incoming.get(e.to)!.push(e.from);
+  const column = new Map<string, number>();
+  const visiting = new Set<string>();
+  const columnOf = (id: string): number => {
+    const seen = column.get(id);
+    if (seen !== undefined) return seen;
+    if (visiting.has(id)) return 0;
+    visiting.add(id);
+    const c = Math.max(-1, ...incoming.get(id)!.map(columnOf)) + 1;
+    visiting.delete(id);
+    column.set(id, c);
+    return c;
+  };
+  for (const id of ids) columnOf(id);
+  return column;
+}
+
+/**
+ * Whether most edges run backwards (into a Node that is not to the right of where they
+ * start), so wires loop around the cards and Tidy up would help. Outputs sit on a Node's
+ * right side and inputs on its left, so a forward edge goes to a Node further right.
+ */
+export function wiresMostlyBackward(nodes: readonly Pick<LayoutNode, "id" | "x">[], edges: readonly LayoutEdge[]): boolean {
+  const x = new Map(nodes.map((n) => [n.id, n.x]));
+  const counted = edges.filter((e) => x.has(e.from) && x.has(e.to) && e.from !== e.to);
+  if (counted.length < 2) return false;
+  const backward = counted.filter((e) => x.get(e.to)! <= x.get(e.from)!).length;
+  return backward * 2 > counted.length;
 }

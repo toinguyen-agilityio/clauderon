@@ -60,6 +60,8 @@ export type CanvasEdge = {
   missing?: { from?: string; to?: string };
   /** Briefly highlighted, after picking its problem from the list. */
   flash?: boolean;
+  /** While one Output Type is traced from the legend: this edge carries it, or fades. */
+  trace?: "traced" | "faded";
 };
 export type Selection = { nodes: ReadonlySet<string>; edges: ReadonlySet<string> };
 export type CanvasConnection = { source: string; sourceHandle: string; target: string; targetHandle: string };
@@ -600,7 +602,7 @@ export function FlowCanvas(props: Props) {
               const d = roundedPath(ends.pts);
               const kind = edge.reason ? "err" : edge.selected ? "sel" : edge.state === "active" ? "active" : edge.state === "done" ? "done" : "base";
               return (
-                <g key={edge.id} className={`fc-edge-g ${kind} ${edge.flash ? "flash" : ""}`} data-testid={edge.reason ? "edge-error" : "edge"} data-edge={edge.id}>
+                <g key={edge.id} className={`fc-edge-g ${kind} ${edge.flash ? "flash" : ""} ${edge.trace ?? ""}`} data-testid={edge.reason ? "edge-error" : "edge"} data-edge={edge.id}>
                   {edge.reason && <title>{edge.reason}</title>}
                   <path d={d} className="fc-edge-hit" onPointerDown={(event) => onEdgeDown(event, edge)} />
                   <path d={d} className={`fc-edge ${kind}`} style={edge.color ? ({ "--c": edge.color } as CSSProperties) : undefined} markerEnd={`url(#${uid}-arrow-${kind})`} />

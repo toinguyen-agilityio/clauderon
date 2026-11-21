@@ -16,8 +16,8 @@ const STATE_LABEL: Record<PreviewNodeState, string> = { queued: "Queued", runnin
 /**
  * The details of the selected Node (spec M2 §3, FLW-6), floating over the canvas: a
  * label for this placement, extra instructions that are added to its prompt in this
- * Flow, a switch per optional Output, its ports, and what the last Test run made up for
- * it. Turning off an Output that has an edge is a problem the badge reports; it is not
+ * Flow, a switch per optional Output, its ports with the Nodes on their other end, and
+ * what the last Test run made up for it. Turning off an Output that has an edge is a problem the badge reports; it is not
  * blocked here.
  */
 export function NodePanel({
@@ -25,6 +25,7 @@ export function NodePanel({
   lib,
   readOnly,
   usedOutputs,
+  links,
   problems,
   runState,
   testOutputs,
@@ -36,6 +37,8 @@ export function NodePanel({
   readOnly: boolean;
   /** Names of this Node's Outputs that have an edge. */
   usedOutputs: ReadonlySet<string>;
+  /** The Nodes on the other end of each port: who feeds each input, who takes each Output. */
+  links: { from: ReadonlyMap<string, readonly string[]>; to: ReadonlyMap<string, readonly string[]> };
   /** Problems this Node is part of, each with what to do about it. */
   problems: readonly ReactNode[];
   runState?: PreviewNodeState;
@@ -98,44 +101,74 @@ export function NodePanel({
         </label>
 
         <section className="fe-ports" aria-label="Inputs">
-          <h3 className="eyebrow">Inputs</h3>
+          <h3 className="fe-ports-h">Inputs</h3>
           {lib.inputs.length === 0 && <span className="faint small">None: this Node starts the Flow.</span>}
-          {lib.inputs.map((i) => (
-            <div key={i.name} className="fe-port">
-              <i style={{ "--c": outputColor(i.type) } as CSSProperties} />
-              <span className="mono">{i.name}</span>
-              <span className="faint small">{i.type}</span>
-              {i.required && <span className="fe-port-tag">required</span>}
-            </div>
-          ))}
+          {lib.inputs.map((i) => {
+            const from = links.from.get(i.name) ?? [];
+            return (
+              <div key={i.name} className="fe-port">
+                <div className="fe-port-row">
+                  <i style={{ "--c": outputColor(i.type) } as CSSProperties} />
+                  <span className="mono">{i.name}</span>
+                  {i.name !== i.type && <span className="faint small">{i.type}</span>}
+                  <span className="fe-port-tag">{i.required ? "required" : "optional"}</span>
+                </div>
+                <div className="fe-port-links">
+                  {from.length > 0 ? (
+                    from.map((n, k) => (
+                      <span key={k} className="fe-link">
+                        from {n}
+                      </span>
+                    ))
+                  ) : (
+                    <span className={i.required ? "fe-link warn" : "faint small"}>Not connected</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </section>
 
         <section className="fe-ports" aria-label="Outputs">
-          <h3 className="eyebrow">Outputs</h3>
+          <h3 className="fe-ports-h">Outputs</h3>
           {lib.outputs.length === 0 && <span className="faint small">None: this Node ends the Flow.</span>}
           {lib.outputs.map((o) => {
             const on = !o.optional || placement.enabledOptionalOutputs.includes(o.name);
+            const to = links.to.get(o.name) ?? [];
             return (
               <div key={o.name} className={`fe-port ${on ? "" : "off"}`}>
-                <i style={{ "--c": outputColor(o.type) } as CSSProperties} />
-                <span className="mono">{o.name}</span>
-                <span className="faint small">{o.type}</span>
-                {o.optional && (
-                  <label className="fe-switch">
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      aria-label={`Optional Output ${o.name}`}
-                      checked={on}
-                      disabled={readOnly}
-                      onChange={() =>
-                        onChange({ enabledOptionalOutputs: on ? placement.enabledOptionalOutputs.filter((n) => n !== o.name) : [...placement.enabledOptionalOutputs, o.name] })
-                      }
-                    />
-                    <span aria-hidden="true" />
-                  </label>
-                )}
-                {o.optional && !on && usedOutputs.has(o.name) && <span className="err-text small fe-port-note">has an edge: a problem</span>}
+                <div className="fe-port-row">
+                  <i style={{ "--c": outputColor(o.type) } as CSSProperties} />
+                  <span className="mono">{o.name}</span>
+                  {o.name !== o.type && <span className="faint small">{o.type}</span>}
+                  {o.optional && (
+                    <label className="fe-switch">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label={`Optional Output ${o.name}`}
+                        checked={on}
+                        disabled={readOnly}
+                        onChange={() =>
+                          onChange({ enabledOptionalOutputs: on ? placement.enabledOptionalOutputs.filter((n) => n !== o.name) : [...placement.enabledOptionalOutputs, o.name] })
+                        }
+                      />
+                      <span aria-hidden="true" />
+                    </label>
+                  )}
+                </div>
+                <div className="fe-port-links">
+                  {to.length > 0 ? (
+                    to.map((n, k) => (
+                      <span key={k} className="fe-link">
+                        to {n}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="faint small">{on ? "Not used by another Node" : "Off"}</span>
+                  )}
+                </div>
+                {o.optional && !on && usedOutputs.has(o.name) && <span className="err-text small">Off but has an edge: a problem.</span>}
               </div>
             );
           })}
@@ -144,7 +177,7 @@ export function NodePanel({
 
         {runState && (
           <section className="fe-ports" aria-label="Test run">
-            <h3 className="eyebrow">Test run</h3>
+            <h3 className="fe-ports-h">Test run</h3>
             <span className={`fe-run-state ${runState}`}>{STATE_LABEL[runState]}</span>
             {testOutputs && testOutputs.length > 0 && (
               <div className="stack" style={{ gap: 8 }}>
