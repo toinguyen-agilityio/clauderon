@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LeaveDialog } from "../src/app/(app)/flows/[id]/leave-dialog";
-import { LAYOUT_GAP_X, layeredLayout } from "../src/app/(app)/flows/[id]/flow-layout";
+import { LAYOUT_GAP_X, layerOf, layeredLayout, wiresMostlyBackward } from "../src/app/(app)/flows/[id]/flow-layout";
 import { describeProblems } from "../src/app/(app)/flows/[id]/problem-hints";
 import { hasUnsavedChanges, leavesPage } from "../src/app/(app)/flows/[id]/unsaved";
 import { advanceTestRun, edgeStates, nodeStates, startTestRun, type TestRun } from "../src/app/(app)/flows/[id]/test-run";
@@ -11,6 +11,28 @@ const node = (id: string, x: number, y: number) => ({ id, nodeId: id, x, y, enab
 const edge = (id: string, from: string, to: string) => ({ id, fromFlowNodeId: from, fromOutput: "o", toFlowNodeId: to, toInput: "i" });
 
 describe("tidy up layout", () => {
+  it("puts each Node on the step of the longest path that reaches it", () => {
+    const steps = layerOf(["t", "c", "rt", "cs", "pr"], [
+      { from: "t", to: "c" },
+      { from: "c", to: "rt" },
+      { from: "c", to: "cs" },
+      { from: "c", to: "pr" },
+      { from: "rt", to: "pr" },
+    ]);
+    expect(Object.fromEntries(steps)).toEqual({ t: 0, c: 1, rt: 2, cs: 2, pr: 3 });
+  });
+
+  it("says when most wires run backwards, as in a Flow stacked top to bottom", () => {
+    const edges = [
+      { from: "a", to: "b" },
+      { from: "b", to: "c" },
+    ];
+    expect(wiresMostlyBackward([{ id: "a", x: 0 }, { id: "b", x: 0 }, { id: "c", x: 0 }], edges)).toBe(true);
+    expect(wiresMostlyBackward([{ id: "a", x: 0 }, { id: "b", x: 300 }, { id: "c", x: 600 }], edges)).toBe(false);
+    // one wire is not enough to say
+    expect(wiresMostlyBackward([{ id: "a", x: 0 }, { id: "b", x: 0 }], edges.slice(0, 1))).toBe(false);
+  });
+
   it("puts each Node one column right of the Nodes it depends on", () => {
     const at = layeredLayout(
       [

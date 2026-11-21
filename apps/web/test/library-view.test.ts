@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardMeta, copyName, deleteBlocker, filterNodes, groupCounts, kindGroupOf, saveBlocker, saveOutcome, sameValue, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
+import { copyName, deleteBlocker, filterNodes, groupCounts, groupNodes, kindGroupOf, kindLabel, retypePort, saveBlocker, saveOutcome, sameValue, usageLabel, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
 
 const node = (name: string, kind: "agent" | "command" | "approve", over: { instructions?: string; command?: string | null } = {}) => ({
   name,
@@ -50,10 +50,28 @@ describe("Node library list (ticket #71)", () => {
     ]);
   });
 
-  it("describes a card by its Kind and how many Flows place it", () => {
-    expect(cardMeta({ kind: "grill", usedBy: [{ flowId: "a", name: "A", locked: false }, { flowId: "b", name: "B", locked: false }] })).toBe("Human · Grill · in 2 Flows");
-    expect(cardMeta({ kind: "agent", usedBy: [{ flowId: "a", name: "A", locked: false }] })).toBe("Agent · in 1 Flow");
-    expect(cardMeta({ kind: "command", usedBy: [] })).toBe("Command · in no Flow");
+  it("puts the Nodes under their Kind group, in the groups' order, leaving out empty groups", () => {
+    const grouped = groupNodes([node("Run tests", "command"), node("Approve a plan", "approve"), node("Code a change", "agent")]);
+    expect(grouped.map((g) => [g.group, g.nodes.map((n) => n.name)])).toEqual([
+      ["agent", ["Code a change"]],
+      ["command", ["Run tests"]],
+      ["human", ["Approve a plan"]],
+    ]);
+    expect(groupNodes([])).toEqual([]);
+  });
+
+  it("renames a port after its new type while it was named after the old one", () => {
+    expect(retypePort({ name: "issue", type: "issue", required: true }, "plan")).toEqual({ name: "plan", type: "plan", required: true });
+    expect(retypePort({ name: "", type: "issue", required: true }, "plan").name).toBe("plan");
+    expect(retypePort({ name: "ticket", type: "issue", required: true }, "plan").name).toBe("ticket");
+  });
+
+  it("says how many Flows place a Node, and names its Kind", () => {
+    expect(usageLabel([{ flowId: "a", name: "A", locked: false }, { flowId: "b", name: "B", locked: false }])).toBe("Used in 2 Flows");
+    expect(usageLabel([{ flowId: "a", name: "A", locked: false }])).toBe("Used in 1 Flow");
+    expect(usageLabel([])).toBe("Not used in any Flow");
+    expect(kindLabel("grill")).toBe("Human · Grill");
+    expect(kindLabel("agent")).toBe("Agent");
   });
 });
 

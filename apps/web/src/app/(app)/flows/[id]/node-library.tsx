@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { LibraryNode } from "@clauderon/core";
+import type { LibraryNode, OutputType } from "@clauderon/core";
 import { outputColor } from "../../../../components/state-pill";
 import { FIcon, kindIcon } from "./flow-icons";
 import { KIND_LABEL } from "./flow-node";
@@ -125,15 +125,9 @@ export function NodeLibrary({
                   <span className={`fe-lib-ic k-${n.kind}`} aria-hidden="true">
                     {kindIcon(n.kind)}
                   </span>
-                  <span className="fe-lib-name">{n.name}</span>
-                  <span className="fe-lib-sig" aria-label={`${n.inputs.length} inputs, ${n.outputs.length} outputs`}>
-                    {n.inputs.map((p) => (
-                      <i key={`i-${p.name}`} title={`in: ${p.name} (${p.type})`} style={{ "--c": outputColor(p.type) } as CSSProperties} />
-                    ))}
-                    <span className="arrow">→</span>
-                    {n.outputs.map((p) => (
-                      <i key={`o-${p.name}`} title={`out: ${p.name} (${p.type})`} style={{ "--c": outputColor(p.type) } as CSSProperties} />
-                    ))}
+                  <span className="fe-lib-text">
+                    <span className="fe-lib-name">{n.name}</span>
+                    <Signature inputs={n.inputs} outputs={n.outputs} />
                   </span>
                 </div>
               );
@@ -143,5 +137,35 @@ export function NodeLibrary({
       </div>
       <div className="fe-library-foot faint small">Drag onto the canvas, or press Enter to add.</div>
     </div>
+  );
+}
+
+type SignaturePort = { name: string; type: OutputType; optional?: boolean; required?: boolean };
+
+/**
+ * What a Node takes and makes, as one line of port names in their Output Type's colour:
+ * "issue, plan? → branch, summary?". A "?" marks an optional port. Shared by the editor's
+ * library popover and the Node library page.
+ */
+export function Signature({ inputs, outputs }: { inputs: readonly SignaturePort[]; outputs: readonly SignaturePort[] }) {
+  const ports = (list: readonly SignaturePort[], side: "in" | "out") =>
+    list.map((p, i) => {
+      const optional = side === "in" ? p.required === false : p.optional === true;
+      return (
+        <span key={`${side}-${p.name}`}>
+          {i > 0 && ", "}
+          <b className={optional ? "opt" : undefined} style={{ "--c": outputColor(p.type) } as CSSProperties} title={`${p.name}: ${p.type}${optional ? ", optional" : ""}`}>
+            {p.name}
+            {optional ? "?" : ""}
+          </b>
+        </span>
+      );
+    });
+  return (
+    <span className="sig">
+      {inputs.length > 0 ? ports(inputs, "in") : <span>starts the Flow</span>}
+      <span aria-label="to"> → </span>
+      {outputs.length > 0 ? ports(outputs, "out") : <span>ends the Flow</span>}
+    </span>
   );
 }

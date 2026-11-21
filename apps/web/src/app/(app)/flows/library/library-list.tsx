@@ -1,70 +1,48 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { NodeKind, OutputType } from "@clauderon/core";
 import { Icon } from "../../../../components/icons";
 import { cloneNodeAction } from "./actions";
 import { EMPTY_NODE, NodeForm } from "./node-form";
-import { KIND_GROUP_LABEL, cardMeta, filterNodes, groupCounts, type KindGroup, type LibraryNodeView } from "./library-view";
+import { KIND_GROUP_LABEL, filterNodes, groupCounts, groupNodes, kindLabel, usageLabel, type KindGroup, type LibraryNodeView } from "./library-view";
+import { kindIcon } from "../[id]/flow-icons";
+import { Signature } from "../[id]/node-library";
 import { closeOnBackdrop } from "../../../../components/dialog";
 
-type Port = { name: string; type: OutputType; optional: boolean };
-
-const KIND_MARK: Record<NodeKind, string> = { agent: "AI", command: "$_", approve: "H", grill: "H", ticket: "#" };
-
-/** Ports as chips: the square's colour is the Output Type; a dashed chip with "opt" is optional. */
-function PortChips({ ports }: { ports: Port[] }) {
-  return ports.map((p) => (
-    <span key={p.name} className={`lib-port t-${p.type} ${p.optional ? "opt" : ""}`} title={`${p.name}: ${p.type}${p.optional ? ", optional" : ""}`}>
-      <i aria-hidden="true" />
-      {p.name}
-      {p.name !== p.type && <span className="faint">: {p.type}</span>}
-      {p.optional && <span className="lib-opt">opt</span>}
-    </span>
-  ));
-}
-
+/**
+ * One library Node: its kind icon (as on the canvas), name, what it does and its signature;
+ * the footer says how many Flows place it and holds Clone. The card opens the editor.
+ */
 function NodeCard({ node, onOpen, onClone, cloning }: { node: LibraryNodeView; onOpen: () => void; onClone: () => void; cloning: boolean }) {
-  const inputs: Port[] = node.inputs.map((i) => ({ name: i.name, type: i.type, optional: !i.required }));
-  const outputs: Port[] = node.outputs.map((o) => ({ name: o.name, type: o.type, optional: o.optional }));
   const locked = node.usedBy.some((u) => u.locked);
   return (
-    <div className="lib-card-wrap">
-    <button type="button" className="card lib-card" onClick={onOpen} aria-haspopup="dialog">
-      <span className="lib-card-h">
-        <span className={`lib-kind k-${node.kind}`} aria-hidden="true">
-          {KIND_MARK[node.kind]}
+    <div className={`card lib-card-wrap k-${node.kind}`}>
+      <button type="button" className="lib-card" onClick={onOpen} aria-haspopup="dialog">
+        <span className="lib-card-h">
+          <span className="lib-kind" aria-hidden="true">
+            {kindIcon(node.kind)}
+          </span>
+          <b className="lib-card-name">{node.name}</b>
+          {node.isSample && <span className="tag sample">Sample</span>}
         </span>
-        <b className="lib-card-name">{node.name}</b>
-        {node.isSample && <span className="tag sample">Sample</span>}
-      </span>
-      {node.kind === "command" ? (
-        <code className="lib-card-desc mono">$ {node.command}</code>
-      ) : (
-        <span className="lib-card-desc">{node.instructions || <span className="faint">No instructions.</span>}</span>
-      )}
-      {(inputs.length > 0 || outputs.length > 0) && (
-        <span className="lib-flow-ports">
-          <PortChips ports={inputs} />
-          {inputs.length > 0 && outputs.length > 0 && (
-            <span className="lib-arrow" aria-label="to">
-              →
-            </span>
-          )}
-          <PortChips ports={outputs} />
-        </span>
-      )}
-      <span className="lib-card-f small faint">
-        {cardMeta(node)}
+        {node.kind === "command" ? (
+          <code className="lib-card-desc mono">$ {node.command}</code>
+        ) : (
+          <span className="lib-card-desc">{node.instructions || <span className="faint">No instructions.</span>}</span>
+        )}
+        <Signature inputs={node.inputs} outputs={node.outputs} />
+      </button>
+      <div className="lib-card-f small">
+        <span className={node.usedBy.length === 0 ? "faint" : undefined}>{usageLabel(node.usedBy)}</span>
         {locked && <span className="tag dry">locked</span>}
-      </span>
-    </button>
-      {/* The Ticket sample cannot be cloned: a Flow has exactly one Ticket Node. */}
-      {node.isSample && node.kind !== "ticket" && (
-        <button type="button" className="btn sm icon lib-clone" disabled={cloning} aria-label={`Clone ${node.name}`} data-tip={cloning ? "Cloning…" : "Clone"} onClick={onClone}>
-          {cloning ? Icon.spin : Icon.copy}
-        </button>
-      )}
+        {/* The Ticket sample cannot be cloned: a Flow has exactly one Ticket Node. */}
+        {node.isSample && node.kind !== "ticket" && (
+          <button type="button" className="btn sm icon ghost lib-clone" disabled={cloning} aria-label={`Clone ${node.name}`} data-tip={cloning ? "Cloning…" : "Clone"} onClick={onClone}>
+            {cloning ? Icon.spin : Icon.copy}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -80,9 +58,35 @@ function NodeDialog({ node, onClose }: { node: LibraryNodeView | null; onClose: 
     <dialog ref={ref} {...closeOnBackdrop} className="modal wide lib-dialog" aria-labelledby="nd-title" onClose={onClose}>
       <div className="modal-in">
         <div className="modal-h">
-          <div>
-            <h2 id="nd-title">{title}</h2>
-            {node && <p className="muted small" style={{ marginTop: 4 }}>{cardMeta(node)}</p>}
+          <div className="nd-head">
+            {node && (
+              <span className={`lib-kind nd-kind k-${node.kind}`} aria-hidden="true">
+                {kindIcon(node.kind)}
+              </span>
+            )}
+            <div>
+              <h2 id="nd-title">{title}</h2>
+              {node && (
+                <p className="muted small nd-used">
+                  {kindLabel(node.kind)}
+                  {node.isSample ? " · Sample" : ""} ·{" "}
+                  {node.usedBy.length === 0 ? (
+                    usageLabel(node.usedBy)
+                  ) : (
+                    <>
+                      used in{" "}
+                      {node.usedBy.map((u, i) => (
+                        <span key={u.flowId}>
+                          {i > 0 && ", "}
+                          <Link href={`/flows/${u.flowId}`}>{u.name}</Link>
+                          {u.locked && <span className="tag dry">locked</span>}
+                        </span>
+                      ))}
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
           </div>
           <button type="button" className="btn ghost sm" aria-label="Close" onClick={() => ref.current?.close()}>
             {Icon.x}
@@ -178,10 +182,24 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
         </div>
       )}
 
-      <div className="lib-grid" data-testid="library-list">
-        {shown.map((n) => (
-          <NodeCard key={n.id} node={n} onOpen={() => setOpen(n.id)} onClone={() => void clone(n.id)} cloning={cloning === n.id} />
-        ))}
+      <div className="lib-groups-list" data-testid="library-list">
+        {/* "All" shows the Nodes under their Kind; one Kind shows them as one grid. */}
+        {(group === "all" ? groupNodes(shown) : [{ group, nodes: shown }]).map((g) =>
+          g.nodes.length === 0 ? null : (
+            <section key={g.group} className="lib-section" aria-label={KIND_GROUP_LABEL[g.group]}>
+              {group === "all" && (
+                <h2 className="lib-section-h">
+                  {KIND_GROUP_LABEL[g.group]} <span className="n">{g.nodes.length}</span>
+                </h2>
+              )}
+              <div className="lib-grid">
+                {g.nodes.map((n) => (
+                  <NodeCard key={n.id} node={n} onOpen={() => setOpen(n.id)} onClone={() => void clone(n.id)} cloning={cloning === n.id} />
+                ))}
+              </div>
+            </section>
+          ),
+        )}
         {shown.length === 0 && (
           <div className="card empty lib-empty">
             <b>No Node matches</b>

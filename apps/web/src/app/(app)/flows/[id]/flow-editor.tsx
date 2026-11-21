@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import {
   activeOutputs,
   canConnect as typesConnect,
   simulatedDelayMs,
   simulatedOutputs,
   validateFlow,
+  OUTPUT_TYPES,
   type LibraryNode,
+  type OutputType,
   type OutputValue,
 } from "@clauderon/core";
 import { outputColor } from "../../../../components/state-pill";
@@ -17,7 +19,7 @@ import { saveFlowAction } from "./actions";
 import { GRID, intersects, snap } from "./canvas-geometry";
 import { FlowCanvas, isTyping, type CanvasConnection, type CanvasEdge, type CanvasNode, type FlowCanvasHandle, type HandleType, type Selection } from "./flow-canvas";
 import { FIcon } from "./flow-icons";
-import { layeredLayout } from "./flow-layout";
+import { layeredLayout, wiresMostlyBackward } from "./flow-layout";
 import { NodeView, type NodeAction, type Placement, type WireFrom } from "./flow-node";
 import { NODE_DRAG_TYPE, NodeLibrary } from "./node-library";
 import { NodePanel, type PlacementPatch } from "./node-panel";
@@ -72,6 +74,9 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
   const [testOutputs, setTestOutputs] = useState<ReadonlyMap<string, OutputValue[]>>(new Map());
   const [dropping, setDropping] = useState(false);
   const [fitRequest, setFitRequest] = useState(0);
+  /** The Output Type traced from the legend: its wires stand out, the rest fade. */
+  const [trace, setTrace] = useState<OutputType | null>(null);
+  const [layoutHintClosed, setLayoutHintClosed] = useState(false);
 
   const { placements, edges: graphEdges } = doc;
   const placementById = useMemo(() => new Map(placements.map((p) => [p.id, p])), [placements]);
@@ -219,6 +224,7 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
             missingInputs={missingInputs.get(p.id)}
             flash={flash?.nodes.has(p.id)}
             runState={runNodeStates?.get(p.id)}
+            trace={trace}
             wire={wire}
             renaming={renaming === p.id}
             onRename={(label) => {
@@ -233,6 +239,8 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
     ];
   });
   const outputTypeOf = (flowNodeId: string, output: string) => libOf(flowNodeId)?.outputs.find((o) => o.name === output)?.type ?? "";
+  // The Output Types the wires carry, in the library's order, for the legend.
+  const wireTypes = OUTPUT_TYPES.filter((t) => graphEdges.some((e) => outputTypeOf(e.fromFlowNodeId, e.fromOutput) === t));
   const edges: CanvasEdge[] = graphEdges.map((e) => ({
     id: e.id,
     fromNodeId: e.fromFlowNodeId,
@@ -245,7 +253,18 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
     flash: flash?.edges.has(e.id),
     color: outputColor(outputTypeOf(e.fromFlowNodeId, e.fromOutput)),
     state: runEdgeStates?.get(e.id) ?? null,
+    trace: trace ? (outputTypeOf(e.fromFlowNodeId, e.fromOutput) === trace ? "traced" : "faded") : undefined,
   }));
+  // Wires that mostly run backwards loop around the cards (a Flow laid out top to bottom): suggest Tidy up.
+  const loops = useMemo(
+    () =>
+      wiresMostlyBackward(
+        placements,
+        graphEdges.map((e) => ({ from: e.fromFlowNodeId, to: e.toFlowNodeId })),
+      ),
+    [placements, graphEdges],
+  );
+  const layoutHint = loops && !layoutHintClosed && !readOnly && !running;
 
   const onSelect = (next: Selection) => {
     setSelected((s) => (sameSet(s.nodes, next.nodes) && sameSet(s.edges, next.edges) ? s : next));
@@ -521,6 +540,17 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
   const selectedPlacement = single ? (placementById.get(single) ?? null) : null;
   const selectedLib = selectedPlacement ? libById.get(selectedPlacement.nodeId) : undefined;
   const usedOutputs = useMemo(() => new Set(graphEdges.filter((e) => e.fromFlowNodeId === selectedPlacement?.id).map((e) => e.fromOutput)), [graphEdges, selectedPlacement]);
+  /** For the details panel: the Nodes on the other end of each of the selected Node's ports. */
+  const links = useMemo(() => {
+    const titleOf = (id: string) => placementById.get(id)?.label || libOf(id)?.name || "a Node";
+    const from = new Map<string, string[]>();
+    const to = new Map<string, string[]>();
+    for (const e of graphEdges) {
+      if (e.toFlowNodeId === selectedPlacement?.id) from.set(e.toInput, [...(from.get(e.toInput) ?? []), titleOf(e.fromFlowNodeId)]);
+      if (e.fromFlowNodeId === selectedPlacement?.id) to.set(e.fromOutput, [...(to.get(e.fromOutput) ?? []), titleOf(e.toFlowNodeId)]);
+    }
+    return { from, to };
+  }, [graphEdges, selectedPlacement, placementById, libOf]);
   const patch = (id: string, p: PlacementPatch) => change((d) => ({ ...d, placements: d.placements.map((x) => (x.id === id ? { ...x, ...p } : x)) }));
 
   const runStep = testRun && testRun.phase !== "done" ? testRun.order[testRun.index] : null;
@@ -713,6 +743,7 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
             lib={selectedLib}
             readOnly={readOnly || running}
             usedOutputs={usedOutputs}
+            links={links}
             problems={problemsAround(selectedPlacement.id).map((v) => <div key={`${v.problem.code}-${v.problem.edgeId ?? v.problem.input ?? ""}`}>{problemCard(v)}</div>)}
             runState={runNodeStates?.get(selectedPlacement.id)}
             testOutputs={testOutputs.get(selectedPlacement.id)}
@@ -750,9 +781,40 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
           </div>
         )}
 
-        {(notice || message) && (
+        {wireTypes.length > 0 && (
+          <div className="fe-legend fc-overlay" role="group" aria-label="Output Types: point at one to trace its wires" onPointerDown={(e) => e.stopPropagation()}>
+            {wireTypes.map((t) => (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={trace === t}
+                onMouseEnter={() => setTrace(t)}
+                onMouseLeave={() => setTrace(null)}
+                onFocus={() => setTrace(t)}
+                onBlur={() => setTrace(null)}
+              >
+                <i style={{ "--c": outputColor(t) } as CSSProperties} />
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {(notice || message || layoutHint) && (
           <div className="fe-notices fc-overlay" onPointerDown={(e) => e.stopPropagation()}>
             {notice}
+            {layoutHint && (
+              <div className="fe-toast hint" role="status">
+                {FIcon.tidy}
+                <span>Wires loop around Nodes in this layout.</span>
+                <button type="button" className="fe-btn sm" onClick={tidy}>
+                  Tidy up
+                </button>
+                <button type="button" className="fc-ibtn" aria-label="Dismiss" onClick={() => setLayoutHintClosed(true)}>
+                  {FIcon.close}
+                </button>
+              </div>
+            )}
             {message && (
               <div className={`fe-toast ${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>
                 {message.kind === "ok" ? FIcon.check : FIcon.alert}
