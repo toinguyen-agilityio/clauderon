@@ -1,9 +1,9 @@
 import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
-import { flow, machine, member, run, ticket, type MachineDoctor } from "./schema";
+import { flow, machine, member, run, ticket, type MachineDoctor, type MachineUsage } from "./schema";
 
-export type { MachineDoctor } from "./schema";
+export type { MachineDoctor, MachineUsage } from "./schema";
 
 // Machines (ADR 0006): one per Member, created by its first Pairing.
 
@@ -161,8 +161,9 @@ export async function markAllMachinesDisconnected(db: Db): Promise<void> {
   await db.update(machine).set({ connected: false }).where(eq(machine.connected, true));
 }
 
-export async function recordMachineHeartbeat(db: Db, machineId: string, now: Date): Promise<void> {
-  await db.update(machine).set({ lastHeartbeatAt: now }).where(eq(machine.id, machineId));
+/** Keeps the heartbeat's time, and its usage when the Agent sends one (older Agents do not). */
+export async function recordMachineHeartbeat(db: Db, machineId: string, now: Date, usage?: MachineUsage): Promise<void> {
+  await db.update(machine).set(usage ? { lastHeartbeatAt: now, usage } : { lastHeartbeatAt: now }).where(eq(machine.id, machineId));
 }
 
 export async function saveMachineLinkIds(db: Db, machineId: string, ids: { lastReceivedId: number; lastSentId: number }): Promise<void> {

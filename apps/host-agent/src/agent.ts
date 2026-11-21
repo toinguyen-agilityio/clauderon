@@ -22,6 +22,9 @@ export type Connector = (url: string, headers: Record<string, string>) => Promis
 /** What a hello tells about the Machine (spec M0 §8, ADR 0006). */
 export type MachineFacts = { os: string; arch: string; hostname: string; cpus: number; memoryMb: number; diskGb: number };
 export type MachineFactsReader = () => Promise<MachineFacts>;
+/** What the Machine is using now, sent with each heartbeat. */
+export type MachineUsage = NonNullable<Payload<"heartbeat">["usage"]>;
+export type MachineUsageReader = () => Promise<MachineUsage | null>;
 
 /** Where the Agent keeps its last received id between restarts. */
 export interface StateStore {
@@ -38,6 +41,8 @@ export type AgentOptions = {
   clock: Clock;
   connect: Connector;
   facts: MachineFactsReader;
+  /** Read before each heartbeat; without it (or when it fails) heartbeats carry no usage. */
+  usage?: MachineUsageReader;
   state: StateStore;
   processId: string;
   version: string;
@@ -169,7 +174,19 @@ export class Agent {
   }
 
   private sendHeartbeat(): void {
-    this.socket?.send(serialize(controlMessage("heartbeat", { at: this.opts.clock.now().toISOString() })));
+    const at = this.opts.clock.now().toISOString();
+    if (!this.opts.usage) {
+      this.socket?.send(serialize(controlMessage("heartbeat", { at })));
+      return;
+    }
+    const socket = this.socket;
+    void this.opts
+      .usage()
+      .catch(() => null)
+      .then((usage) => {
+        // A reconnect in between sends its own heartbeats.
+        if (socket && socket === this.socket) socket.send(serialize(controlMessage("heartbeat", usage ? { at, usage } : { at })));
+      });
   }
 
   private stopHeartbeat(): void {

@@ -13,6 +13,15 @@ export function claudeCommand(resumeSessionId?: string): string {
   return `claude ${CLAUDE_ARGS.join(" ")}${resume} < "$CLAUDERON_PROMPT_FILE"`;
 }
 
+/**
+ * A Flow Draft's call (ADR 0008): it only answers, so it runs without skipping permissions;
+ * in print mode any tool that would need one is refused.
+ */
+export function draftClaudeCommand(resumeSessionId?: string): string {
+  const resume = resumeSessionId ? ` --resume '${resumeSessionId.replace(/[^A-Za-z0-9-]/g, "")}'` : "";
+  return `claude -p --output-format stream-json --verbose${resume} < "$CLAUDERON_PROMPT_FILE"`;
+}
+
 export type ClaudeEvent = {
   log?: string;
   usage?: { inputTokens: number; outputTokens: number };

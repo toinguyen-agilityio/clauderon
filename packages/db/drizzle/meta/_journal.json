@@ -71,6 +71,13 @@
       "when": 1795099522174,
       "tag": "0009_machine_doctor",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795169685850,
+      "tag": "0010_machine_usage",
+      "breakpoints": true
     }
   ]
 }

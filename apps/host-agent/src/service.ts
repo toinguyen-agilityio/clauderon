@@ -2,7 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 // Runs the Agent whenever the Member is logged in (ADR 0006), under their own
@@ -12,9 +12,22 @@ import { promisify } from "node:util";
 // Never root or a system service.
 
 export const SERVICE_LABEL = "com.clauderon.agent";
-const SYSTEMD_UNIT = "clauderon-agent.service";
 const WINDOWS_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-const WINDOWS_RUN_NAME = "Clauderon Agent";
+
+/**
+ * The service's names for one Agent home. The default home (~/.clauderon)
+ * keeps the original names; any other home (e.g. ~/.clauderon-dev, which the
+ * install script of a local web app picks) gets its own, so the Agent of a
+ * second web app on the same computer does not replace the first one's service.
+ */
+export function serviceNames(home: string): { label: string; unit: string; runName: string } {
+  const suffix = basename(home)
+    .replace(/^\.?clauderon-?/, "")
+    .replace(/^\./, "")
+    .replace(/[^A-Za-z0-9-]/g, "-");
+  if (!suffix) return { label: SERVICE_LABEL, unit: "clauderon-agent.service", runName: "Clauderon Agent" };
+  return { label: `${SERVICE_LABEL}.${suffix}`, unit: `clauderon-agent-${suffix}.service`, runName: `Clauderon Agent (${suffix})` };
+}
 
 /** How the service starts the Agent: this Node with these arguments, from this directory, with this home. */
 export type ServiceSpec = {
@@ -53,7 +66,7 @@ export function launchdPlist(spec: ServiceSpec): string {
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>${SERVICE_LABEL}</string>
+  <string>${serviceNames(spec.home).label}</string>
   <key>ProgramArguments</key>
   <array>
 ${args}
@@ -137,8 +150,8 @@ export function windowsLauncher(spec: ServiceSpec): string {
   ].join("\r\n");
 }
 
-export const launchdPath = () => join(homedir(), "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
-export const systemdPath = () => join(homedir(), ".config", "systemd", "user", SYSTEMD_UNIT);
+export const launchdPath = (home: string) => join(homedir(), "Library", "LaunchAgents", `${serviceNames(home).label}.plist`);
+export const systemdPath = (home: string) => join(homedir(), ".config", "systemd", "user", serviceNames(home).unit);
 
 type Exec = (file: string, args: readonly string[]) => Promise<void>;
 const exec: Exec = async (file, args) => {
@@ -160,10 +173,11 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 /** Installs, or replaces, the service and starts it now. Returns where its log goes. */
 export async function installService(spec: ServiceSpec, platform: NodeJS.Platform = process.platform, run: Exec = exec, launch = launchDetached, pause = sleep): Promise<string> {
   await mkdir(spec.home, { recursive: true });
+  const names = serviceNames(spec.home);
   if (platform === "darwin") {
-    const path = launchdPath();
+    const path = launchdPath(spec.home);
     const domain = `gui/${process.getuid?.() ?? 0}`;
-    await run("launchctl", ["bootout", `${domain}/${SERVICE_LABEL}`]).catch(() => {});
+    await run("launchctl", ["bootout", `${domain}/${names.label}`]).catch(() => {});
     await write(path, launchdPlist(spec));
     // bootout returns before the replaced Agent has exited, and until it has,
     // bootstrap fails with "5: Input/output error"; so retry for a few seconds.
@@ -177,14 +191,14 @@ export async function installService(spec: ServiceSpec, platform: NodeJS.Platfor
       }
     }
   } else if (platform === "linux") {
-    await write(systemdPath(), systemdUnit(spec));
+    await write(systemdPath(spec.home), systemdUnit(spec));
     await run("systemctl", ["--user", "daemon-reload"]);
-    await run("systemctl", ["--user", "enable", "--now", SYSTEMD_UNIT]);
-    await run("systemctl", ["--user", "restart", SYSTEMD_UNIT]);
+    await run("systemctl", ["--user", "enable", "--now", names.unit]);
+    await run("systemctl", ["--user", "restart", names.unit]);
   } else if (platform === "win32") {
     await write(windowsLauncherPath(spec), windowsLauncher(spec));
     await write(windowsHiddenPath(spec), windowsHidden(spec));
-    await run("reg", ["add", WINDOWS_RUN_KEY, "/v", WINDOWS_RUN_NAME, "/t", "REG_SZ", "/d", windowsRunCommand(spec), "/f"]);
+    await run("reg", ["add", WINDOWS_RUN_KEY, "/v", names.runName, "/t", "REG_SZ", "/d", windowsRunCommand(spec), "/f"]);
     launch(windowsHiddenPath(spec));
   } else {
     throw new Error(`no service support for ${platform}: run the Agent with start instead`);
@@ -193,10 +207,10 @@ export async function installService(spec: ServiceSpec, platform: NodeJS.Platfor
 }
 
 /** Whether the service is installed; null on a platform without one. */
-export async function serviceInstalled(platform: NodeJS.Platform = process.platform, run: Exec = exec): Promise<boolean | null> {
-  if (platform === "darwin") return existsSync(launchdPath());
-  if (platform === "linux") return existsSync(systemdPath());
-  if (platform === "win32") return run("reg", ["query", WINDOWS_RUN_KEY, "/v", WINDOWS_RUN_NAME]).then(
+export async function serviceInstalled(home: string, platform: NodeJS.Platform = process.platform, run: Exec = exec): Promise<boolean | null> {
+  if (platform === "darwin") return existsSync(launchdPath(home));
+  if (platform === "linux") return existsSync(systemdPath(home));
+  if (platform === "win32") return run("reg", ["query", WINDOWS_RUN_KEY, "/v", serviceNames(home).runName]).then(
     () => true,
     () => false,
   );
@@ -204,15 +218,16 @@ export async function serviceInstalled(platform: NodeJS.Platform = process.platf
 }
 
 /** Stops and removes the service; a missing one is fine. */
-export async function uninstallService(platform: NodeJS.Platform = process.platform, run: Exec = exec): Promise<void> {
+export async function uninstallService(home: string, platform: NodeJS.Platform = process.platform, run: Exec = exec): Promise<void> {
+  const names = serviceNames(home);
   if (platform === "darwin") {
-    await run("launchctl", ["bootout", `gui/${process.getuid?.() ?? 0}/${SERVICE_LABEL}`]).catch(() => {});
-    await rm(launchdPath(), { force: true });
+    await run("launchctl", ["bootout", `gui/${process.getuid?.() ?? 0}/${names.label}`]).catch(() => {});
+    await rm(launchdPath(home), { force: true });
   } else if (platform === "linux") {
-    await run("systemctl", ["--user", "disable", "--now", SYSTEMD_UNIT]).catch(() => {});
-    await rm(systemdPath(), { force: true });
+    await run("systemctl", ["--user", "disable", "--now", names.unit]).catch(() => {});
+    await rm(systemdPath(home), { force: true });
     await run("systemctl", ["--user", "daemon-reload"]).catch(() => {});
   } else if (platform === "win32") {
-    await run("reg", ["delete", WINDOWS_RUN_KEY, "/v", WINDOWS_RUN_NAME, "/f"]).catch(() => {});
+    await run("reg", ["delete", WINDOWS_RUN_KEY, "/v", names.runName, "/f"]).catch(() => {});
   }
 }

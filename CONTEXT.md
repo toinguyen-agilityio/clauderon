@@ -99,6 +99,10 @@ _Avoid_: Pipeline, workflow, template
 A typed value a Node produces, consumed by later Nodes through the Flow's edges.
 _Avoid_: Artifact, port value, result
 
+**Flow Draft**:
+A Flow that Claude Code writes on a Member's own Machine from their description, outside any Run; it is only previewed until the Member creates it, which imports it as a new Flow.
+_Avoid_: Generated flow, AI flow, suggestion
+
 **Output Type**:
 The type of an Output, such as `issue`, `plan`, `branch` or `pull-request`; an edge is allowed only between matching Output Types.
 _Avoid_: Artifact type, data type

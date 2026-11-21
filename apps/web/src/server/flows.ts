@@ -1,4 +1,4 @@
-import { buildFlowFile, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
+import { agentSupportsFlowDrafts, buildFlowFile, isMachineReady, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
 import {
   cloneFlow,
   createFlow,
@@ -6,6 +6,7 @@ import {
   importFlow,
   listLibraryRows,
   flowLocks,
+  getMachineOfMember,
   listFlowRows,
   loadFlow,
   loadFlowDetail,
@@ -256,4 +257,15 @@ export async function importMyFlow(deps: AppDeps, viewer: Viewer, text: string):
   const created = await importFlow(deps.db, { name, nodes, placements: parsed.flow.placements, edges: parsed.flow.edges }, viewer.email, deps.clock.now());
   await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: created.id, detail: { imported: true, newNodes: created.createdNodes } });
   return { ok: true, flowId: created.id, name: created.name, createdNodes: created.createdNodes };
+}
+
+export type FlowBuildAvailability = { ok: true; machine: string } | { ok: false; reason: string };
+
+/** Whether the viewer's own Machine can draft a Flow now (ADR 0008): Claude runs there, never here. */
+export async function flowBuildAvailability(deps: AppDeps, viewer: Viewer): Promise<FlowBuildAvailability> {
+  const machine = await getMachineOfMember(deps.db, viewer.id);
+  if (!machine?.tokenHash) return { ok: false, reason: "Pair your Machine first: Claude runs on your own computer." };
+  if (!isMachineReady(machine)) return { ok: false, reason: "Your Machine is not ready. Open Machines to see why." };
+  if (!agentSupportsFlowDrafts(machine.agentVersion)) return { ok: false, reason: "Update your Machine's Agent to build Flows with it." };
+  return { ok: true, machine: machine.name ?? machine.hostname ?? "your Machine" };
 }

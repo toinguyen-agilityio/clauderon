@@ -1,8 +1,9 @@
 import { SEEDED_BY } from "@clauderon/db";
 import { ago, formatTime } from "../../../components/format";
-import { viewFlows, type FlowView } from "../../../server/flows";
+import { flowBuildAvailability, viewFlows, type FlowView } from "../../../server/flows";
 import { viewLibrary } from "../../../server/library";
-import { deps, requireMember } from "../../../server/runtime";
+import { deps, gatewayUrl, requireMember } from "../../../server/runtime";
+import { BuildFlow } from "./build-flow";
 import { FlowsList } from "./flows-list";
 import { ImportFlow } from "./import-flow";
 import { NewFlow } from "./new-flow";
@@ -12,8 +13,8 @@ import type { FlowRowView } from "./flows-view";
 export const dynamic = "force-dynamic";
 
 export default async function FlowsPage() {
-  await requireMember();
-  const [{ samples, flows }, nodes] = await Promise.all([viewFlows(deps()), viewLibrary(deps())]);
+  const member = await requireMember();
+  const [{ samples, flows }, nodes, buildable] = await Promise.all([viewFlows(deps()), viewLibrary(deps()), flowBuildAvailability(deps(), member)]);
   const now = new Date();
   // Only what the list needs, in a shape that can cross to the client (no Dates). Your own Flows come first.
   const row = (f: FlowView): FlowRowView => ({
@@ -41,6 +42,7 @@ export default async function FlowsPage() {
         </div>
         <div className="row" style={{ gap: 8 }}>
           <ImportFlow />
+          <BuildFlow gatewayUrl={gatewayUrl()} availability={buildable} />
           <NewFlow />
         </div>
       </div>

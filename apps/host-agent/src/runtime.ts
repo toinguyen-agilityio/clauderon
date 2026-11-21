@@ -1,9 +1,11 @@
+import { execFile } from "node:child_process";
 import { chmod, mkdir, readFile, rename, rm, statfs, writeFile } from "node:fs/promises";
-import { arch, cpus, hostname, platform, totalmem, uptime } from "node:os";
+import { arch, cpus, freemem, hostname, platform, totalmem, uptime } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import WebSocket from "ws";
 import { fromWebSocket } from "@clauderon/protocol";
-import type { Connector, MachineFacts, StateStore } from "./agent";
+import type { Connector, MachineFacts, MachineUsageReader, StateStore } from "./agent";
 
 /** Opens a `ws` WebSocket and resolves once it is open. */
 export const wsConnector: Connector = (url, headers) =>
@@ -19,17 +21,17 @@ export const wsConnector: Connector = (url, headers) =>
     ws.once("error", reject);
   });
 
-/** Size of the disk holding `path`, or of the root disk before `path` exists. */
-async function diskGb(path: string): Promise<number> {
+/** The disk holding `path`, or the root disk before `path` exists. */
+async function disk(path: string): Promise<{ totalGb: number; freeGb: number } | null> {
   for (const candidate of [path, platform() === "win32" ? "C:\\" : "/"]) {
     try {
       const stats = await statfs(candidate);
-      return Math.round((stats.blocks * stats.bsize) / 1024 ** 3);
+      return { totalGb: Math.round((stats.blocks * stats.bsize) / 1024 ** 3), freeGb: Math.round((stats.bavail * stats.bsize) / 1024 ** 3) };
     } catch {
       // try the next one
     }
   }
-  return 0;
+  return null;
 }
 
 /** The Machine's facts for hello and Pairing (spec M0 §8, ADR 0006). */
@@ -40,7 +42,63 @@ export async function readMachineFacts(home: string): Promise<MachineFacts> {
     hostname: hostname(),
     cpus: cpus().length,
     memoryMb: Math.round(totalmem() / 1024 ** 2),
-    diskGb: await diskGb(home),
+    diskGb: (await disk(home))?.totalGb ?? 0,
+  };
+}
+
+/**
+ * Memory in use on macOS from `vm_stat`, as Activity Monitor counts it: app
+ * memory (anonymous minus purgeable), wired and compressed pages. Null when
+ * the output has none of them.
+ */
+export function parseVmStat(text: string): number | null {
+  const pageSize = Number(/page size of (\d+) bytes/.exec(text)?.[1]);
+  const pages = (label: string) => Number(new RegExp(`^${label}:\\s+(\\d+)`, "m").exec(text)?.[1] ?? Number.NaN);
+  const used = pages("Anonymous pages") - pages("Pages purgeable") + pages("Pages wired down") + pages("Pages occupied by compressor");
+  return Number.isFinite(pageSize) && Number.isFinite(used) ? used * pageSize : null;
+}
+
+async function memoryUsedBytes(): Promise<number> {
+  // On macOS free memory leaves out the cache the system gives back on demand, so nearly all of it looks used.
+  if (platform() === "darwin") {
+    const used = await promisify(execFile)("vm_stat")
+      .then(({ stdout }) => parseVmStat(stdout))
+      .catch(() => null);
+    if (used !== null) return used;
+  }
+  return totalmem() - freemem();
+}
+
+type CpuTimes = { busy: number; total: number };
+
+function cpuTimes(): CpuTimes {
+  let busy = 0;
+  let total = 0;
+  for (const { times } of cpus()) {
+    const b = times.user + times.nice + times.sys + times.irq;
+    busy += b;
+    total += b + times.idle;
+  }
+  return { busy, total };
+}
+
+/** Busy share of all cores between two readings, 0-100. */
+export function cpuBusyPercent(before: CpuTimes, after: CpuTimes): number {
+  const total = after.total - before.total;
+  if (total <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round(((after.busy - before.busy) / total) * 100)));
+}
+
+/** Reads what the Machine is using now; CPU counts since the previous reading. */
+export function machineUsageReader(home: string): MachineUsageReader {
+  let previous = cpuTimes();
+  return async () => {
+    const now = cpuTimes();
+    const cpuPercent = cpuBusyPercent(previous, now);
+    previous = now;
+    const [used, space] = await Promise.all([memoryUsedBytes(), disk(home)]);
+    if (!space) return null;
+    return { memoryUsedMb: Math.round(used / 1024 ** 2), diskFreeGb: space.freeGb, cpuPercent };
   };
 }
 
