@@ -21,10 +21,14 @@ export type PullRequest = {
   url: string;
 };
 
+/** An open pull request of a repository, whoever opened it; `reviewers` are the logins asked to review it. */
+export type OpenPullRequest = PullRequest & { state: "open"; title: string; authorLogin: string; createdAt: Date; reviewers: string[] };
+
 export interface GitHubReader {
   listRepositories(): Promise<Repository[]>;
   listBranches(owner: string, repo: string): Promise<string[]>;
   listOpenIssues(owner: string, repo: string): Promise<Issue[]>;
   getIssue(owner: string, repo: string, number: number): Promise<Issue | null>;
   findPullRequest(owner: string, repo: string, branch: string): Promise<PullRequest | null>;
+  listOpenPullRequests(owner: string, repo: string): Promise<OpenPullRequest[]>;
 }

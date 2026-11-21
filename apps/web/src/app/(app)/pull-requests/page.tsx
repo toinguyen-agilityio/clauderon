@@ -3,50 +3,74 @@ import { Avatar } from "../../../components/brand";
 import { ago } from "../../../components/format";
 import { Icon } from "../../../components/icons";
 import { Tabs } from "../../../components/tabs";
-import { PULL_REQUEST_TABS, parsePullRequestTab, viewPullRequests } from "../../../server/runs";
+import { parsePullRequestTab, viewPullRequests } from "../../../server/runs";
 import { deps, requireMember } from "../../../server/runtime";
 
 export const dynamic = "force-dynamic";
 
-type Search = { state?: string; page?: string };
-
-const TAB_LABEL = { open: "Open", merged: "Merged", closed: "Closed" } as const;
-const EMPTY = {
-  all: "No Run has opened a pull request yet.",
-  open: "No pull request is open for review.",
-  merged: "No pull request has been merged yet.",
-  closed: "No pull request was closed without merging.",
-} as const;
+type Search = { project?: string; tab?: string; page?: string };
 
 export default async function PullRequestsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireMember();
+  const member = await requireMember();
   const search = await searchParams;
-  const state = parsePullRequestTab(search.state);
+  const tab = parsePullRequestTab(search.tab);
   const page = Math.max(1, Number(search.page) || 1);
-  const { rows, hasMore, counts } = await viewPullRequests(deps(), state, page);
+  const view = await viewPullRequests(deps(), member, { tab, projectId: search.project || undefined, page });
+  const { rows, hasMore, counts, projects } = view;
   const now = new Date();
-  const total = PULL_REQUEST_TABS.reduce((n, s) => n + (counts[s] ?? 0), 0);
-  const href = (s: string | undefined, p?: number) => {
-    const query = new URLSearchParams();
-    if (s) query.set("state", s);
-    if (p && p > 1) query.set("page", String(p));
+  // A new filter starts again at page 1.
+  const href = (change: Omit<Search, "page">, p?: number) => {
+    const next = { project: search.project, tab: search.tab, ...change, page: p && p > 1 ? String(p) : undefined };
+    const query = new URLSearchParams(Object.entries(next).filter(([, v]) => v) as [string, string][]);
     return `/pull-requests${query.size ? `?${query}` : ""}`;
   };
+  const empty =
+    tab !== "needs-you"
+      ? "No pull request is open on any Project."
+      : view.ghAccount
+        ? `No open pull request is waiting on a review from @${view.ghAccount}.`
+        : "Log in to gh on your Machine so this page knows your GitHub account.";
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Pull requests</h1>
-          <p className="sub">Pull requests opened by Runs, newest first. GitHub stays the source of truth; open ones refresh at most once a minute.</p>
+          <p className="sub">
+            Open pull requests of every Project, read from GitHub each time this page opens. Needs you: you are asked to review them.
+          </p>
         </div>
       </div>
 
+      {view.errors.length > 0 && (
+        <div className="banner wait">
+          <div className="grow small">
+            <b>Could not read {view.errors.map((e) => e.repo).join(", ")} from GitHub.</b> Only pull requests Runs opened are shown for it.{" "}
+            {view.errors[0]!.error}
+          </div>
+        </div>
+      )}
+
+      {projects.length > 0 && (
+        <div className="row">
+          <nav className="seg" aria-label="Project">
+            <Link href={href({ project: undefined })} className={!search.project ? "on" : ""}>
+              All <span className="faint num">{view.total}</span>
+            </Link>
+            {projects.map((p) => (
+              <Link key={p.id} href={href({ project: p.id })} className={search.project === p.id ? "on" : ""}>
+                {p.repo} <span className="faint num">{view.perProject[p.id] ?? 0}</span>
+              </Link>
+            ))}
+          </nav>
+        </div>
+      )}
+
       <Tabs
-        label="Pull request state"
+        label="Pull requests"
         tabs={[
-          { href: href(undefined), label: "All", count: total, active: !state },
-          ...PULL_REQUEST_TABS.map((s) => ({ href: href(s), label: TAB_LABEL[s], count: counts[s] ?? 0, active: state === s })),
+          { href: href({ tab: undefined }), label: "Open", count: counts.open, active: !tab },
+          { href: href({ tab: "needs-you" }), label: "Needs you", count: counts.needsYou, active: tab === "needs-you" },
         ]}
       />
 
@@ -57,54 +81,66 @@ export default async function PullRequestsPage({ searchParams }: { searchParams:
               <tr>
                 <th>Pull request</th>
                 <th>Ticket</th>
-                <th>State</th>
                 <th>Flow</th>
-                <th>Started by</th>
+                <th>Opened by</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={4}>
                     <div className="empty">
                       <b>No pull requests</b>
-                      {EMPTY[state ?? "all"]}
+                      {empty}
                     </div>
                   </td>
                 </tr>
               )}
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td className="nowrap">
-                    {r.pullRequestUrl ? (
-                      <a className="mono" href={r.pullRequestUrl} target="_blank" rel="noreferrer">
-                        #{r.pullRequestNumber} {Icon.external}
-                      </a>
-                    ) : (
-                      <span className="mono">#{r.pullRequestNumber}</span>
-                    )}
+                  <td className="t-title">
+                    <span className="mono faint small">
+                      {r.repo}{" "}
+                      {r.url ? (
+                        <a className="mono" href={r.url} target="_blank" rel="noreferrer">
+                          #{r.number} {Icon.external}
+                        </a>
+                      ) : (
+                        <span className="mono">#{r.number}</span>
+                      )}
+                    </span>
+                    {r.title && <div>{r.title}</div>}
+                    {r.needsYou && <span className="pill wait">Needs you</span>}
                     {r.branch && <div className="mono faint small clip pr-branch">{r.branch}</div>}
                   </td>
                   <td className="t-title">
-                    <span className="mono faint small">{r.key}</span>
-                    <div>
-                      <Link href={`/runs/${r.id}`}>{r.ticketTitle}</Link>
-                    </div>
+                    {r.run ? (
+                      <>
+                        <span className="mono faint small">{r.run.key}</span>
+                        <div>
+                          <Link href={`/runs/${r.run.id}`}>{r.run.ticketTitle}</Link>
+                        </div>
+                      </>
+                    ) : (
+                      <span className="faint small">Not opened by a Run</span>
+                    )}
                   </td>
+                  <td className="small nowrap">{r.run?.flowName ?? <span className="faint">—</span>}</td>
                   <td>
-                    <span className={`pill ${r.pullRequestState === "open" ? "ok" : r.pullRequestState === "merged" ? "merged" : ""}`}>
-                      {r.pullRequestState ?? "unknown"}
-                    </span>
-                  </td>
-                  <td className="small nowrap">{r.flowName}</td>
-                  <td>
-                    <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
-                      <Avatar name={r.starterName} email={r.starterEmail} picture={r.starterPicture} />
+                    {r.run ? (
+                      <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
+                        <Avatar name={r.run.starterName} email={r.run.starterEmail} picture={r.run.starterPicture} />
+                        <span className="small nowrap">
+                          {r.run.starterName ?? r.run.starterEmail}
+                          <div className="faint">{ago(r.at, now)}</div>
+                        </span>
+                      </div>
+                    ) : (
                       <span className="small nowrap">
-                        {r.starterName ?? r.starterEmail}
-                        <div className="faint">{ago(r.queuedAt, now)}</div>
+                        <span className="mono">@{r.authorLogin}</span>
+                        <div className="faint">{ago(r.at, now)}</div>
                       </span>
-                    </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -114,13 +150,13 @@ export default async function PullRequestsPage({ searchParams }: { searchParams:
         {(page > 1 || hasMore) && (
           <div className="pager">
             {page > 1 && (
-              <Link className="btn sm" href={href(state, page - 1)}>
+              <Link className="btn sm" href={href({}, page - 1)}>
                 Newer
               </Link>
             )}
             <span className="faint small">Page {page}</span>
             {hasMore && (
-              <Link className="btn sm" href={href(state, page + 1)}>
+              <Link className="btn sm" href={href({}, page + 1)}>
                 Older
               </Link>
             )}

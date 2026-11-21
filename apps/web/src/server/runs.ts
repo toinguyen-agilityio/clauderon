@@ -23,16 +23,16 @@ import {
   listProjects,
   listPullRequests,
   listRuns,
+  RUNS_PAGE_SIZE,
+  listMembers,
   nodesFrom,
   openHumanRequests,
-  pullRequestCounts,
   respondToHuman,
   retryRun,
   retryableNodes,
   runStateCounts,
   type AuditFilters,
   type HumanAction,
-  type PullRequestFilter,
   type RunFilters,
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
@@ -73,33 +73,133 @@ export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number)
   };
 }
 
-export const PULL_REQUEST_TABS = ["open", "merged", "closed"] as const satisfies readonly PullRequestFilter[];
+export type PullRequestTab = "needs-you";
 
-/** The `state` tab from a URL; anything else means every pull request. */
-export function parsePullRequestTab(state: string | undefined): PullRequestFilter | undefined {
-  return (PULL_REQUEST_TABS as readonly string[]).includes(state ?? "") ? (state as PullRequestFilter) : undefined;
+/** The tab from a URL: "needs-you", or anything else for every open pull request. */
+export function parsePullRequestTab(tab: string | undefined): PullRequestTab | undefined {
+  return tab === "needs-you" ? tab : undefined;
 }
 
+export type PullRequestRow = {
+  /** Unique per row: the Project and the pull request number. */
+  id: string;
+  projectId: string;
+  repo: string;
+  number: number;
+  url: string | null;
+  title: string | null;
+  branch: string | null;
+  at: Date;
+  /** Who opened it on GitHub, for one a Run did not open. */
+  authorLogin: string | null;
+  /** The viewer's GitHub login is asked to review it. */
+  needsYou: boolean;
+  /** The Member who opened it: their Run did, or its author is their Machine's gh login. */
+  openedBy: string | null;
+  /** The Run that opened it, if one did. */
+  run: { id: string; key: string; ticketTitle: string; flowName: string; starterName: string | null; starterEmail: string; starterPicture: string | null } | null;
+};
+
+/** `memberId` is a Member's id, or "me" for the viewer. */
+export type PullRequestQuery = { tab?: PullRequestTab; projectId?: string; memberId?: string; page: number };
+
 /**
- * The Pull requests page: Runs that opened one, by PR state. Open ones on the page are
- * refreshed from GitHub first (each at most once a minute, TIC-6), so a merge shows up.
+ * The Pull requests page: every open pull request of every Project, read from
+ * GitHub each time the page opens, with the Run that opened it when one did.
+ * "Needs you" are the ones asking the gh login of the viewer's Machine for a
+ * review. For a Project GitHub cannot read, the page
+ * falls back to the pull requests its Runs recorded as open, and says so.
  */
-export async function viewPullRequests(deps: AppDeps, state: PullRequestFilter | undefined, page: number) {
-  const first = await listPullRequests(deps.db, state, page);
-  const open = first.rows.filter((r) => r.pullRequestState === "open");
-  await Promise.all(open.map((r) => refreshPullRequest(deps, r.id)));
-  const [result, counts, projects, machines] = await Promise.all([
-    open.length > 0 ? listPullRequests(deps.db, state, page) : first,
-    pullRequestCounts(deps.db),
-    listProjects(deps.db),
-    listMachines(deps.db),
-  ]);
+export async function viewPullRequests(deps: AppDeps, viewer: Viewer, query: PullRequestQuery) {
+  const [projects, fromRuns, machines, members] = await Promise.all([listProjects(deps.db), listPullRequests(deps.db), listMachines(deps.db), listMembers(deps.db)]);
+  const fromGitHub = await Promise.all(
+    projects.map(async (p) => {
+      try {
+        return { project: p, pulls: await deps.github.listOpenPullRequests(p.owner, p.repo), error: null };
+      } catch (error) {
+        return { project: p, pulls: null, error: error instanceof Error ? error.message : String(error) };
+      }
+    }),
+  );
+
   const keyOf = ticketKeys(projects);
-  const machineLabel = new Map(machines.map((p) => [p.id, p.name ?? `${p.owner.name ?? p.owner.email}'s Machine`]));
+  const machine = machines.find((m) => m.memberId === viewer.id);
+  const me = machine?.ghAccount?.toLowerCase() ?? null;
+  const memberOfLogin = new Map(machines.filter((m) => m.ghAccount).map((m) => [m.ghAccount!.toLowerCase(), m.memberId]));
+  const runOf = new Map(fromRuns.map((r) => [`${r.projectId}#${r.pullRequestNumber}`, r]));
+  const runPart = (r: (typeof fromRuns)[number]): PullRequestRow["run"] => ({
+    id: r.id,
+    key: keyOf(r.projectId, r.ticketNumber),
+    ticketTitle: r.ticketTitle,
+    flowName: r.flowName,
+    starterName: r.starterName,
+    starterEmail: r.starterEmail,
+    starterPicture: r.starterPicture,
+  });
+
+  const all: PullRequestRow[] = [];
+  for (const { project, pulls } of fromGitHub) {
+    if (pulls) {
+      for (const pr of pulls) {
+        const r = runOf.get(`${project.id}#${pr.number}`);
+        all.push({
+          id: `${project.id}#${pr.number}`,
+          projectId: project.id,
+          repo: project.repo,
+          number: pr.number,
+          url: pr.url,
+          title: pr.title,
+          branch: pr.branch,
+          at: pr.createdAt,
+          authorLogin: pr.authorLogin,
+          needsYou: !!me && pr.reviewers.some((login) => login.toLowerCase() === me),
+          openedBy: r?.starterMemberId ?? memberOfLogin.get(pr.authorLogin.toLowerCase()) ?? null,
+          run: r ? runPart(r) : null,
+        });
+      }
+    } else {
+      for (const r of fromRuns.filter((r) => r.projectId === project.id && r.pullRequestState === "open")) {
+        all.push({
+          id: `${project.id}#${r.pullRequestNumber}`,
+          projectId: project.id,
+          repo: project.repo,
+          number: r.pullRequestNumber!,
+          url: r.pullRequestUrl,
+          title: null,
+          branch: r.branch,
+          at: r.queuedAt,
+          authorLogin: null,
+          needsYou: false,
+          openedBy: r.starterMemberId,
+          run: runPart(r),
+        });
+      }
+    }
+  }
+
+  all.sort((a, b) => b.at.getTime() - a.at.getTime() || b.number - a.number);
+  const memberId = query.memberId === "me" ? viewer.id : query.memberId;
+  const ofMember = all.filter((r) => !memberId || r.openedBy === memberId);
+  const ofProject = ofMember.filter((r) => !query.projectId || r.projectId === query.projectId);
+  const perProject: Record<string, number> = {};
+  for (const r of ofMember) perProject[r.projectId] = (perProject[r.projectId] ?? 0) + 1;
+
+  const listed = ofProject.filter((r) => query.tab !== "needs-you" || r.needsYou);
+  const page = Math.max(1, query.page);
+  const start = (page - 1) * RUNS_PAGE_SIZE;
   return {
-    ...result,
-    rows: result.rows.map((r) => ({ ...r, key: keyOf(r.projectId, r.ticketNumber), machine: (r.machineId && machineLabel.get(r.machineId)) ?? "Machine removed" })),
-    counts,
+    projects: projects.map((p) => ({ id: p.id, repo: p.repo })),
+    /** Counts below follow the Member filter. */
+    total: ofMember.length,
+    perProject,
+    members: members.filter((m) => m.id !== viewer.id).map((m) => ({ id: m.id, label: m.name ?? m.email })),
+    /** The tab counts, of the chosen Project (or all). */
+    counts: { open: ofProject.length, needsYou: ofProject.filter((r) => r.needsYou).length },
+    /** The viewer's gh login, from their Machine; without one nothing "needs you". */
+    ghAccount: machine?.ghAccount ?? null,
+    rows: listed.slice(start, start + RUNS_PAGE_SIZE),
+    hasMore: listed.length > start + RUNS_PAGE_SIZE,
+    errors: fromGitHub.filter((g) => g.error).map((g) => ({ repo: g.project.repo, error: g.error! })),
   };
 }
 
