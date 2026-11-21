@@ -20,7 +20,7 @@ pnpm --filter @clauderon/host-agent build   # bundle the Agent into apps/host-ag
 pnpm lint | typecheck | test | build
 ```
 
-Tests are Vitest and need `TEST_DATABASE_URL` (copy `.env.example` to `.env`; each test file creates and drops its own database, so the Postgres server from `db:up` is enough). CI runs lint, typecheck and test, plus the Agent's tests and an install smoke test (`apps/web/scripts/agent-smoke.ts`) on macOS, Linux and Windows.
+Tests are Vitest and need `TEST_DATABASE_URL` (copy `.env.example` to `.env`; each test file creates and drops its own database, so the Postgres server from `db:up` is enough). CI runs lint, typecheck and test, plus the Agent's tests and an install smoke test (`apps/web/scripts/agent-smoke.ts`) on macOS, Linux and Windows (`agent.yml`: on pull requests only when they touch the Agent or the packages and web files it depends on; always on pushes to `staging` and `main`).
 
 ```sh
 pnpm --filter @clauderon/gateway test                       # one package
