@@ -134,8 +134,10 @@ export const sampleFlows: SampleFlow[] = [
       { key: "grill", node: "grill-a-plan", x: 216, y: 112 },
       { key: "approvePlan", node: "approve-a-plan", x: 520, y: 112 },
       { key: "code", node: "code-a-change", x: 824, y: 104, enabledOptionalOutputs: ["summary"] },
-      { key: "tests", node: "run-tests", x: 1128, y: 0 },
-      { key: "shots", node: "capture-screenshots", x: 1128, y: 208 },
+      { key: "tests", node: "run-tests", x: 1128, y: 208 },
+      // Above the pull request: ties in run order go by y first (RUN-2), so this keeps
+      // screenshots running before the pull request opens.
+      { key: "shots", node: "capture-screenshots", x: 1128, y: 0 },
       { key: "pr", node: "open-a-pull-request", x: 1432, y: 80, enabledOptionalOutputs: ["pull-request"] },
       { key: "approvePr", node: "approve-the-pull-request", x: 1736, y: 120 },
     ],
