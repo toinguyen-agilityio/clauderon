@@ -76,9 +76,14 @@ describe("Agent service (ADR 0006)", () => {
   });
 
   describe("launchd install", () => {
-    const home = process.env.HOME;
-    afterEach(() => void (process.env.HOME = home));
-    const fakeHome = () => (process.env.HOME = mkdtempSync(join(tmpdir(), "clauderon-launchd-")));
+    const { HOME, USERPROFILE } = process.env;
+    afterEach(() => {
+      process.env.HOME = HOME;
+      if (USERPROFILE === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = USERPROFILE;
+    });
+    // os.homedir() reads USERPROFILE on Windows and HOME elsewhere, so fake both.
+    const fakeHome = () => (process.env.HOME = process.env.USERPROFILE = mkdtempSync(join(tmpdir(), "clauderon-launchd-")));
 
     // bootout returns before the old Agent has exited, and bootstrap fails with
     // "5: Input/output error" until it has, so a reinstall retries bootstrap.
