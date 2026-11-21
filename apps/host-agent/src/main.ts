@@ -13,9 +13,10 @@ import { runDoctor } from "./doctor";
 import { checkGateway, type GatewayCheck } from "./gateway-check";
 import { findBash, localSystem } from "./local-system";
 import { checkLogins, registerLoginHandlers, type LoginHooks, type Logins } from "./logins";
+import { registerDraftHandlers } from "./drafts";
 import { registerNodeHandlers, type NodeHandles } from "./nodes";
 import { pair } from "./pair";
-import { acquireLock, fileStateStore, pairingFile, readMachineFacts, wsConnector, type Pairing } from "./runtime";
+import { acquireLock, fileStateStore, machineUsageReader, pairingFile, readMachineFacts, wsConnector, type Pairing } from "./runtime";
 import { installService, serviceInstalled, uninstallService, type ServiceSpec } from "./service";
 import type { System } from "./system";
 import { refreshToolPath } from "./tool-path";
@@ -57,7 +58,7 @@ async function agentBinDir(): Promise<string> {
 const gatewayOf = (paired: Pairing | null): Promise<GatewayCheck | null> => (paired ? checkGateway(paired.gatewayUrl, paired.token) : Promise.resolve(null));
 
 async function doctorFor(system: System, logins: Logins, gateway: GatewayCheck | null): Promise<DoctorReport> {
-  return runDoctor({ system, platform: process.platform, home, logins, gateway, serviceInstalled: await serviceInstalled().catch(() => null), version: VERSION });
+  return runDoctor({ system, platform: process.platform, home, logins, gateway, serviceInstalled: await serviceInstalled(home).catch(() => null), version: VERSION });
 }
 
 /** Opens a page in the default browser; failing is fine, the URL is printed too. */
@@ -149,6 +150,7 @@ async function runCommand(): Promise<void> {
   await refreshToolPath();
   const system = localSystem({ binDir: await agentBinDir() });
   let nodes: NodeHandles | null = null;
+  let drafts: { running(): string[] } | null = null;
   let webUrl = process.env.CLAUDERON_WEB_URL ?? paired.webUrl ?? null;
   const agent = new Agent({
     url: process.env.GATEWAY_URL ?? paired.gatewayUrl,
@@ -156,6 +158,7 @@ async function runCommand(): Promise<void> {
     clock: systemClock,
     connect: wsConnector,
     facts: () => readMachineFacts(home),
+    usage: machineUsageReader(home),
     state: fileStateStore(home),
     // A new id per process: the Gateway tells a restart from a reconnect by it.
     processId: randomUUID(),
@@ -187,7 +190,7 @@ async function runCommand(): Promise<void> {
   /** A bundled Agent takes the web app's bundle once no Node runs (ADR 0007). */
   const maybeUpdate = async (): Promise<void> => {
     if (!BUILD || !webUrl || process.env.CLAUDERON_NO_UPDATE) return;
-    if ((nodes?.running().length ?? 0) > 0) {
+    if ((nodes?.running().length ?? 0) + (drafts?.running().length ?? 0) > 0) {
       setTimeout(() => void maybeUpdate(), 5 * 60_000).unref();
       return;
     }
@@ -219,6 +222,7 @@ async function runCommand(): Promise<void> {
   registerLoginHandlers(agent, system, hooks);
   registerWorkspaceHandlers(agent, system, { home, log });
   nodes = registerNodeHandlers(agent, system, { log, knownSecrets: [paired.token], home });
+  drafts = registerDraftHandlers(agent, system, { log, knownSecrets: [paired.token], home });
 
   // As a service nobody is at its terminal: Ctrl-C or a closing console (SIGINT,
   // SIGHUP, SIGBREAK) from some other window must not stop it, only SIGTERM does.
@@ -270,7 +274,7 @@ try {
   else if (command === "doctor") await doctorCommand(args);
   else if (command === "install-service") await installCommand();
   else if (command === "uninstall-service") {
-    await uninstallService();
+    await uninstallService(home);
     log("The Agent service is removed.");
   } else if (command === "help" || command === "--help") log(USAGE);
   else throw new Error(`unknown command ${command}\n\n${USAGE}`);

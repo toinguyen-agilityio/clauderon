@@ -2,7 +2,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { acquireLock, fileStateStore, pairingFile, readMachineFacts } from "../src/runtime";
+import { acquireLock, cpuBusyPercent, fileStateStore, machineUsageReader, pairingFile, parseVmStat, readMachineFacts } from "../src/runtime";
 
 let dir: string | null = null;
 afterEach(async () => {
@@ -17,6 +17,34 @@ describe("fileStateStore", () => {
     expect(await store.load()).toEqual({ lastReceivedId: 0 });
     await store.save({ lastReceivedId: 42 });
     expect(await fileStateStore(join(dir, "nested")).load()).toEqual({ lastReceivedId: 42 });
+  });
+});
+
+describe("machine usage", () => {
+  it("counts app, wired and compressed pages from vm_stat as used memory", () => {
+    const text = [
+      "Mach Virtual Memory Statistics: (page size of 16384 bytes)",
+      "Pages free:                                5422.",
+      "Pages wired down:                        100.",
+      "Pages purgeable:                           50.",
+      "Anonymous pages:                         1000.",
+      "Pages occupied by compressor:            200.",
+    ].join("\n");
+    expect(parseVmStat(text)).toBe((1000 - 50 + 100 + 200) * 16384);
+    expect(parseVmStat("nothing here")).toBeNull();
+  });
+
+  it("gives the busy share of CPU time between two readings", () => {
+    expect(cpuBusyPercent({ busy: 100, total: 1000 }, { busy: 230, total: 2000 })).toBe(13);
+    expect(cpuBusyPercent({ busy: 5, total: 10 }, { busy: 5, total: 10 })).toBe(0);
+  });
+
+  it("reads memory, free disk and CPU on this computer", async () => {
+    const usage = await machineUsageReader(tmpdir())();
+    expect(usage?.memoryUsedMb).toBeGreaterThan(0);
+    expect(usage?.diskFreeGb).toBeGreaterThanOrEqual(0);
+    expect(usage?.cpuPercent).toBeGreaterThanOrEqual(0);
+    expect(usage?.cpuPercent).toBeLessThanOrEqual(100);
   });
 });
 

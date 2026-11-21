@@ -104,6 +104,37 @@ describe("Agent", () => {
     expect(gateway.received.filter((e) => e.type === "heartbeat")).toHaveLength(3);
   });
 
+  it("sends the Machine's usage with each heartbeat, and a bare heartbeat when reading it fails", async () => {
+    const usage = { memoryUsedMb: 15360, diskFreeGb: 65, cpuPercent: 13 };
+    let fail = false;
+    agent = new Agent({
+      url: "ws://gateway.test",
+      token: "machine-token",
+      clock,
+      connect: gateway.connector,
+      facts,
+      usage: async () => {
+        if (fail) throw new Error("statfs failed");
+        return usage;
+      },
+      state,
+      processId: "proc-1",
+      version: "0.1.0",
+      log: () => {},
+    });
+    await agent.start();
+    await settle();
+    gateway.welcome();
+    await settle();
+    await clock.advance(10_000);
+    await settle();
+    fail = true;
+    await clock.advance(10_000);
+    await settle();
+    const beats = gateway.received.filter((e) => e.type === "heartbeat").map((e) => e.payload as { usage?: unknown });
+    expect(beats.map((b) => b.usage)).toEqual([usage, undefined]);
+  });
+
   it("delivers a numbered message once, acknowledges it and stores its id", async () => {
     const got: string[] = [];
     agent.on("node.kill", (p) => {

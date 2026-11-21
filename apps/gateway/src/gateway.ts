@@ -1,6 +1,7 @@
 import type { Clock } from "@clauderon/core";
 import type { Db } from "@clauderon/db";
 import { BrowserHub } from "./browser-hub";
+import { FlowDrafts } from "./flow-drafts";
 import { LiveHub } from "./live-hub";
 import { LogRetention } from "./log-retention";
 import { MachineLinks } from "./machine-link";
@@ -28,7 +29,8 @@ export function createGateway(opts: GatewayOptions) {
   const { db, clock, log } = opts;
   const live = new LiveHub(db);
   const links = new MachineLinks({ db, clock, log });
-  const hub = new BrowserHub({ db, operators: opts.operators, sessionSecret: opts.sessionSecret, clock, live });
+  const drafts = new FlowDrafts({ db, links, clock, secrets: opts.appSecrets, log });
+  const hub = new BrowserHub({ db, operators: opts.operators, sessionSecret: opts.sessionSecret, clock, live, drafts, log });
   const engine = new RunEngine({
     db,
     links,
@@ -51,6 +53,7 @@ export function createGateway(opts: GatewayOptions) {
   links.on("node.log", (p) => engine.nodeLog(p));
   links.on("node.usage", (p) => engine.nodeUsage(p));
   links.on("node.result", (p) => engine.nodeResult(p));
+  links.on("flow.drafted", (p, machineId) => drafts.drafted(p, machineId));
   // A new Agent process, e.g. right after Pairing: its logins are unknown until checked (POD-5).
   links.onHello((machineId, _hello, { processChanged }) => {
     if (processChanged) links.send(machineId, "machine.checkLogins", {});
@@ -63,7 +66,7 @@ export function createGateway(opts: GatewayOptions) {
     await engine.booted();
   };
 
-  return { links, hub, live, engine, machines, watch, retention, start };
+  return { links, hub, live, drafts, engine, machines, watch, retention, start };
 }
 
 export type Gateway = ReturnType<typeof createGateway>;

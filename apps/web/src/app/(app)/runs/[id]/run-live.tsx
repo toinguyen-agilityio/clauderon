@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { duration, formatTime, tokens } from "../../../../components/format";
-import { openGatewaySocket } from "../../../../components/gateway-socket";
+import { useGatewaySocket } from "../../../../components/gateway-socket";
 import { Icon } from "../../../../components/icons";
 import { HumanForm } from "../../../../components/human-form";
 import { OutputValue } from "../../../../components/output-value";
@@ -23,43 +23,6 @@ const KIND: Record<string, [letter: string, label: string]> = {
   approve: ["H", "Human · Approve"],
   grill: ["H", "Human · Grill"],
 };
-
-/** The Gateway's `/browser` socket, reopened with backoff when it drops (NFR-3). */
-function useGatewaySocket(gatewayUrl: string): WebSocket | null {
-  const [socket, setSocket] = useState<WebSocket | null>(null);
-  useEffect(() => {
-    let stopped = false;
-    let retry: ReturnType<typeof setTimeout> | null = null;
-    let current: WebSocket | null = null;
-    let failures = 0;
-    const open = async () => {
-      const ws = await openGatewaySocket(gatewayUrl, "/browser");
-      if (!ws) return;
-      if (stopped) return ws.close();
-      current = ws;
-      ws.onopen = () => {
-        failures = 0;
-        setSocket(ws);
-      };
-      ws.onclose = (event) => {
-        setSocket((s) => (s === ws ? null : s));
-        if (stopped) return;
-        if (event.code === 4403 || event.code === 4401) {
-          window.location.href = "/session-ended";
-          return;
-        }
-        retry = setTimeout(() => void open(), Math.min(1000 * 2 ** failures++, 10_000));
-      };
-    };
-    void open();
-    return () => {
-      stopped = true;
-      if (retry) clearTimeout(retry);
-      current?.close();
-    };
-  }, [gatewayUrl]);
-  return socket;
-}
 
 function classify(line: Line): string {
   if (line.stream !== "stdout") return line.stream;

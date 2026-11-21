@@ -176,7 +176,7 @@ export class MachineLinks {
         link.buffer.acknowledge((envelope.payload as Payload<"ack">).upTo);
         return;
       case "heartbeat":
-        await recordMachineHeartbeat(this.opts.db, machineId, this.opts.clock.now());
+        await recordMachineHeartbeat(this.opts.db, machineId, this.opts.clock.now(), (envelope.payload as Payload<"heartbeat">).usage);
         for (const listener of this.heartbeatListeners) await listener(machineId);
         return;
       case "welcome":

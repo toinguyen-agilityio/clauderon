@@ -12,7 +12,7 @@ import { AutoRefresh } from "../auto-refresh";
 import { CmdBox } from "../cmd-box";
 import { DoctorCard } from "../doctor-card";
 import { CheckLogins, RemoveMachine, UnpairMachine } from "../machine-actions";
-import { claudeAccountLabel, defaultMachineName, formatGb, machineName, MachineStatusChip, osLabel, ReadyChip, SlotBar, SlotChips } from "../machine-parts";
+import { claudeAccountLabel, defaultMachineName, machineName, MachineStatusChip, osLabel, ReadyChip, ResourceMeter, resourceLabels, SlotBar, SlotChips } from "../machine-parts";
 import { MachineSettings } from "../machine-settings";
 import { PairingProgress } from "../pairing-progress";
 
@@ -75,12 +75,13 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     [machine.claudeLoggedIn, "Claude Code", checking ? CHECKING : loginChip(machine.claudeLoggedIn, claudeAccountLabel(machine) ?? "Logged in")],
     [machine.ghLoggedIn, "gh", checking ? CHECKING : loginChip(machine.ghLoggedIn, machine.ghAccount ?? "Logged in")],
   ];
+  const resources = resourceLabels(machine);
   const facts: [label: string, value: ReactNode][] = [
     ["Hostname", <span key="h" className="mono small">{machine.hostname ?? "—"}</span>],
     ["System", osLabel(machine.os, machine.arch) || "—"],
-    ["CPU", machine.cpus ? `${machine.cpus} cores` : "—"],
-    ["RAM", machine.memoryMb ? formatGb(machine.memoryMb) : "—"],
-    ["Disk", machine.diskGb ? `${machine.diskGb} GB` : "—"],
+    ["CPU", <ResourceMeter key="cpu" label="CPU" resource={resources.cpu} />],
+    ["RAM", <ResourceMeter key="ram" label="RAM" resource={resources.ram} />],
+    ["Disk", <ResourceMeter key="disk" label="Disk" resource={resources.disk} />],
     [
       "Agent",
       <span key="a" className="mono small">

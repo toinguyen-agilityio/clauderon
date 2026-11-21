@@ -293,6 +293,12 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .slot { width: 22px; height: 10px; border-radius: 3px; background: var(--panel); border: 1px solid var(--line-strong); }
 .slot.run { background: var(--run); border-color: var(--run); }
 .slot.wait { background: var(--wait); border-color: var(--wait); }
+.meter-row { display: flex; flex-direction: column; gap: 4px; }
+.meter { width: 100%; max-width: 160px; height: 6px; border-radius: 3px; background: var(--line-strong); overflow: hidden; }
+.meter-fill { display: block; height: 100%; border-radius: 3px; }
+.meter-fill.ok { background: var(--ok); }
+.meter-fill.wait { background: var(--wait); }
+.meter-fill.fail { background: var(--fail); }
 .pod-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* Run page */
@@ -1095,3 +1101,17 @@ a.proj-count:hover span { color: var(--accent-text); text-decoration: underline;
 @media (max-width: 860px) {
   .members-add { width: 100%; }
 }
+
+/* Build with Agent (ADR 0008): the Flow Draft drawn read-only on the editor's canvas. */
+.draft-preview { display: flex; flex-direction: column; gap: 8px; }
+.draft-canvas { position: relative; height: 360px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+/* Build with Agent: the description composer. */
+.composer { display: flex; flex-direction: column; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--panel); transition: border-color 0.12s; }
+.composer:focus-within { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 1px; }
+.composer.disabled { background: var(--sunk); }
+.composer textarea { border: 0; background: transparent; padding: 10px 12px; resize: vertical; min-height: 72px; line-height: 1.5; outline: none; }
+.composer textarea:disabled { cursor: progress; color: var(--fg2); }
+.composer-f { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 12px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.composer-kbd kbd { font-family: var(--font-mono); font-size: 11px; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--sunk); color: var(--fg2); }
+@media (pointer: coarse) { .composer-kbd { display: none; } }
+.build-examples { align-items: center; margin-top: 2px; }

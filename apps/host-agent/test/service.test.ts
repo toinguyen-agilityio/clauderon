@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { installService, launchdPlist, serviceArgs, systemdUnit, uninstallService, windowsHidden, windowsLauncher, windowsRunCommand, type ServiceSpec } from "../src/service";
+import { installService, launchdPlist, serviceArgs, serviceNames, systemdUnit, uninstallService, windowsHidden, windowsLauncher, windowsRunCommand, type ServiceSpec } from "../src/service";
 
 // A bundled Agent (ADR 0007): its own Node and agent.mjs under the home.
 const spec: ServiceSpec = {
@@ -65,14 +65,25 @@ describe("Agent service (ADR 0006)", () => {
     expect(calls[0]![2]).toMatch(/^HKCU\\/);
     expect(launched).toHaveLength(1);
     calls.length = 0;
-    await uninstallService("win32", run);
+    await uninstallService(`${process.cwd()}/.tmp-service-home`, "win32", run);
     expect(calls.map((c) => c.slice(0, 2))).toEqual([["reg", "delete"]]);
   });
 
+  it("names the service after its home, so a dev Agent (~/.clauderon-dev) does not replace the default one", () => {
+    expect(serviceNames("/Users/ann/.clauderon")).toEqual({ label: "com.clauderon.agent", unit: "clauderon-agent.service", runName: "Clauderon Agent" });
+    expect(serviceNames("/Users/ann/.clauderon-dev")).toEqual({ label: "com.clauderon.agent.dev", unit: "clauderon-agent-dev.service", runName: "Clauderon Agent (dev)" });
+    expect(launchdPlist({ ...spec, home: "/Users/ann/.clauderon-dev" })).toContain("<string>com.clauderon.agent.dev</string>");
+  });
+
   describe("launchd install", () => {
-    const home = process.env.HOME;
-    afterEach(() => void (process.env.HOME = home));
-    const fakeHome = () => (process.env.HOME = mkdtempSync(join(tmpdir(), "clauderon-launchd-")));
+    const { HOME, USERPROFILE } = process.env;
+    afterEach(() => {
+      process.env.HOME = HOME;
+      if (USERPROFILE === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = USERPROFILE;
+    });
+    // os.homedir() reads USERPROFILE on Windows and HOME elsewhere, so fake both.
+    const fakeHome = () => (process.env.HOME = process.env.USERPROFILE = mkdtempSync(join(tmpdir(), "clauderon-launchd-")));
 
     // bootout returns before the old Agent has exited, and bootstrap fails with
     // "5: Input/output error" until it has, so a reinstall retries bootstrap.
@@ -88,6 +99,15 @@ describe("Agent service (ADR 0006)", () => {
       await installService({ ...spec, home: join(process.env.HOME!, ".clauderon") }, "darwin", run, () => {}, async (ms) => void pauses.push(ms));
       expect(calls).toEqual(["bootout", "bootstrap", "bootstrap", "bootstrap"]);
       expect(pauses).toHaveLength(2);
+    });
+
+    it("installs a dev home's service beside the default one, under its own label", async () => {
+      fakeHome();
+      const calls: string[][] = [];
+      const run = async (_file: string, args: readonly string[]) => void calls.push([...args]);
+      await installService({ ...spec, home: join(process.env.HOME!, ".clauderon-dev") }, "darwin", run, () => {}, async () => {});
+      expect(calls[0]![1]).toMatch(/\/com\.clauderon\.agent\.dev$/);
+      expect(calls[1]![2]).toBe(join(process.env.HOME!, "Library", "LaunchAgents", "com.clauderon.agent.dev.plist"));
     });
 
     it("gives up with the last error when bootstrap keeps failing", async () => {

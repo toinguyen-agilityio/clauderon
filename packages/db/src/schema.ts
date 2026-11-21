@@ -103,6 +103,9 @@ export type MachineDoctor = {
   checks: { id: string; title: string; status: "ok" | "warn" | "fail"; detail?: string; fix?: string }[];
 };
 
+/** What the Machine was using at its latest heartbeat, as `machine.usage` carries it. */
+export type MachineUsage = { memoryUsedMb: number; diskFreeGb: number; cpuPercent: number };
+
 /**
  * One Member's Machine (ADR 0006): their own computer, paired with a token
  * whose SHA-256 hash is kept here. Pairing a new computer replaces the hash,
@@ -131,6 +134,8 @@ export const machine = pgTable("machine", {
   connected: boolean("connected").notNull().default(false),
   connectedAt: ts("connected_at"),
   lastHeartbeatAt: ts("last_heartbeat_at"),
+  /** From the latest heartbeat; null until an Agent that reports it beats. */
+  usage: jsonb("usage").$type<MachineUsage>(),
   lastReceivedId: bigint("last_received_id", { mode: "number" }).notNull().default(0),
   lastSentId: bigint("last_sent_id", { mode: "number" }).notNull().default(0),
   slots: integer("slots").notNull().default(2),
