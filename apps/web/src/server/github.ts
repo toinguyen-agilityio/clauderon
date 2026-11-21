@@ -1,4 +1,4 @@
-import type { GitHubReader, Issue, PullRequest, Repository } from "@clauderon/core";
+import type { GitHubReader, Issue, OpenPullRequest, PullRequest, Repository } from "@clauderon/core";
 
 // The GitHub reader over the REST API with the app's read-only token
 // (`GITHUB_TOKEN`, PRJ-2). Sync never writes to GitHub (TIC-9).
@@ -95,6 +95,30 @@ export function gitHubApi(token: string, fetcher: typeof fetch = fetch): GitHubR
       const pr = data[0];
       if (!pr) return null;
       return { number: pr.number, branch: pr.head.ref, state: pr.merged_at ? "merged" : pr.state, url: pr.html_url };
+    },
+    async listOpenPullRequests(owner, repo): Promise<OpenPullRequest[]> {
+      type Login = { login: string };
+      const pulls = await all<{
+        number: number;
+        title: string;
+        html_url: string;
+        created_at: string;
+        user: Login | null;
+        head: { ref: string };
+        requested_reviewers?: Login[] | null;
+      }>(
+        `/repos/${encode(owner, repo)}/pulls?state=open&per_page=100`,
+      );
+      return pulls.map((pr) => ({
+        number: pr.number,
+        branch: pr.head.ref,
+        state: "open",
+        url: pr.html_url,
+        title: pr.title,
+        authorLogin: pr.user?.login ?? "ghost",
+        createdAt: new Date(pr.created_at),
+        reviewers: (pr.requested_reviewers ?? []).map((u) => u.login),
+      }));
     },
   };
 }
