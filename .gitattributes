@@ -1,3 +1,4 @@
 # Files that run on Linux (the Pod image) must keep LF, whatever core.autocrlf is.
 images/pod/** text eol=lf
 *.sh text eol=lf
+docs/features.json text eol=lf

@@ -18,6 +18,7 @@ pnpm dev                   # web (Next.js) and gateway in watch mode
 pnpm --filter @clauderon/host-agent pair http://localhost:3000  # pair this computer as your Machine and run the Agent
 pnpm --filter @clauderon/host-agent build   # bundle the Agent into apps/host-agent/dist (served at /agent/agent.mjs)
 pnpm lint | typecheck | test | build
+pnpm features:build        # regenerate docs/features.json (CI runs `pnpm features:check`)
 ```
 
 Tests are Vitest and need `TEST_DATABASE_URL` (copy `.env.example` to `.env`; each test file creates and drops its own database, so the Postgres server from `db:up` is enough). CI runs lint, typecheck and test, plus the Agent's tests and an install smoke test (`apps/web/scripts/agent-smoke.ts`) on macOS, Linux and Windows (`agent.yml`: on pull requests only when they touch the Agent or the packages and web files it depends on; always on pushes to `staging` and `main`).
@@ -29,6 +30,8 @@ pnpm --filter @clauderon/db generate                        # new migration afte
 ```
 
 ## Architecture
+
+Read `docs/features.json` before exploring the code for what exists (features, status, paths, removed ones with a reason); it is generated, never hand-edited.
 
 Three deployables and four internal packages, all TypeScript ESM. Packages export source (`./src/index.ts`), with no build step. Web, Gateway and Postgres are self-hosted as one Docker Compose stack and published through a Cloudflare Tunnel (ADR 0005, ADR 0006, `deploy/README.md`); each Member runs the Agent on their own Machine (ADR 0006).
 

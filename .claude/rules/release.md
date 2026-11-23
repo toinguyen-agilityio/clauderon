@@ -4,11 +4,11 @@ Branch flow: feature and fix PRs go into `staging`. A release is a branch `relea
 
 Before `gh pr create` from a `release/*` branch into `main`:
 
-1. Run `graphify update .` (code only; no LLM, no API key).
-2. If `graphify-out/graph.json` or `graphify-out/GRAPH_REPORT.md` changed, commit just those two files as `chore(graph): refresh repo graph`.
+1. Run `pnpm features:build` to refresh `docs/features.json`, and `graphify update .` (code only; no LLM, no API key).
+2. If `docs/features.json` changed, commit it as `chore(features): refresh features.json`. If `graphify-out/graph.json` or `graphify-out/GRAPH_REPORT.md` changed, commit just those two files as `chore(graph): refresh repo graph`.
 3. Then create the PR.
 
-Do not refresh or commit the graph on any other branch.
+Do not refresh or commit the graph on any other branch. (`docs/features.json` is also refreshed on feature branches when a change adds, removes or moves a feature: edit `packages/features/features.map.json`, then run `pnpm features:build`; CI fails when it is stale.)
 
 Before cutting the branch, find the last tag (`git describe --tags --abbrev=0 origin/main`), list the commits since it, work out the next version and tell the user which one and why. Title the release PR `chore(release): v<version>`.
 

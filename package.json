@@ -14,7 +14,9 @@
     "db:up": "docker compose up -d postgres",
     "db:migrate": "pnpm --filter @clauderon/db migrate",
     "db:seed": "pnpm --filter @clauderon/db seed",
-    "start:gateway": "pnpm db:migrate && pnpm --filter @clauderon/gateway start"
+    "start:gateway": "pnpm db:migrate && pnpm --filter @clauderon/gateway start",
+    "features:build": "pnpm --filter @clauderon/features build:file",
+    "features:check": "pnpm --filter @clauderon/features check"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
