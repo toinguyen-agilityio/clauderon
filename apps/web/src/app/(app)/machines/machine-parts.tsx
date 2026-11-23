@@ -61,6 +61,23 @@ export function ResourceMeter({ label, resource }: { label: string; resource: Re
   );
 }
 
+/** CPU, RAM and Disk of one Machine as labelled meters (the list tiles); the same data as the Machine page. */
+export function MachineResources({ machine }: { machine: ResourceMachine }) {
+  const resources = resourceLabels(machine);
+  return (
+    <dl className="res-list" aria-label="Resources">
+      {([["CPU", resources.cpu], ["RAM", resources.ram], ["Disk", resources.disk]] as const).map(([label, resource]) => (
+        <div key={label} className="res-item">
+          <dt className="faint">{label}</dt>
+          <dd>
+            <ResourceMeter label={label} resource={resource} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /** The Machine's own name, or "<owner>'s Machine" when it has none. */
 export const machineName = (machine: { name: string | null; owner: { name: string | null; email: string } }) =>
   machine.name ?? defaultMachineName(machine.owner);

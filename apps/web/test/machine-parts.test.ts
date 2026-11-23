@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { claudeAccountLabel, resourceLabels, usageLevel } from "../src/app/(app)/machines/machine-parts";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { claudeAccountLabel, MachineResources, resourceLabels, usageLevel } from "../src/app/(app)/machines/machine-parts";
 
 describe("claudeAccountLabel", () => {
   it("names the Claude account Runs use by the email's name, with its plan, in one short label", () => {
@@ -28,6 +30,38 @@ describe("resourceLabels", () => {
     expect(resourceLabels({ ...machine, usage: null })).toEqual(totals);
     const none = { text: "—", percent: null };
     expect(resourceLabels({ connected: false, cpus: null, memoryMb: null, diskGb: null, usage: null })).toEqual({ cpu: none, ram: none, disk: none });
+  });
+});
+
+describe("MachineResources (Machines list)", () => {
+  const machine = { connected: true, cpus: 10, memoryMb: 24576, diskGb: 460, usage: { memoryUsedMb: 15360, diskFreeGb: 65, cpuPercent: 13 } };
+  const html = (m: Parameters<typeof MachineResources>[0]["machine"]) => renderToStaticMarkup(createElement(MachineResources, { machine: m }));
+
+  it("shows CPU, RAM and Disk with their shares and levels", () => {
+    const out = html(machine);
+    expect(out).toContain("13% of 10 cores");
+    expect(out).toContain("15 / 24 GB");
+    expect(out).toContain("395 / 460 GB");
+    expect(out).toContain('aria-label="Disk in use" aria-valuenow="86"');
+    expect(out).toContain("meter-fill wait"); // disk 86% is amber
+    expect(html({ ...machine, usage: { ...machine.usage, diskFreeGb: 20 } })).toContain("meter-fill fail");
+  });
+
+  it("shows the totals alone, with no meter, when offline or the Agent sends no usage", () => {
+    for (const m of [{ ...machine, connected: false }, { ...machine, usage: null }]) {
+      const out = html(m);
+      expect(out).toContain("10 cores");
+      expect(out).toContain("24 GB");
+      expect(out).toContain("460 GB");
+      expect(out).not.toContain("role=\"meter\"");
+      expect(out).not.toContain("0%");
+    }
+  });
+
+  it("shows a dash for a Machine that has not reported yet", () => {
+    const out = html({ connected: false, cpus: null, memoryMb: null, diskGb: null, usage: null });
+    expect(out.match(/—/g)).toHaveLength(3);
+    expect(out).not.toContain("role=\"meter\"");
   });
 });
 
