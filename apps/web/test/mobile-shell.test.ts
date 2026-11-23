@@ -6,7 +6,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/tickets" }));
 
 import { MobileShell } from "../src/components/mobile-shell";
 
-const html = (needsYou: number) => renderToStaticMarkup(createElement(MobileShell, { needsYou }, createElement("nav", null, "links")));
+const html = (needsYou: number) => renderToStaticMarkup(createElement(MobileShell, { needsYou, children: createElement("nav", null, "links") }));
 
 describe("MobileShell", () => {
   it("starts closed with a named, expandable menu button", () => {
