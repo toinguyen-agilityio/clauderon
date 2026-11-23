@@ -68,7 +68,7 @@ function FlowCard({ flow: f }: { flow: FlowRowView }) {
           {steps > 0 && steps !== f.nodeCount ? ` in ${steps} steps` : ""}
         </span>
       </div>
-      <FlowRowActions flowId={f.id} name={f.name} locked={f.lock !== null} />
+      <FlowRowActions flowId={f.id} name={f.name} locked={f.lock !== null} runCount={f.runCount} />
       <Steps nodes={f.nodes} />
       {f.updatedBy && (
         <span className="flow-who small faint" title={f.updatedTitle}>

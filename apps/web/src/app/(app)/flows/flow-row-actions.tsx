@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { closeOnBackdrop } from "../../../components/dialog";
 import { Icon } from "../../../components/icons";
+import { keptReason } from "./flows-view";
 import { exportFlowAction, flowActionAction, type FlowFormState } from "./actions";
 
 /**
@@ -11,7 +12,8 @@ import { exportFlowAction, flowActionAction, type FlowFormState } from "./action
  * name shows on hover; the row itself opens the Flow. Delete asks in a dialog first; a Flow that an Active Run locks cannot be deleted,
  * and says why.
  */
-export function FlowRowActions({ flowId, name, locked }: { flowId: string; name: string; locked: boolean }) {
+export function FlowRowActions({ flowId, name, locked, runCount }: { flowId: string; name: string; locked: boolean; runCount: number }) {
+  const kept = keptReason(runCount);
   const [state, action, pending] = useActionState<FlowFormState, FormData>(flowActionAction, { error: null, notice: null, openFlowId: null });
   const confirm = useRef<HTMLDialogElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -70,9 +72,9 @@ export function FlowRowActions({ flowId, name, locked }: { flowId: string; name:
         <button
           type="button"
           className="btn sm icon ghost danger-hover"
-          disabled={pending || locked}
+          disabled={pending || locked || kept !== null}
           aria-label={`Delete ${name}`}
-          data-tip={locked ? "Locked by an Active Run" : "Delete"}
+          data-tip={locked ? "Locked by an Active Run" : (kept ?? "Delete")}
           onClick={() => confirm.current?.showModal()}
         >
           {Icon.trash}
@@ -88,7 +90,7 @@ export function FlowRowActions({ flowId, name, locked }: { flowId: string; name:
             </div>
             <div className="modal-b">
               <p className="small">
-                <b>{name}</b> will be deleted. This cannot be undone. A Flow with Runs in its history is kept.
+                <b>{name}</b> will be deleted. This cannot be undone.
               </p>
             </div>
             <div className="modal-f">
@@ -102,6 +104,11 @@ export function FlowRowActions({ flowId, name, locked }: { flowId: string; name:
           </div>
         </dialog>
       </form>
+      {kept && !locked && (
+        <span className="faint small" data-testid="delete-kept-reason">
+          {kept}
+        </span>
+      )}
       {exportError && (
         <span className="err-text small" role="alert">
           {exportError}

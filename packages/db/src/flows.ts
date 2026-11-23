@@ -90,6 +90,8 @@ export type FlowListRow = {
   updatedByName: string | null;
   updatedAt: Date;
   nodeCount: number;
+  /** Runs in the Flow's history; `deleteFlow` refuses a Flow that has any. */
+  runCount: number;
 };
 
 /** Every Flow with its number of placed Nodes, for the Flows page (FLW-9). */
@@ -104,6 +106,7 @@ export async function listFlowRows(db: Db): Promise<FlowListRow[]> {
       updatedByName: sql<string | null>`(select member.name from member where member.email = "flow"."updated_by_email")`,
       updatedAt: flow.updatedAt,
       nodeCount: sql<number>`(select count(*)::int from flow_node where flow_node.flow_id = "flow"."id")`,
+      runCount: sql<number>`(select count(*)::int from run where run.flow_id = "flow"."id")`,
     })
     .from(flow)
     .orderBy(flow.name);

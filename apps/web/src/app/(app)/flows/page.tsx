@@ -22,6 +22,7 @@ export default async function FlowsPage() {
     name: f.name,
     isSample: f.isSample,
     nodeCount: f.nodeCount,
+    runCount: f.runCount,
     problems: f.problems,
     nodes: f.nodes,
     // A sample nobody has changed shows no author.
