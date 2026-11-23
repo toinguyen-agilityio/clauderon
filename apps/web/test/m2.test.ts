@@ -155,7 +155,12 @@ describe("Flows page (spec M2 §2)", () => {
     const copy = await cloneMyFlow(deps, ann, flowId);
     if (!copy.ok) throw new Error("clone failed");
     // The sample has a Run in its history and is a sample; the clone has none and can go.
-    expect((await viewFlows(deps)).samples.every((f) => f.lock === null)).toBe(true);
+    const view = await viewFlows(deps);
+    expect(view.samples.every((f) => f.lock === null)).toBe(true);
+    // The list gets the Run count from the server; the server rule still refuses.
+    expect(view.samples.find((f) => f.id === flowId)!.runCount).toBe(1);
+    expect(view.flows.find((f) => f.id === copy.flowId)!.runCount).toBe(0);
+    expect(await deleteMyFlow(deps, ann, flowId)).toMatchObject({ ok: false });
     expect(await deleteMyFlow(deps, ann, copy.flowId)).toEqual({ ok: true });
   });
 });

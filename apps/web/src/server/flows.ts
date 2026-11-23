@@ -39,6 +39,7 @@ export type FlowView = {
   name: string;
   isSample: boolean;
   nodeCount: number;
+  runCount: number;
   problems: number;
   /**
    * The Nodes of the Flow in the order a Run executes them (canvas order if the Flow has a
@@ -71,6 +72,7 @@ export async function viewFlows(deps: AppDeps) {
       name: r.name,
       isSample: r.isSample,
       nodeCount: r.nodeCount,
+      runCount: r.runCount,
       problems: validateFlow(graph, library).length,
       nodes: executionOrder(graph).flatMap((n) => {
         const lib = libraryById.get(n.nodeId);
