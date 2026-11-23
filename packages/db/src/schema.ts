@@ -23,7 +23,6 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull(
 const ts = (name: string) => timestamp(name, { withTimezone: true });
 
 export const nodeKind = pgEnum("node_kind", ["ticket", "agent", "command", "approve", "grill"]);
-export const runMode = pgEnum("run_mode", ["real", "dry"]);
 export const runState = pgEnum("run_state", [
   "queued",
   "running",
@@ -278,7 +277,6 @@ export const batch = pgTable("batch", {
   starterMemberId: uuid("starter_member_id")
     .notNull()
     .references(() => member.id),
-  mode: runMode("mode").notNull(),
   extraInstructions: text("extra_instructions").notNull().default(""),
 });
 
@@ -302,8 +300,7 @@ export const run = pgTable(
     starterMemberId: uuid("starter_member_id")
       .notNull()
       .references(() => member.id),
-    mode: runMode("mode").notNull(),
-    state: runState("state").notNull().default("queued"),
+      state: runState("state").notNull().default("queued"),
     queuedAt: ts("queued_at").notNull().defaultNow(),
     startedAt: ts("started_at"),
     endedAt: ts("ended_at"),
@@ -320,10 +317,10 @@ export const run = pgTable(
   },
   (t) => [
     index("run_machine_queue_idx").on(t.machineId, t.state, t.queuedAt),
-    // One Active Run per Ticket, Dry-runs excluded (TIC-7).
+    // One Active Run per Ticket (TIC-7).
     uniqueIndex("run_one_active_per_ticket_idx")
       .on(t.ticketId)
-      .where(sql`${t.state} not in ('succeeded', 'cancelled') and ${t.mode} = 'real'`),
+      .where(sql`${t.state} not in ('succeeded', 'cancelled')`),
   ],
 );
 

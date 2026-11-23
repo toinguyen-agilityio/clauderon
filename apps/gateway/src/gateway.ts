@@ -16,9 +16,6 @@ export type GatewayOptions = {
   sessionSecret: string;
   /** Secret values masked out of every stored log line (NFR-1). */
   appSecrets: readonly string[];
-  /** Chance that a simulated Dry-run Node fails, 0 to 1 (DRY_RUN_FAILURE_RATE). */
-  dryRunFailureRate?: number;
-  random?: () => number;
   log?: (message: string) => void;
   /** Heartbeat timeout; default 30 s (RUN-12). */
   heartbeatTimeoutMs?: number;
@@ -37,8 +34,6 @@ export function createGateway(opts: GatewayOptions) {
     clock,
     live,
     secrets: opts.appSecrets,
-    dryRunFailureRate: opts.dryRunFailureRate,
-    random: opts.random,
     log,
   });
   const watch = new MachineWatch({ db, links, engine, clock, timeoutMs: opts.heartbeatTimeoutMs });
@@ -59,11 +54,10 @@ export function createGateway(opts: GatewayOptions) {
     if (processChanged) links.send(machineId, "machine.checkLogins", {});
   });
 
-  /** Loads the links, interrupts lost Dry-runs and arms the boot wait (spec M3 §6). */
+  /** Loads the links, arms the boot wait (spec M3 §6). */
   const start = async () => {
     await links.start();
     await watch.start();
-    await engine.booted();
   };
 
   return { links, hub, live, drafts, engine, machines, watch, retention, start };

@@ -171,7 +171,6 @@ export async function openHumanRequests(db: Db) {
       request: humanRequest,
       flowNodeId: attempt.flowNodeId,
       runId: run.id,
-      mode: run.mode,
       flowSnapshot: run.flowSnapshot,
       ticketNumber: ticket.number,
       ticketTitle: ticket.title,

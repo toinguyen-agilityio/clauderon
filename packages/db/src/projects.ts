@@ -172,7 +172,7 @@ export async function setPullRequestState(db: Db, runId: string, state: string, 
   await db.update(run).set({ pullRequestState: state, pullRequestCheckedAt: now }).where(eq(run.id, runId));
 }
 
-export type TicketRunView = { id: string; mode: "real" | "dry"; state: (typeof run.$inferSelect)["state"]; queuedAt: Date; pullRequestState: string | null };
+export type TicketRunView = { id: string; state: (typeof run.$inferSelect)["state"]; queuedAt: Date; pullRequestState: string | null };
 export type TicketWithRuns = Ticket & { runs: TicketRunView[] };
 
 /** Tickets with their Runs, for the derived Ticket Status (TIC-6). */
@@ -184,7 +184,7 @@ export async function listTicketsWithRuns(db: Db, projectId?: string): Promise<T
     .orderBy(asc(ticket.projectId), desc(ticket.number));
   if (tickets.length === 0) return [];
   const runs = await db
-    .select({ id: run.id, ticketId: run.ticketId, mode: run.mode, state: run.state, queuedAt: run.queuedAt, pullRequestState: run.pullRequestState })
+    .select({ id: run.id, ticketId: run.ticketId, state: run.state, queuedAt: run.queuedAt, pullRequestState: run.pullRequestState })
     .from(run)
     .where(
       inArray(

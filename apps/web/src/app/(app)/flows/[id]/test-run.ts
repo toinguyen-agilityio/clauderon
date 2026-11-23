@@ -1,6 +1,6 @@
 // The editor's Test run: a walk through the Flow in the order the Run engine would
 // take (core's topologicalOrder), shown on the canvas. It runs nothing: no Machine, no
-// GitHub, no Claude. A real Run, or a Dry-run on a Machine, is started from Tickets.
+// GitHub, no Claude. A real Run is started from Tickets.
 
 import { topologicalOrder, type Flow, type NodeKind } from "@clauderon/core";
 

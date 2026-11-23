@@ -156,7 +156,7 @@ p{margin:0}
 @keyframes pulse{50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.pill.run::before{animation:none}}
 .tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:4px;font-size:11.5px;font-weight:600;background:var(--sunk);color:var(--fg2);white-space:nowrap}
-.tag.dry{background:var(--wait-bg);color:var(--wait);font-family:var(--font-mono);font-size:11px}
+.tag.warn{background:var(--wait-bg);color:var(--wait);font-family:var(--font-mono);font-size:11px}
 .tag.sample{background:var(--accent-weak);color:var(--accent)}
 .label{display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:10px;font-size:11.5px;border:1px solid var(--line);color:var(--fg2)}
 .otype{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:4px;font-family:var(--font-mono);font-size:11px;background:var(--sunk);color:var(--fg)}
@@ -457,7 +457,7 @@ const IC = {
 let S;          // persisted domain state
 const U = {     // per-session UI state
   term:{}, sel: new Set(), tkProject:'p1', tkFilter:'all', tkSearch:'',
-  runFilter:{state:'all',flow:'all',pod:'all',mode:'all'},
+  runFilter:{state:'all',flow:'all',pod:'all'},
   runSel:{}, runTab:{}, attSel:{}, drafts:{}, modal:null, sim:false, ed:null, toasts:[], dirty:true,
 };
 
@@ -554,7 +554,7 @@ function seed(){
     tasks: seedTasks(), flows: seedFlows(), runs:[], batches:[],
   };
   // --- seeded history, oldest first
-  seedBatch({flow:'f-basic',pod:'pod-toi',mode:'dry',who:'toi',at:T-190*MIN,items:[['k412','end'],['k421','fail:n3'],['k430','cancel:n3']],failRate:.2});
+  seedBatch({flow:'f-basic',pod:'pod-toi',mode:'real',who:'toi',at:T-190*MIN,items:[['k412','end'],['k421','fail:n3'],['k430','cancel:n3']]});
   seedBatch({flow:'f-basic',pod:'pod-linh',mode:'real',who:'linh',at:T-150*MIN,items:[['k412','end'],['k421','end'],['k430','fail:n3']]});
   seedBatch({flow:'f-plan',pod:'pod-minh',mode:'real',who:'minh',at:T-70*MIN,items:[['k95w','intr:n4'],['k97w','queued']]});
   seedBatch({flow:'f-ledger',pod:'pod-huy',mode:'real',who:'huy',at:T-26*MIN,items:[['k418','wait:n3'],['k425','run:n4'],['k433','wait:n7']]});
@@ -588,14 +588,14 @@ function inputsOf(r,nid){
   return r.flow.edges.filter(e=>e.to===nid).map(e=>{ const a=liveAttempt(r,e.from); const o=a&&a.state==='succeeded'?a.outputs.find(o=>o.type===e.ft):null; return {type:e.tt,from:e.from,value:o?o.value:null}; });
 }
 function ticketOf(r){ return ticketById(r.ticketId); }
-function branchFor(r){ const t=ticketOf(r); return r.mode==='dry' ? `feat/${t.number}-${slug(t.title).split('-').slice(0,2).join('-')}` : `clauderon/${t.number}-${slug(t.title)}`; }
+function branchFor(r){ const t=ticketOf(r); return `clauderon/${t.number}-${slug(t.title)}`; }
 
-function newRun({ticketId,flowId,podId,batchId,mode,who,extra,failRate,at}){
+function newRun({ticketId,flowId,podId,batchId,mode,who,extra,at}){
   const f = flowById(flowId);
   const tasks = {}; f.nodes.forEach(n=>{ tasks[n.taskId]=clone(taskById(n.taskId)); });
-  const r = {id:uid('r'),ticketId,flowId,flowName:f.name,flow:{nodes:clone(f.nodes),edges:clone(f.edges)},tasks,podId,batchId,mode,starter:who,extra:extra||'',failRate:failRate??.15,
+  const r = {id:uid('r'),ticketId,flowId,flowName:f.name,flow:{nodes:clone(f.nodes),edges:clone(f.edges)},tasks,podId,batchId,mode,starter:who,extra:extra||'',
     state:'queued',createdAt:at,queuedAt:at,startedAt:null,endedAt:null,attempts:[],curId:null,branch:null,pr:null,artifact:null,worktree:'none',
-    audit:[{at,who,what:`Started the Run (${mode==='dry'?'Dry-run':'Real'}) on ${podById(podId).name}`}],lastFeedback:null,feedbackFor:null,failReason:null,interruptedAt:null};
+    audit:[{at,who,what:`Started the Run on ${podById(podId).name}`}],lastFeedback:null,feedbackFor:null,failReason:null,interruptedAt:null};
   S.runs.push(r); return r;
 }
 function startRun(r,t){
@@ -604,7 +604,6 @@ function startRun(r,t){
 function genLog(r,nid){
   const task=taskOf(r,nid), tk=ticketOf(r), p=projectById(tk.projectId), node=nodeOf(r,nid), att=nodeAttempts(r,nid).length+1;
   const extra = [node.extra, r.extra].filter(Boolean);
-  if(r.mode==='dry') return [`[dry-run] ${task.name} · simulated runner, nothing is sent to Claude or GitHub`,`[dry-run] worktree ~/workspace/runs/${r.id} (simulated)`,`[dry-run] sleeping to mimic work…`,`[dry-run] produced: ${task.outputs.map(o=>o.type).join(', ')||'nothing'}`];
   const L=[`[agent] docker exec ${podById(r.podId).name} · worktree ~/workspace/runs/${r.id} · attempt #${att}`];
   const fb = (r.feedbackFor && r.feedbackFor.nodeId===nid) ? r.feedbackFor.text : null;
   switch(task.flavor){
@@ -635,7 +634,6 @@ function genLog(r,nid){
   return L;
 }
 function attemptDur(r,task){
-  if(r.mode==='dry') return rand(2000,8000);
   if(task.kind==='agent') return rand(9000,16000);
   if(task.flavor==='grill') return 3500;
   return rand(4500,8000);
@@ -673,22 +671,20 @@ function outputValue(r,type,a){
     case 'test-result': return `${40+hash(t.id)%30} passing, 0 failing (${(4+hash(t.id)%6)}.${hash(t.title)%10}s)`;
     case 'screenshot': return `${t.area}-default.png, ${t.area}-mobile-375.png, ${t.area}-dark.png`;
     case 'pull-request': {
-      if(!r.pr){ r.pr = r.mode==='dry' ? {number:88,state:'simulated',url:null} : {number:++S.prSeq,state:'open',url:`https://github.com/${p.repo}/pull/${S.prSeq}`,author:(podById(r.podId)&&podById(r.podId).gh.user)||r.starter}; }
-      return r.mode==='dry' ? `#88 (simulated, not opened)` : `#${r.pr.number} ${t.title}`;
+      if(!r.pr){ r.pr = {number:++S.prSeq,state:'open',url:`https://github.com/${p.repo}/pull/${S.prSeq}`,author:(podById(r.podId)&&podById(r.podId).gh.user)||r.starter}; }
+      return `#${r.pr.number} ${t.title}`;
     }
   }
   return type;
 }
 function failInfo(r,task){
   const t=ticketOf(r);
-  if(r.mode==='dry') return {reason:`Simulated failure (Dry-run failure rate ${Math.round(r.failRate*100)}%)`,log:['[dry-run] ✗ simulated failure']};
   if(task.flavor==='test') return {reason:`1 failing test in ${t.area}`,log:[`  1) ${t.area} › handles the edge case from ${tkKey(t)}`,`     AssertionError: expected 2 to equal 1`,`        at test/${t.area}/${t.area}.test.ts:${40+hash(t.id)%80}:${9}`,``,`${38+hash(t.id)%30} passing, ✗ 1 failing`,`[agent] exit code 1`]};
   if(task.flavor==='pr') return {reason:'gh: authentication required on the Pod',log:['✗ gh: To get started with GitHub CLI, please run: gh auth login','[agent] exit code 4']};
   return {reason:'Claude Code stopped: usage limit reached. Retry after the limit resets.',log:['[claude] ✗ usage limit reached for this subscription','[agent] exit code 2']};
 }
 function shouldFail(r,task,a){
   if(task.kind==='human'||task.kind==='entry') return false;
-  if(r.mode==='dry') return Math.random()<r.failRate;
   if(task.flavor==='test') return Math.random() < ((a.n>1||a.feedbackIn)?0.08:0.3);
   if(task.kind==='agent') return Math.random()<0.03;
   return false;
@@ -704,7 +700,7 @@ function completeAttempt(r,a,ok,t,reasonOverride){
       a.outputs = task.outputs.filter(o=>!(node.off||[]).includes(o.type)).map(o=>({type:o.type,value:outputValue(r,o.type,a)}));
     }
     if(task.flavor==='test') a.planned.push(`✓ ${a.outputs[0]?a.outputs[0].value:'tests passed'}`);
-    if(task.flavor==='pr' && r.pr) a.planned.push(r.mode==='dry'?'[dry-run] pull request not opened':`${r.pr.url}`);
+    if(task.flavor==='pr' && r.pr) a.planned.push(`${r.pr.url}`);
     if(task.kind==='agent' && r.mode==='real'){ a.tokens={in:Math.round(rand(11000,38000)),out:Math.round(rand(1800,7200))}; a.planned.push(`[claude] usage · ${ktok(a.tokens.in)} in / ${ktok(a.tokens.out)} out`); }
     a.shown=a.planned.length;
     r.curId=null;
@@ -799,7 +795,7 @@ function actAnswer(r,text){
   a.planned.push(`[member] ${S.me} answered question ${a.grill.answers.length}`);
   audit(r,`Answered Grill question ${a.grill.answers.length} in “${nodeName(r,a.nodeId)}”`);
   if(a.grill.answers.length<a.grill.q.length){ a.planned.push(`[claude] (same session) asked question ${a.grill.answers.length+1} of ${a.grill.q.length}`); a.shown=a.planned.length; toast('Answer sent · Claude asked the next question'); }
-  else { a.state='running'; a.phase='writing'; a.prog=0; a.dur=r.mode==='dry'?1500:4000; r.state='running'; a.planned.push('[claude] (same session) resuming with your answers'); a.shown=a.planned.length; toast('Answer sent · Claude is writing the plan'); }
+  else { a.state='running'; a.phase='writing'; a.prog=0; a.dur=4000; r.state='running'; a.planned.push('[claude] (same session) resuming with your answers'); a.shown=a.planned.length; toast('Answer sent · Claude is writing the plan'); }
 }
 function actCancel(r){
   const t=now(); const a=curAttempt(r);
@@ -825,11 +821,11 @@ function interruptPod(p,why){
 }
 
 /* ---------------------------------------------------------------- seeding batches */
-function seedBatch({flow,pod,mode,who,at,items,failRate}){
+function seedBatch({flow,pod,mode,who,at,items}){
   const b={id:uid('b'),flowId:flow,podId:pod,mode,starter:who,createdAt:at,runIds:[]};
   S.batches.push(b);
   items.forEach(([tid,plan],i)=>{
-    const r=newRun({ticketId:tid,flowId:flow,podId:pod,batchId:b.id,mode,who,failRate,at:at+i*1000});
+    const r=newRun({ticketId:tid,flowId:flow,podId:pod,batchId:b.id,mode,who,at:at+i*1000});
     b.runIds.push(r.id);
     ffRun(r,plan,at+i*1000);
   });
@@ -843,7 +839,7 @@ function ffRun(r,plan,t0){
     const nid=nextNode(r);
     if(!nid){ finishRun(r,t); r.endedAt=t; r.audit[r.audit.length-1].at=t; if(r.artifact){ r.artifact.at=t; r.artifact.duration=t-r.startedAt; } return; }
     const task=taskOf(r,nid);
-    const d = r.mode==='dry' ? rand(2000,8000) : task.kind==='agent' ? rand(3,9)*MIN : task.kind==='human' ? rand(2,14)*MIN : rand(.6,2.2)*MIN;
+    const d = task.kind==='agent' ? rand(3,9)*MIN : task.kind==='human' ? rand(2,14)*MIN : rand(.6,2.2)*MIN;
     const a=createAttempt(r,nid,t,{dur:d});
     if(task.kind==='entry'){ continue; }
     const isStop = nid===stop;
@@ -1025,7 +1021,7 @@ function ticketsView(){
         <td class="mono faint">${esc(tkKey(t))}</td>
         <td class="t-title"><a href="#ticket-${t.id}">${esc(t.title)}</a><div class="row" style="gap:4px;margin-top:4px">${t.labels.map(l=>`<span class="label">${esc(l)}</span>`).join('')}</div></td>
         <td><span class="pill ${TS_CLS[s]}">${TS_LABEL[s]}</span></td>
-        <td class="small">${lr?`<a href="#run-${lr.id}" class="mono">${lr.id}</a> <span class="faint">· ${esc(lr.flowName)}</span>${lr.mode==='dry'?' <span class="tag dry">dry-run</span>':''}${lr.pr&&lr.pr.url?` · <span class="mono">PR #${lr.pr.number}</span>`:''}`:'<span class="faint">No Runs yet</span>'}</td>
+        <td class="small">${lr?`<a href="#run-${lr.id}" class="mono">${lr.id}</a> <span class="faint">· ${esc(lr.flowName)}</span>${lr.pr&&lr.pr.url?` · <span class="mono">PR #${lr.pr.number}</span>`:''}`:'<span class="faint">No Runs yet</span>'}</td>
         <td class="small faint">${ago(t.openedAt)} · ${esc(t.openedBy)}</td>
       </tr>`; }).join('') || `<tr><td colspan="6"><div class="empty"><b>No Tickets match</b>Clear the search or pick another status.</div></td></tr>`}</tbody>
   </table></div></div>
@@ -1039,11 +1035,11 @@ function ticketView(id){
   <div><div class="crumbs"><a href="#tickets">Tickets</a> / <span class="mono">${esc(tkKey(t))}</span></div>
   <div class="page-head"><div><h1>${esc(t.title)}</h1><div class="row" style="margin-top:8px"><span class="pill ${TS_CLS[s]}">${TS_LABEL[s]}</span>${t.labels.map(l=>`<span class="label">${esc(l)}</span>`).join('')}<span class="faint small">opened by ${esc(t.openedBy)} · ${ago(t.openedAt)}</span>${req('TIC-4')}</div></div>
   <div class="row"><span class="mono faint small">github.com/${esc(p.repo)}/issues/${t.number}</span><button class="btn primary" data-act="start-open" data-ticket="${t.id}" ${act||t.issueState==='closed'?'disabled':''}>${IC.play}Start Run…</button></div></div></div>
-  ${act?`<div class="banner info"><div class="grow"><p><b>This Ticket has an Active Run</b> (<a href="#run-${act.id}">${act.id}</a>, ${RUN_LABEL[act.state]}). A Ticket has at most one Active Run; cancel it or let it finish to start another. Dry-runs are still allowed. ${req('TIC-7')}</p></div></div>`:''}
+  ${act?`<div class="banner info"><div class="grow"><p><b>This Ticket has an Active Run</b> (<a href="#run-${act.id}">${act.id}</a>, ${RUN_LABEL[act.state]}). A Ticket has at most one Active Run; cancel it or let it finish to start another. ${req('TIC-7')}</p></div></div>`:''}
   <div class="grid g-wide">
     <div class="card"><div class="card-head"><h2>Issue</h2><span class="faint small">From GitHub · read-only</span></div><div class="card-pad stack"><p style="max-width:68ch">${esc(t.body)}</p><div class="kv"><dt>Project</dt><dd class="mono">${esc(p.repo)} · ${esc(p.base)}</dd><dt>Issue state</dt><dd>${t.issueState==='open'?'Open':'Closed on GitHub'}</dd></div></div></div>
     <div class="card"><div class="card-head"><h2>Runs <span class="faint num">${runs.length}</span></h2></div>
-      ${runs.length?`<ul class="feed" style="padding:0 16px">${runs.map(r=>`<li>${avatar(r.starter)}<div class="small"><a href="#run-${r.id}" class="mono">${r.id}</a> · ${esc(r.flowName)} ${r.mode==='dry'?'<span class="tag dry">dry-run</span>':''}<div class="faint">${esc(r.starter)} · ${ago(r.createdAt)}${r.pr&&r.pr.url?` · PR #${r.pr.number} (${r.pr.state})`:''}</div></div>${runPill(r.state)}</li>`).join('')}</ul>`:`<div class="empty"><b>No Runs yet</b>Start one to send this Ticket through a Flow.</div>`}
+      ${runs.length?`<ul class="feed" style="padding:0 16px">${runs.map(r=>`<li>${avatar(r.starter)}<div class="small"><a href="#run-${r.id}" class="mono">${r.id}</a> · ${esc(r.flowName)} <div class="faint">${esc(r.starter)} · ${ago(r.createdAt)}${r.pr&&r.pr.url?` · PR #${r.pr.number} (${r.pr.state})`:''}</div></div>${runPill(r.state)}</li>`).join('')}</ul>`:`<div class="empty"><b>No Runs yet</b>Start one to send this Ticket through a Flow.</div>`}
     </div>
   </div>`;
 }
@@ -1070,18 +1066,13 @@ function startModal(){
           ${!podUp(pod)?`<p class="hint">${esc(pod.name)} is ${S.host.agent?'not running':'unreachable (Host Agent offline)'}. Runs wait in its queue until it runs again.</p>`:used>=pod.slots?`<p class="hint">All Slots are busy; new Runs queue first-in, first-out.</p>`:''}`}
         <span class="hint">Runs always run on the Starter's Pod, with the Starter's Claude Code and gh. ${req('POD-3','POD-5')}</span>
       </div>
-      <div class="grid g2">
-        <div class="field"><label>Mode</label><div class="seg"><button data-act="sd-mode" data-v="real" class="${m.mode==='real'?'on':''}">Real</button><button data-act="sd-mode" data-v="dry" class="${m.mode==='dry'?'on':''}">Dry-run</button></div>
-          <span class="hint">${m.mode==='real'?'Claude Code runs on the Pod and a real pull request is opened.':'Simulated runner: occupies a Slot, never calls Claude or GitHub, does not block the Ticket.'} ${req('RUN-13')}</span></div>
-        ${m.mode==='dry'?`<div class="field"><label for="sd-fail">Failure rate: <span class="num">${Math.round(m.failRate*100)}%</span></label><input type="range" id="sd-fail" min="0" max="60" step="5" value="${Math.round(m.failRate*100)}" style="accent-color:var(--accent)"><span class="hint">Each Node fails with this probability.</span></div>`:'<div></div>'}
-      </div>
       <div class="field"><label for="sd-extra">Extra instructions <span class="faint">(optional)</span></label><textarea class="textarea" id="sd-extra" placeholder="e.g. Keep the public API unchanged.">${esc(m.extra)}</textarea><span class="hint">Added to every Agent Node of these Runs.</span></div>
       <div class="field"><label>Tickets <span class="faint num">${ok.length} of ${ids.length} can start</span></label>
         <div class="pick">${ids.map(id=>{ const t=ticketById(id); const b=blocked(t); const ar=activeRunOf(t); return `<label class="${b?'dis':''}"><input type="checkbox" class="cb" checked disabled><span class="mono faint small">${esc(tkKey(t))}</span><span class="grow">${esc(t.title)}</span>${b?`<span class="small" style="color:var(--fail)">${t.issueState==='closed'?'Issue closed':`Has an Active Run (${ar.id})`}</span>`:''}</label>`; }).join('')}</div>
         ${ids.length-ok.length?`<span class="hint">Tickets with an Active Run are skipped. ${req('TIC-7')}</span>`:''}
       </div>
     </div>
-    <div class="modal-f"><button class="btn" data-act="modal-close">Cancel</button><button class="btn primary" data-act="sd-submit" ${!f||probs.length||!ok.length||!canStart(S.me)?'disabled':''}>${IC.play}Start ${ok.length} Run${ok.length===1?'':'s'}${m.mode==='dry'?' (Dry-run)':''}</button></div>
+    <div class="modal-f"><button class="btn" data-act="modal-close">Cancel</button><button class="btn primary" data-act="sd-submit" ${!f||probs.length||!ok.length||!canStart(S.me)?'disabled':''}>${IC.play}Start ${ok.length} Run${ok.length===1?'':'s'}</button></div>
   </div>`;
 }
 function startSubmit(){
@@ -1090,7 +1081,7 @@ function startSubmit(){
   if(!f||!pod||!ids.length||!canStart(S.me)) return;
   const t=now(); const b={id:uid('b'),flowId:f.id,podId:pod.id,mode:m.mode,starter:S.me,createdAt:t,runIds:[]};
   S.batches.push(b);
-  ids.forEach((id,i)=>{ const r=newRun({ticketId:id,flowId:f.id,podId:pod.id,batchId:b.id,mode:m.mode,who:S.me,extra:m.extra,failRate:m.failRate,at:t+i}); b.runIds.push(r.id); });
+  ids.forEach((id,i)=>{ const r=newRun({ticketId:id,flowId:f.id,podId:pod.id,batchId:b.id,mode:m.mode,who:S.me,extra:m.extra,at:t+i}); b.runIds.push(r.id); });
   U.sel.clear(); U.modal=null; renderModal();
   toast(`Started ${ids.length} Run${ids.length>1?'s':''} on ${pod.name}`);
   location.hash='batch-'+b.id;
@@ -1099,17 +1090,17 @@ function startSubmit(){
 /* ---- Runs list */
 function runsView(){
   const F=U.runFilter;
-  const list=S.runs.filter(r=>(F.state==='all'||r.state===F.state)&&(F.flow==='all'||r.flowId===F.flow)&&(F.pod==='all'||r.podId===F.pod)&&(F.mode==='all'||r.mode===F.mode)).sort((a,b)=>b.createdAt-a.createdAt);
+  const list=S.runs.filter(r=>(F.state==='all'||r.state===F.state)&&(F.flow==='all'||r.flowId===F.flow)&&(F.pod==='all'||r.podId===F.pod)).sort((a,b)=>b.createdAt-a.createdAt);
   const counts={}; S.runs.forEach(r=>counts[r.state]=(counts[r.state]||0)+1);
   const sel=(k,opts)=>`<select class="select" style="width:auto;min-width:140px" data-act="run-filter" data-k="${k}" aria-label="Filter by ${k}">${opts.map(([v,l])=>`<option value="${v}" ${F[k]===v?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
   return `
   <div class="page-head"><div><h1>Runs</h1><p class="sub">Every Run, newest first. A Run is one Flow applied to one Ticket on one Pod. ${req('TRK-7')}</p></div></div>
   <div class="grid g3" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${['running','waiting','queued','failed','interrupted','succeeded'].map(s=>`<button class="card card-pad" style="text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px;${F.state===s?'border-color:var(--accent)':''}" data-act="run-filter-state" data-v="${s}"><span class="pill ${RUN_CLS[s]}">${RUN_LABEL[s]}</span><span style="font-size:24px;font-weight:600" class="num">${counts[s]||0}</span></button>`).join('')}</div>
-  <div class="row">${sel('state',[['all','All states'],...Object.entries(RUN_LABEL)])}${sel('flow',[['all','All Flows'],...S.flows.map(f=>[f.id,f.name])])}${sel('pod',[['all','All Pods'],...S.pods.map(p=>[p.id,p.name])])}${sel('mode',[['all','Real and Dry-run'],['real','Real only'],['dry','Dry-run only']])}${Object.values(F).some(v=>v!=='all')?'<button class="btn ghost sm" data-act="run-filter-clear">Clear filters</button>':''}</div>
+  <div class="row">${sel('state',[['all','All states'],...Object.entries(RUN_LABEL)])}${sel('flow',[['all','All Flows'],...S.flows.map(f=>[f.id,f.name])])}${sel('pod',[['all','All Pods'],...S.pods.map(p=>[p.id,p.name])])}${Object.values(F).some(v=>v!=='all')?'<button class="btn ghost sm" data-act="run-filter-clear">Clear filters</button>':''}</div>
   <div class="card"><div class="tbl-wrap"><table class="tbl">
     <thead><tr><th>Run</th><th>Ticket</th><th>Flow</th><th>State</th><th>Current Node</th><th>Pod</th><th>Started by</th><th>Duration</th><th>PR</th></tr></thead>
     <tbody>${list.map(r=>{ const t=ticketOf(r); const c=runCurrentLabel(r); return `<tr>
-      <td><a class="mono" href="#run-${r.id}">${r.id}</a>${r.mode==='dry'?' <span class="tag dry">dry-run</span>':''}</td>
+      <td><a class="mono" href="#run-${r.id}">${r.id}</a></td>
       <td class="t-title" style="min-width:220px"><span class="mono faint small">${esc(tkKey(t))}</span><div>${esc(t.title)}</div></td>
       <td class="small">${esc(r.flowName)}</td>
       <td>${runPill(r.state)}${r.state==='queued'?` <span class="faint small num">#${queuePos(r)}</span>`:''}</td>
@@ -1142,16 +1133,16 @@ function runView(id){
   if(r.state==='failed') banner=`<div class="banner fail"><div class="grow"><p><b>Failed at “${esc(nodeName(r,r.failedNode))}”</b>: ${esc(r.failReason)}</p><p class="small">The Run stays Active, keeps its worktree and the Flow's edit lock, but frees its Slot. Retry from any Node or cancel it. ${req('RUN-6','RUN-7','RUN-9')}</p></div></div>`;
   if(r.state==='interrupted') banner=`<div class="banner intr"><div class="grow"><p><b>Interrupted</b>: ${esc(r.interruptReason||pod.name+' stopped')} ${ago(r.interruptedAt)}.</p><p class="small">${podUp(pod)?'The Pod is running again.':'The Pod is not running yet.'} Nothing retries by itself: check the log, then Retry from the interrupted Node. ${req('RUN-12')}</p></div></div>`;
   if(r.state==='queued') banner=`<div class="banner"><div class="grow"><p><b>Queued on ${esc(pod.name)}</b> · position <span class="num">${queuePos(r)}</span> · ${slotsUsed(pod.id)}/${pod.slots} Slots busy${podUp(pod)?'':' · Pod not running'}</p><p class="small muted">Starts first-in, first-out when a Slot frees up${podUp(pod)?'':` and ${esc(pod.owner)} starts the Pod`}. ${req('POD-3')}</p></div></div>`;
-  if(r.state==='succeeded') banner=`<div class="banner ok"><div class="grow"><p><b>Succeeded</b> in ${dur(runDuration(r))}${r.pr&&r.pr.url?` · pull request <span class="mono">#${r.pr.number}</span> ${r.pr.state==='merged'?'merged':'open for review on GitHub'}`:''}${r.mode==='dry'?' · Dry-run: nothing was pushed':''}</p><p class="small">Worktree deleted. The Artifact summarises the work. ${req('RUN-14','TRK-5')}</p></div><button class="btn sm" data-act="run-tab" data-run="${r.id}" data-v="artifact">View Artifact</button></div>`;
+  if(r.state==='succeeded') banner=`<div class="banner ok"><div class="grow"><p><b>Succeeded</b> in ${dur(runDuration(r))}${r.pr&&r.pr.url?` · pull request <span class="mono">#${r.pr.number}</span> ${r.pr.state==='merged'?'merged':'open for review on GitHub'}`:''}</p><p class="small">Worktree deleted. The Artifact summarises the work. ${req('RUN-14','TRK-5')}</p></div><button class="btn sm" data-act="run-tab" data-run="${r.id}" data-v="artifact">View Artifact</button></div>`;
   if(r.state==='cancelled') banner=`<div class="banner"><div class="grow"><p><b>Cancelled</b> ${ago(r.endedAt)}. ${r.startedAt?'Worktree deleted.':''}</p></div></div>`;
   return `
   <div><div class="crumbs"><a href="#runs">Runs</a> / ${b?`<a href="#batch-${b.id}">Batch ${b.id}</a> /`:''} <span class="mono">${r.id}</span></div>
   <div class="page-head"><div class="grow"><div class="row" style="gap:10px"><h1>${esc(t.title)}</h1></div>
-    <div class="row" style="margin-top:8px">${runPill(r.state)}${r.mode==='dry'?'<span class="tag dry">dry-run</span>':''}<a class="mono small" href="#ticket-${t.id}">${esc(tkKey(t))}</a><span class="faint">·</span><span class="small">${esc(r.flowName)}</span><span class="faint">·</span><a class="mono small" href="#pod-${pod.id}">${esc(pod.name)}</a><span class="faint">·</span><span class="row" style="gap:6px">${avatar(r.starter)}<span class="small">started by <b>${esc(r.starter)}</b> ${ago(r.createdAt)}</span></span></div>
+    <div class="row" style="margin-top:8px">${runPill(r.state)}<a class="mono small" href="#ticket-${t.id}">${esc(tkKey(t))}</a><span class="faint">·</span><span class="small">${esc(r.flowName)}</span><span class="faint">·</span><a class="mono small" href="#pod-${pod.id}">${esc(pod.name)}</a><span class="faint">·</span><span class="row" style="gap:6px">${avatar(r.starter)}<span class="small">started by <b>${esc(r.starter)}</b> ${ago(r.createdAt)}</span></span></div>
   </div><div class="row">${actions}</div></div></div>
   ${banner}
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
-    ${stat('Duration',dur(runDuration(r)))}${stat('Tokens',tokens?ktok(tokens):'—', r.mode==='dry'?'Dry-run: no Claude':'')}${stat('Branch',r.branch?`<span class="mono" style="font-size:12px">${esc(r.branch)}</span>`:'—')}${stat('Pull request',r.pr?(r.pr.url?`<span class="mono">#${r.pr.number}</span> <span class="pill ${r.pr.state==='merged'?'ok':'acc'} plain">${r.pr.state}</span><div class="faint small mono">by ${esc(r.pr.author||r.starter)}</div>`:'<span class="faint">simulated</span>'):'—')}${stat('Worktree',{none:'Not created',ready:'In use',kept:'Kept for Retry',deleted:'Deleted'}[r.worktree])}
+    ${stat('Duration',dur(runDuration(r)))}${stat('Tokens',tokens?ktok(tokens):'—')}${stat('Branch',r.branch?`<span class="mono" style="font-size:12px">${esc(r.branch)}</span>`:'—')}${stat('Pull request',r.pr?(r.pr.url?`<span class="mono">#${r.pr.number}</span> <span class="pill ${r.pr.state==='merged'?'ok':'acc'} plain">${r.pr.state}</span><div class="faint small mono">by ${esc(r.pr.author||r.starter)}</div>`:'<span class="faint">simulated</span>'):'—')}${stat('Worktree',{none:'Not created',ready:'In use',kept:'Kept for Retry',deleted:'Deleted'}[r.worktree])}
   </div>
   <div class="card">
     <div class="minigraph">${miniGraph(r)}</div>
@@ -1177,7 +1168,7 @@ function nodePanel(r,nid){
   const head=`<div class="row between"><div><div class="row" style="gap:8px">${kindBadge(task.kind)}<h2>${esc(nodeName(r,nid))}</h2>${a?runPill(a.state==='waiting'?'waiting':a.state):'<span class="pill">Pending</span>'}</div><p class="faint small" style="margin-top:4px">${esc(task.kind==='command'?('$ '+task.command):task.instructions||'')}</p>${node.extra?`<p class="small" style="margin-top:4px"><b>Node instructions:</b> ${esc(node.extra)}</p>`:''}</div></div>`;
   if(!a) return `<div class="stack">${head}<div class="empty"><b>Not started</b>${r.state==='cancelled'?'The Run was cancelled before this Node.':'Runs after the Nodes before it succeed.'}</div></div>`;
   const tabs = as.length>1 ? `<div class="att-tabs" role="tablist" aria-label="Attempts">${as.map(x=>`<button class="${x.id===a.id?'on':''} ${x.stale?'stale':''}" data-act="sel-att" data-key="${key}" data-id="${x.id}" title="${x.stale?'Replaced by a Retry':''}">#${x.n} <span class="ndot ${x.state}" style="width:14px;height:14px;border-width:1.5px">${''}</span></button>`).join('')}<span class="faint small">Every Retry adds an Attempt; earlier ones stay visible. ${req('TRK-2')}</span></div>` : '';
-  const logLines=a.planned.slice(0,a.shown).map(l=>{ let c=''; if(/^\[agent\]|^\[app\]|^\[dry-run\]/.test(l)) c='d'; if(/^\[claude\]/.test(l)) c='a'; if(/^\$ /.test(l)) c='b'; if(/✓|passing, 0 failing|^https:/.test(l)) c='k'; if(/✗|failing|Error|exit code [1-9]/.test(l)) c='f'; if(/^\[member\]/.test(l)) c='w'; return `<span class="${c}">${esc(l)}</span>`; }).join('\n');
+  const logLines=a.planned.slice(0,a.shown).map(l=>{ let c=''; if(/^\[agent\]|^\[app\]/.test(l)) c='d'; if(/^\[claude\]/.test(l)) c='a'; if(/^\$ /.test(l)) c='b'; if(/✓|passing, 0 failing|^https:/.test(l)) c='k'; if(/✗|failing|Error|exit code [1-9]/.test(l)) c='f'; if(/^\[member\]/.test(l)) c='w'; return `<span class="${c}">${esc(l)}</span>`; }).join('\n');
   const live=a.state==='running';
   let human='';
   if(a.state==='waiting'){
@@ -1202,7 +1193,7 @@ function nodePanel(r,nid){
     ${a.stale?`<div class="banner"><div class="grow small">This Attempt was replaced by a Retry. Its Outputs are kept for reference.</div></div>`:''}
     ${a.feedbackIn?`<div class="banner info"><div class="grow small"><b>Feedback passed to this Attempt:</b> “${esc(a.feedbackIn)}”</div></div>`:''}
     ${human}
-    <div class="kv small"><dt>Started</dt><dd>${ago(a.startedAt)}</dd><dt>Duration</dt><dd class="num">${a.endedAt?dur(a.endedAt-a.startedAt):a.state==='waiting'?'waiting · '+dur(now()-(a.waitingSince||a.startedAt)):'running…'}</dd>${task.kind==='agent'?`<dt>Tokens</dt><dd class="num">${a.tokens?`${ktok(a.tokens.in)} in · ${ktok(a.tokens.out)} out`:r.mode==='dry'?'— (Dry-run)':'counting…'}</dd>`:''}${a.failReason?`<dt>Failure</dt><dd style="color:var(--fail)">${esc(a.failReason)}</dd>`:''}</div>
+    <div class="kv small"><dt>Started</dt><dd>${ago(a.startedAt)}</dd><dt>Duration</dt><dd class="num">${a.endedAt?dur(a.endedAt-a.startedAt):a.state==='waiting'?'waiting · '+dur(now()-(a.waitingSince||a.startedAt)):'running…'}</dd>${task.kind==='agent'?`<dt>Tokens</dt><dd class="num">${a.tokens?`${ktok(a.tokens.in)} in · ${ktok(a.tokens.out)} out`:'counting…'}</dd>`:''}${a.failReason?`<dt>Failure</dt><dd style="color:var(--fail)">${esc(a.failReason)}</dd>`:''}</div>
     <div class="grid g2">
       <div class="stack" style="gap:8px"><span class="eyebrow">Inputs</span>${inputs.length?inputs.map(i=>`<div class="stack" style="gap:4px">${otype(i.type)}<div class="outv">${esc(i.value||'—')}</div></div>`).join(''):'<span class="faint small">None</span>'}</div>
       <div class="stack" style="gap:8px"><span class="eyebrow">Outputs</span>${a.outputs.length?a.outputs.map(o=>`<div class="stack" style="gap:4px">${otype(o.type)}<div class="outv">${o.type==='pull-request'&&r.pr&&r.pr.url?`<span class="mono">${esc(r.pr.url)}</span>`:esc(o.value)}</div></div>`).join(''):`<span class="faint small">${a.state==='succeeded'?'None':'Not produced yet'}</span>`}</div>
@@ -1243,7 +1234,6 @@ function diffView(r){
   if(!r.branch) return `<div class="empty"><b>No changes yet</b>The diff appears once a Node commits on the Run branch. ${req('TRK-3')}</div>`;
   const add=t.files.reduce((s,f)=>s+f[1],0), del=t.files.reduce((s,f)=>s+f[2],0);
   return `<div class="stack"><div class="row between"><span class="small"><span class="mono">${esc(r.branch)}</span> → <span class="mono">${esc(projectById(t.projectId).base)}</span> · ${t.files.length} files · <span class="add">+${add}</span> <span class="del">−${del}</span></span><span class="small">${r.pr&&r.pr.url?`<span class="mono">${esc(r.pr.url)}</span>`:''} ${req('TRK-3')}</span></div>
-    ${r.mode==='dry'?'<div class="banner"><div class="grow small">Dry-run: this diff is simulated and was never pushed.</div></div>':''}
     ${t.files.map(f=>`<div class="diff"><div class="diff-file"><span>${esc(f[0])}</span><span class="num"><span class="add">+${f[1]}</span> <span class="del">−${f[2]}</span></span></div><div class="diff-body">${diffLines(f[0],f[1],f[2],t).map(l=>`<div class="${l.c}">${esc(l.t)}</div>`).join('')}</div></div>`).join('')}</div>`;
 }
 function shotSvg(name,i){
@@ -1264,7 +1254,7 @@ function artifactView(r){
     </div>
     ${A.plan?`<div class="card card-pad stack"><h3>Plan followed</h3><div class="outv">${esc(A.plan)}</div></div>`:''}
     <div class="stack"><h3>Screenshots</h3>${A.shots.length?`<div class="grid g3">${A.shots.map((s,i)=>`<figure class="shot" style="margin:0">${shotSvg(s,i)}<figcaption>${esc(s)}</figcaption></figure>`).join('')}</div>`:'<p class="faint small">This Flow has no screenshot Node.</p>'}</div>
-    <div class="kv small"><dt>Pull request</dt><dd>${r.pr?(r.pr.url?`<span class="mono">${esc(r.pr.url)}</span> (${r.pr.state})`:'Simulated (Dry-run)'):'None'}</dd><dt>Duration</dt><dd class="num">${dur(A.duration)}</dd><dt>Tokens</dt><dd class="num">${A.tokens?ktok(A.tokens):'—'}</dd></div>
+    <div class="kv small"><dt>Pull request</dt><dd>${r.pr?`<span class="mono">${esc(r.pr.url)}</span> (${r.pr.state})`:'None'}</dd><dt>Duration</dt><dd class="num">${dur(A.duration)}</dd><dt>Tokens</dt><dd class="num">${A.tokens?ktok(A.tokens):'—'}</dd></div>
   </div>`;
 }
 function usageView(r){
@@ -1284,7 +1274,7 @@ function batchView(id){
   const runs=b.runIds.map(runById).filter(Boolean); const f=flowById(b.flowId); const pod=podById(b.podId);
   const c={}; runs.forEach(r=>c[r.state]=(c[r.state]||0)+1);
   return `<div><div class="crumbs"><a href="#runs">Runs</a> / <span>Batch ${b.id}</span></div>
-  <div class="page-head"><div><h1>Batch ${b.id}</h1><div class="row" style="margin-top:8px"><span class="small">${runs.length} Runs · ${esc(f?f.name:runs[0]?.flowName||'')}</span><span class="faint">·</span><a class="mono small" href="#pod-${pod.id}">${esc(pod.name)}</a>${b.mode==='dry'?'<span class="tag dry">dry-run</span>':''}<span class="faint">·</span><span class="row" style="gap:6px">${avatar(b.starter)}<span class="small">${esc(b.starter)} · ${ago(b.createdAt)}</span></span>${req('TRK-6')}</div></div></div></div>
+  <div class="page-head"><div><h1>Batch ${b.id}</h1><div class="row" style="margin-top:8px"><span class="small">${runs.length} Runs · ${esc(f?f.name:runs[0]?.flowName||'')}</span><span class="faint">·</span><a class="mono small" href="#pod-${pod.id}">${esc(pod.name)}</a><span class="faint">·</span><span class="row" style="gap:6px">${avatar(b.starter)}<span class="small">${esc(b.starter)} · ${ago(b.createdAt)}</span></span>${req('TRK-6')}</div></div></div></div>
   <div class="row">${Object.entries(c).map(([s,n])=>`<span class="pill ${RUN_CLS[s]}">${n} ${RUN_LABEL[s]}</span>`).join('')}</div>
   <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Run</th><th>Ticket</th><th>State</th><th>Current Node</th><th>Progress</th><th>Duration</th><th>PR</th></tr></thead><tbody>
   ${runs.map(r=>{ const t=ticketOf(r); const order=topo(r.flow).filter(n=>taskOf(r,n).kind!=='entry'); const done=order.filter(n=>nodeDone(r,n)).length; return `<tr><td><a class="mono" href="#run-${r.id}">${r.id}</a></td><td class="t-title"><span class="mono faint small">${esc(tkKey(t))}</span><div>${esc(t.title)}</div></td><td>${runPill(r.state)}</td><td class="small">${esc(runCurrentLabel(r).txt)}</td><td style="min-width:120px"><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="meter grow"><i style="width:${done/order.length*100}%;${r.state==='failed'?'background:var(--fail)':r.state==='succeeded'?'background:var(--ok)':''}"></i></div><span class="num small faint">${done}/${order.length}</span></div></td><td class="num small">${dur(runDuration(r))}</td><td class="mono small">${r.pr?(r.pr.url?'#'+r.pr.number:'sim'):'—'}</td></tr>`; }).join('')}
@@ -1296,7 +1286,7 @@ function needsView(){
   const items=waitingItems();
   return `<div class="page-head"><div><h1>Needs you</h1><p class="sub">Every Node waiting for a person, across all Runs, oldest first. Any Member can respond; each waiting Run holds a Pod Slot until someone does. ${req('RUN-5','MEM-2')}</p></div></div>
   ${items.length?`<div class="stack">${items.map(({r,a})=>{ const t=ticketOf(r); const task=taskOf(r,a.nodeId); const pod=podById(r.podId); return `<div class="card">
-    <div class="card-head"><div class="row" style="gap:10px">${kindBadge('human')}<div><div class="row" style="gap:8px"><b>${esc(nodeName(r,a.nodeId))}</b><span class="tag">${task.human==='grill'?'Grill':'Approve'}</span>${r.mode==='dry'?'<span class="tag dry">dry-run</span>':''}</div><div class="small faint"><span class="mono">${esc(tkKey(t))}</span> ${esc(t.title)} · <a href="#run-${r.id}" class="mono">${r.id}</a></div></div></div>
+    <div class="card-head"><div class="row" style="gap:10px">${kindBadge('human')}<div><div class="row" style="gap:8px"><b>${esc(nodeName(r,a.nodeId))}</b><span class="tag">${task.human==='grill'?'Grill':'Approve'}</span></div><div class="small faint"><span class="mono">${esc(tkKey(t))}</span> ${esc(t.title)} · <a href="#run-${r.id}" class="mono">${r.id}</a></div></div></div>
     <div class="row small faint"><span>waiting ${dur(now()-(a.waitingSince||a.startedAt))}</span><span>·</span><span>holds 1 Slot on <span class="mono">${esc(pod.name)}</span></span><span>·</span><span>started by ${esc(r.starter)}</span></div></div>
     <div class="card-pad">${needsBody(r,a,task)}</div></div>`; }).join('')}</div>`:`<div class="card"><div class="empty"><b>Nothing is waiting for a person</b>Runs that reach an Approve or Grill Node show up here.</div></div>`}`;
 }
@@ -1469,7 +1459,7 @@ function podCard(p){
   return `<a class="pod-tile ${mine?'mine':''} ${podUp(p)?'':'off'}" href="#pod-${p.id}">
     <div class="row between" style="align-items:flex-start"><span style="color:var(--fg)">${CUBE}</span>${podPill(p)}</div>
     <div><div class="row" style="gap:8px"><h3 class="mono">${esc(p.name)}</h3></div><div class="row" style="gap:6px;margin-top:6px"><span class="pill ok plain">${esc(p.owner)}${mine?' · you':''}</span>${podReady(p)?'<span class="pill acc plain">Ready</span>':''}</div></div>
-    <div class="stack" style="gap:6px"><div class="small">Ubuntu image <span class="mono faint">${esc(p.image.split(':')[1])}</span>${stale?' <span class="tag dry">new image</span>':''}</div>${loginRow(p.claude.ok,'Claude Code',p.claude.acct)}${loginRow(p.gh.ok,'gh',p.gh.user)}<div class="small">Workspace <span class="faint num">${p.wsGB.toFixed(1)} GB</span></div></div>
+    <div class="stack" style="gap:6px"><div class="small">Ubuntu image <span class="mono faint">${esc(p.image.split(':')[1])}</span>${stale?' <span class="tag warn">new image</span>':''}</div>${loginRow(p.claude.ok,'Claude Code',p.claude.acct)}${loginRow(p.gh.ok,'gh',p.gh.user)}<div class="small">Workspace <span class="faint num">${p.wsGB.toFixed(1)} GB</span></div></div>
     <div class="stack" style="gap:6px"><div class="row between small"><span>Slots</span><span class="num faint">${slotsUsed(p.id)}/${p.slots} busy · ${q} queued${intr?` · <span style="color:var(--intr)">${intr} need Retry</span>`:''}</span></div>${slotViz(p)}</div>
   </a>`;
 }
@@ -1700,13 +1690,12 @@ document.addEventListener('click',e=>{
     case 'start-open': {
       const ids=el.dataset.ticket?[el.dataset.ticket]:[...U.sel];
       const valid=S.flows.find(f=>!validate(f).length);
-      U.modal={type:'start',tickets:ids,flowId:(valid||{}).id,mode:'real',extra:'',failRate:.15};
+      U.modal={type:'start',tickets:ids,flowId:(valid||{}).id,mode:'real',extra:''};
       renderModal(); break; }
-    case 'sd-mode': U.modal.mode=el.dataset.v; syncStartFields(); renderModal(); break;
-    case 'sd-submit': syncStartFields(); startSubmit(); break;
+        case 'sd-submit': syncStartFields(); startSubmit(); break;
     // runs
     case 'run-filter-state': U.runFilter.state = U.runFilter.state===el.dataset.v?'all':el.dataset.v; rerender(); break;
-    case 'run-filter-clear': U.runFilter={state:'all',flow:'all',pod:'all',mode:'all'}; rerender(); break;
+    case 'run-filter-clear': U.runFilter={state:'all',flow:'all',pod:'all'}; rerender(); break;
     case 'sel-node': { const r=el.dataset.run; U.runSel[r]=el.dataset.node; U.runTab[r]='node'; if(route().v!=='run'||route().id!==r) location.hash='run-'+r; else rerender(); break; }
     case 'sel-att': U.attSel[el.dataset.key]=id; rerender(); break;
     case 'run-tab': U.runTab[el.dataset.run]=el.dataset.v; rerender(); break;
@@ -1752,7 +1741,7 @@ document.addEventListener('click',e=>{
   }
 });
 function selectText(el){ if(!el) return; const r=document.createRange(); r.selectNodeContents(el); const s=getSelection(); s.removeAllRanges(); s.addRange(r); }
-function syncStartFields(){ const m=U.modal; if(!m||m.type!=='start') return; const x=document.getElementById('sd-extra'); if(x) m.extra=x.value; const fr=document.getElementById('sd-fail'); if(fr) m.failRate=+fr.value/100; }
+function syncStartFields(){ const m=U.modal; if(!m||m.type!=='start') return; const x=document.getElementById('sd-extra'); if(x) m.extra=x.value; }
 function readEditorFields(){ if(!U.ed) return; const n=document.getElementById('ed-name'); if(n) U.ed.d.name=n.value; const ds=document.getElementById('ed-desc'); if(ds) U.ed.d.description=ds.value; }
 function doSync(pid){
   const p=projectById(pid); p.lastSync=now();
@@ -1780,7 +1769,6 @@ document.addEventListener('input',e=>{
   const el=e.target;
   if(el.dataset&&el.dataset.draft){ U.drafts[el.dataset.draft]=el.value; return; }
   if(el.id==='tk-search'){ U.tkSearch=el.value; const pos=el.selectionStart; renderView(true); const n=document.getElementById('tk-search'); if(n){ n.focus(); n.setSelectionRange(pos,pos); } return; }
-  if(el.id==='sd-fail'){ U.modal.failRate=+el.value/100; const lab=el.previousElementSibling; if(lab) lab.innerHTML=`Failure rate: <span class="num">${el.value}%</span>`; return; }
   if(U.ed && ['ed-name','ed-desc','ed-nname','ed-nextra'].includes(el.id)){
     if(el.id==='ed-name') U.ed.d.name=el.value;
     if(el.id==='ed-desc') U.ed.d.description=el.value;

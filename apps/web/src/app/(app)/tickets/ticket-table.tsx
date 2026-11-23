@@ -158,7 +158,6 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [flowId, setFlowId] = useState("");
   const [extra, setExtra] = useState("");
-  const [mode, setMode] = useState<"real" | "dry">("real");
   const [error, setError] = useState<{ text: string; machinePage?: string } | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -173,7 +172,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
   const start = async () => {
     setPending(true);
     setError(null);
-    const result = await startAction({ flowId, ticketIds, extraInstructions: extra, mode });
+    const result = await startAction({ flowId, ticketIds, extraInstructions: extra });
     setPending(false);
     if (!result.ok) {
       setError({ text: result.error, machinePage: result.machinePage });
@@ -234,7 +233,7 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
                     Pair my computer
                   </Link>
                 </div>
-              ) : mode === "real" && machine.connected && !machine.ready ? (
+              ) : machine.connected && !machine.ready ? (
                 <div className="banner fail">
                   <div className="grow small">
                     <b>Your Machine is not logged in to Claude Code and gh.</b> Log in on it in your own terminal, then check logins on its page.
@@ -265,23 +264,6 @@ function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: st
                   })()}
                 </span>
               )}
-            </div>
-
-            <div className="field">
-              <label>Mode</label>
-              <div className="seg" style={{ width: "fit-content" }}>
-                <button type="button" className={mode === "real" ? "on" : undefined} aria-pressed={mode === "real"} onClick={() => setMode("real")}>
-                  Real
-                </button>
-                <button type="button" className={mode === "dry" ? "on" : undefined} aria-pressed={mode === "dry"} onClick={() => setMode("dry")}>
-                  Dry-run
-                </button>
-              </div>
-              <span className="hint">
-                {mode === "real"
-                  ? "Claude Code runs on your Machine and a real pull request is opened under your gh account."
-                  : "Simulated Nodes with fake Outputs. It takes a Slot but never calls Claude or GitHub, and needs no logins."}
-              </span>
             </div>
 
             <div className="field">

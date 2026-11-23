@@ -1,7 +1,7 @@
 export type TimerHandle = { readonly id: number } | ReturnType<typeof setTimeout>;
 
 /**
- * Time as the app sees it. Heartbeats, reconnect backoff, Dry-run delays and
+ * Time as the app sees it. Heartbeats, reconnect backoff, and
  * session expiry read it, so tests can drive it with a fake clock.
  */
 export interface Clock {

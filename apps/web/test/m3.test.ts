@@ -74,7 +74,7 @@ async function fixture(ticketCount = 1, slots = 2) {
 
 /** A queued Run of *Plan and deliver*. */
 async function planRun(f: Awaited<ReturnType<typeof fixture>>, ticketIndex = 0) {
-  const started = await startSampleBatch(db, f.ann, f.machine.id, [f.tickets[ticketIndex]!.id], clock.now(), "", "real", "plan-and-deliver");
+  const started = await startSampleBatch(db, f.ann, f.machine.id, [f.tickets[ticketIndex]!.id], clock.now(), "", "plan-and-deliver");
   if (!started.ok) throw new Error("start failed");
   const runId = started.runIds[0]!;
   const snapshot = (await getRun(db, runId))!.flowSnapshot as FlowSnapshot;

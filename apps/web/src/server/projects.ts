@@ -32,7 +32,7 @@ export async function viewProjects(deps: AppDeps) {
     return {
       ...p,
       openTickets: own.filter((t) => t.issueState === "open").length,
-      activeRuns: own.flatMap((t) => t.runs).filter((r) => r.mode === "real" && isActive(r.state)).length,
+      activeRuns: own.flatMap((t) => t.runs).filter((r) => isActive(r.state)).length,
     };
   });
 }

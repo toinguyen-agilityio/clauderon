@@ -62,14 +62,14 @@ export async function startDialog(deps: AppDeps, viewer: Viewer, ticketIds: read
   };
 }
 
-export type StartInput = { flowId: string; ticketIds: readonly string[]; extraInstructions: string; mode?: "real" | "dry" };
+export type StartInput = { flowId: string; ticketIds: readonly string[]; extraInstructions: string };
 export type StartResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; error: string; machinePage?: string };
 
 /**
  * Start (RUN-1, MEM-2): one Batch and one queued Run per Ticket on the
- * Starter's own Machine, then the Gateway schedules. Real mode needs both
+ * Starter's own Machine, then the Gateway schedules. It needs both
  * logins as last checked (POD-5); an offline Machine accepts the Batch and its
- * Runs wait. Dry-run needs a Machine but no logins (RUN-13).
+ * Runs wait.
  */
 export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput): Promise<StartResult> {
   const ticketIds = [...new Set(input.ticketIds)];
@@ -78,12 +78,9 @@ export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput
   const machine = await getMachineOfMember(deps.db, viewer.id);
   if (!machine?.tokenHash) return { ok: false, error: "You have no paired Machine yet.", machinePage: "/machines" };
   const machinePage = `/machines/${machine.id}`;
-  const mode = input.mode ?? "real";
-  if (mode === "real") {
-    const fix = "Log in on your Machine in your own terminal, then check logins on its page.";
-    if (!machine.claudeLoggedIn) return { ok: false, error: `Claude Code is not logged in on your Machine. ${fix}`, machinePage };
-    if (!machine.ghLoggedIn) return { ok: false, error: `gh is not logged in on your Machine. ${fix}`, machinePage };
-  }
+  const fix = "Log in on your Machine in your own terminal, then check logins on its page.";
+  if (!machine.claudeLoggedIn) return { ok: false, error: `Claude Code is not logged in on your Machine. ${fix}`, machinePage };
+  if (!machine.ghLoggedIn) return { ok: false, error: `gh is not logged in on your Machine. ${fix}`, machinePage };
 
   const flow = (await startableFlows(deps)).find((f) => f.id === input.flowId);
   if (!flow) return { ok: false, error: "Pick a Flow without problems." };
@@ -94,7 +91,7 @@ export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput
 
   const result = await startBatch(
     deps.db,
-    { flowId: input.flowId, flowSnapshot, starter: viewer, machineId: machine.id, mode, extraInstructions: input.extraInstructions.trim(), ticketIds },
+    { flowId: input.flowId, flowSnapshot, starter: viewer, machineId: machine.id, extraInstructions: input.extraInstructions.trim(), ticketIds },
     deps.clock.now(),
   );
   if (!result.ok) {

@@ -27,7 +27,7 @@ Every requirement lands in exactly one milestone, or is split across two where t
 | Pods | POD-1, POD-14 | POD-2, POD-4, POD-5, POD-6 (Start, Stop), POD-9, POD-10, POD-11, POD-12, POD-13 | POD-3 | | POD-6 (Recreate, image digest), POD-7, POD-8 |
 | Tickets | | TIC-1, TIC-2, TIC-3, TIC-5, TIC-6, TIC-7, TIC-8, TIC-9 | | | TIC-4 |
 | Flows | FLW-1, FLW-5 (validator), FLW-8 | | FLW-3, FLW-4, FLW-5 (editor), FLW-6, FLW-7, FLW-9, FLW-10 | FLW-2 | |
-| Runs | RUN-12 (heartbeat, message ids) | RUN-1 (Real), RUN-2, RUN-3, RUN-10, RUN-11, RUN-16 | RUN-1 (Dry-run, Batch queue), RUN-13 | RUN-4 … RUN-9, RUN-12 (Interrupted, orphans), RUN-15 | RUN-14 |
+| Runs | RUN-12 (heartbeat, message ids) | RUN-1 (Real), RUN-2, RUN-3, RUN-10, RUN-11, RUN-16 | RUN-1 (Batch queue) | RUN-4 … RUN-9, RUN-12 (Interrupted, orphans), RUN-15 | RUN-14 |
 | Tracking | | TRK-1, TRK-2, TRK-7 | | | TRK-3, TRK-4, TRK-5, TRK-6 |
 | Non-functional | NFR-1 (secrets, cookies), NFR-3 (reconnect) | NFR-1 (masking), NFR-4, NFR-5 (logs), NFR-6 | | NFR-2, NFR-3 (resume within 30 s) | NFR-5 (retention, backups) |
 
@@ -55,7 +55,7 @@ Fixed in M0; later specs add files inside it, never new top-level parts.
 - **App tests** drive the app core through its commands and queries (the same functions the web app and the Gateway call) with three fakes from `packages/testing`:
   - a **fake Host Agent** that speaks the real `packages/protocol` messages over an in-memory socket and can be scripted (succeed, fail, stream logs, drop the connection, ask questions);
   - a **fake GitHub reader** with repositories, branches, issues and pull requests held in memory;
-  - a **fake clock** that the heartbeat timers, Dry-run delays and session expiry read.
+  - a **fake clock** that the heartbeat timers and session expiry read.
 - **Host Agent tests** run the real Host Agent against a fake Docker client and a fake Gateway.
 - Pure logic in `packages/core` has plain unit tests.
 - Tests use a real Postgres (a container in CI), reset per test file. No mocks of the database.

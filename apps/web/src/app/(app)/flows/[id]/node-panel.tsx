@@ -181,7 +181,7 @@ export function NodePanel({
             <span className={`fe-run-state ${runState}`}>{STATE_LABEL[runState]}</span>
             {testOutputs && testOutputs.length > 0 && (
               <div className="stack" style={{ gap: 8 }}>
-                <span className="hint">Made-up Outputs, as a Dry-run would pass them on.</span>
+                <span className="hint">Made-up Outputs, as a real Run would pass them on.</span>
                 {testOutputs.map((o) => (
                   <div key={o.name} className="stack" style={{ gap: 4 }}>
                     <span className="mono small">{o.name}</span>
