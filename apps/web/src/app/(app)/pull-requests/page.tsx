@@ -37,7 +37,7 @@ export default async function PullRequestsPage({ searchParams }: { searchParams:
         <div>
           <h1>Pull requests</h1>
           <p className="sub">
-            Open pull requests of every Project, read from GitHub each time this page opens. Needs you: you are asked to review them.
+            Open pull requests of every Project, read from GitHub at most every 30 seconds. Needs you: you are asked to review them.
           </p>
         </div>
       </div>

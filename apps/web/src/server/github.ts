@@ -41,6 +41,31 @@ function toIssue(i: ApiIssue): Issue {
 
 const encode = (owner: string, repo: string) => `${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 
+const OPEN_PULL_REQUESTS_TTL_MS = 30_000;
+
+/**
+ * Keeps each repository's open pull requests for a short while, so opening the
+ * Pull requests page does not wait on GitHub every time. Concurrent reads share
+ * one request; a failed read is not kept, so the next visit tries again.
+ */
+export function withCachedPullRequests(reader: GitHubReader, ttlMs = OPEN_PULL_REQUESTS_TTL_MS, now: () => number = Date.now): GitHubReader {
+  const cache = new Map<string, { at: number; pulls: Promise<OpenPullRequest[]> }>();
+  return {
+    ...reader,
+    listOpenPullRequests(owner, repo) {
+      const key = `${owner}/${repo}`;
+      const hit = cache.get(key);
+      if (hit && now() - hit.at < ttlMs) return hit.pulls;
+      const entry = { at: now(), pulls: reader.listOpenPullRequests(owner, repo) };
+      cache.set(key, entry);
+      entry.pulls.catch(() => {
+        if (cache.get(key) === entry) cache.delete(key);
+      });
+      return entry.pulls;
+    },
+  };
+}
+
 export function gitHubApi(token: string, fetcher: typeof fetch = fetch): GitHubReader {
   async function request<T>(path: string): Promise<{ data: T; next: string | null }> {
     const res = await fetcher(path.startsWith("http") ? path : `${API}${path}`, {
