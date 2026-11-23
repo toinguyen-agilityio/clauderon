@@ -55,7 +55,7 @@ Postgres, migrations in `packages/db`. Ids are UUIDs except where noted; times a
 | `flow` | `slug` (unique, samples only), `name`, `is_sample`, `cloned_from_id`, `updated_by_email`, `updated_at` | |
 | `flow_node` | `flow_id`, `node_id`, `label`, `extra_instructions`, `enabled_optional_outputs` (jsonb), `x`, `y` | A placement of a library Node (FLW-6) |
 | `flow_edge` | `flow_id`, `from_flow_node_id`, `from_output`, `to_flow_node_id`, `to_input` | |
-| `batch` | `flow_id`, `starter_member_id`, `mode` (`real`, `dry`), `extra_instructions` | |
+| `batch` | `flow_id`, `starter_member_id`, `extra_instructions` | |
 | `run` | `batch_id`, `ticket_id`, `flow_id`, `flow_snapshot` (jsonb), `pod_id`, `starter_member_id`, `mode`, `state`, `queued_at`, `started_at`, `ended_at`, `branch`, `worktree_path`, `pull_request_number`, `pull_request_url`, `pull_request_state`, `failure_reason` | `state` per §5.2. `flow_snapshot` keeps Node names, kinds and edges as they were at Start, so past Runs still render after the Flow is edited |
 | `attempt` | `run_id`, `flow_node_id`, `number`, `state`, `started_at`, `ended_at`, `exit_code`, `error`, `input_tokens`, `output_tokens`, `claude_session_id`, `retry_context` (jsonb) | One per execution of a Node (Attempt) |
 | `output` | `attempt_id`, `name`, `type`, `value` (jsonb) | Typed by Output Type |
@@ -158,7 +158,6 @@ Pure functions, no I/O.
 3. `PR merged` / `PR open` from the latest Run with a pull request;
 4. `Open`.
 
-Dry-run Runs are ignored (TIC-7).
 
 ### 5.5 Masking (NFR-1)
 
@@ -217,7 +216,7 @@ A migration-safe, idempotent seed inserts the nine sample Nodes and two sample F
 | T0-5 | The Run state machine allows every move in the lifecycle diagram and refuses every other one | RUN-2 … RUN-9 |
 | T0-6 | `nextNode` skips a Node whose required input is an unproduced optional Output, and the Run can still succeed | RUN-16 |
 | T0-7 | With 2 Slots, 1 running and 1 waiting, `schedule` starts nothing; after one ends it starts the oldest Queued Run | POD-3 |
-| T0-8 | `ticketStatus` returns each of the nine statuses for a matching fixture and ignores Dry-run Runs | TIC-6, TIC-7 |
+| T0-8 | `ticketStatus` returns each of the nine statuses for a matching fixture | TIC-6, TIC-7 |
 | T0-9 | `mask` hides every token pattern and known secret in a mixed log line | NFR-1 |
 | T0-10 | An unverified or non-allowlisted Google email gets access denied and no session; an Operator email always gets in | MEM-1, MEM-3, A7 |
 | T0-11 | Removing an email ends its sessions; its next request gets 401; its open Gateway socket closes with 4403 | MEM-3, A7 |

@@ -18,7 +18,6 @@ const gateway = createGateway({
   clock: systemClock,
   operators: parseOperatorEmails(process.env.OPERATOR_EMAILS),
   sessionSecret,
-  dryRunFailureRate: Number(process.env.DRY_RUN_FAILURE_RATE ?? 0),
   appSecrets: [sessionSecret, process.env.GITHUB_TOKEN ?? ""].filter(Boolean),
 });
 

@@ -98,12 +98,6 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
                 <tr key={r.id}>
                   <td className="t-title">
                     <span className="mono faint small">{r.key}</span>
-                    {r.mode === "dry" && (
-                      <>
-                        {" "}
-                        <span className="tag dry">Dry-run</span>
-                      </>
-                    )}
                     <div>
                       <Link href={`/runs/${r.id}`}>{r.ticketTitle}</Link>
                     </div>

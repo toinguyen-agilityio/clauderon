@@ -96,6 +96,18 @@ describe("MachineLinks", () => {
     expect((await getMachine(db, machine.id))?.usage).toEqual(usage);
   });
 
+  it("stores usage without a disk reading as it is, so the web shows unknown, not 0", async () => {
+    const agent = new FakeAgent();
+    const socket = connect(agent);
+    await flush();
+    const usage = { memoryUsedMb: 100, cpuPercent: 5 };
+    socket.send(serialize(controlMessage("heartbeat", { at: "now", usage })));
+    await flush();
+    const stored = (await getMachine(db, machine.id))?.usage;
+    expect(stored).toEqual(usage);
+    expect(stored?.diskFreeGb).toBeUndefined();
+  });
+
   it("T0-14: a message dropped before it was acknowledged is delivered exactly once after reconnect", async () => {
     const agent = new FakeAgent();
     let socket = connect(agent);

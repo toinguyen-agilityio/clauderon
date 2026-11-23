@@ -10,8 +10,6 @@ import {
   parseGrillQuestions,
   renderRetryContext,
   schedule,
-  simulatedDelayMs,
-  simulatedOutputs,
   snapshotFlow,
   type Clock,
   type FlowSnapshot,
@@ -57,10 +55,6 @@ export type RunEngineOptions = {
   live: LiveHub;
   /** The app's own secrets, masked again before a log line is stored (NFR-1). */
   secrets: readonly string[];
-  /** Chance that a simulated Dry-run Node fails, 0 to 1 (spec M2 §7); default 0. */
-  dryRunFailureRate?: number;
-  /** Source of randomness for the Dry-run runner; default `Math.random`. */
-  random?: () => number;
   log?: (message: string) => void;
 };
 
@@ -110,18 +104,16 @@ export class RunEngine {
       const moved = await moveRun(this.opts.db, runId, "queued", { state: "running", startedAt: this.now() });
       if (!moved) continue;
       this.opts.live.runChanged(runId);
-      // A Dry-run needs no logins and no Workspace (RUN-13): it starts its Nodes at once.
-      if (runs.find((r) => r.id === runId)?.mode === "dry") await this.advance(runId);
     }
     // A login check right before each Run's first Node (POD-5); its answer
     // prepares the Workspace of every Run still waiting for it.
     if (runs.length > 0 && (await this.waitingForLogins(machineId)).length > 0) this.opts.links.send(machineId, "machine.checkLogins", {});
   }
 
-  /** Real Runs waiting for their login check: new ones, and retried ones (spec M3 §4). */
+  /** Runs waiting for their login check: new ones, and retried ones (spec M3 §4). */
   private async waitingForLogins(machineId: string) {
     return (await runsOfMachine(this.opts.db, machineId, ["running"])).filter(
-      (r) => r.mode === "real" && (r.branch === null || (r.pendingRetry !== null && !r.pendingRetry.loginsChecked)),
+      (r) => r.branch === null || (r.pendingRetry !== null && !r.pendingRetry.loginsChecked),
     );
   }
 
@@ -237,9 +229,6 @@ export class RunEngine {
       return;
     }
 
-    // A Dry-run simulates Grill Nodes like Agent Nodes: no questions (RUN-13).
-    if (ctx.run.mode === "dry") return this.simulate(runId, node, attempt.id);
-
     const retryContext = attempt.retryContext as RetryContext | null;
     const base = { attemptId: attempt.id, runId, worktreePath: ctx.run.worktreePath ?? "" };
     if (node.kind === "agent" || node.kind === "grill") {
@@ -301,36 +290,6 @@ export class RunEngine {
       });
       this.opts.live.runChanged(runId);
     });
-  }
-
-  /**
-   * The simulated runner (spec M2 §7): a Dry-run Node takes 2 to 8 seconds on
-   * the clock, writes a few log lines, then fails with `dryRunFailureRate` or
-   * produces fake Outputs. Only this executor differs from a Real Run.
-   */
-  private async simulate(runId: string, node: SnapshotNode, attemptId: string): Promise<void> {
-    const random = this.opts.random ?? Math.random;
-    for (const [seq, text] of [`[dry-run] ${node.name} started`, `[dry-run] simulating ${node.kind} Node`].entries()) {
-      await this.nodeLog({ attemptId, seq, stream: "stdout", text });
-    }
-    this.opts.clock.setTimeout(() => {
-      void this.serial(() => this.finishSimulated(runId, node, attemptId, random));
-    }, simulatedDelayMs(random));
-  }
-
-  private async finishSimulated(runId: string, node: SnapshotNode, attemptId: string, random: () => number): Promise<void> {
-    const attempt = await getAttempt(this.opts.db, attemptId);
-    const ctx = await getRunContext(this.opts.db, runId);
-    if (!attempt || attempt.state !== "running" || !ctx || ctx.run.state !== "running") return;
-    const end = { endedAt: this.now(), exitCode: 0, claudeSessionId: null };
-    await this.nodeLog({ attemptId, seq: 2, stream: "stdout", text: `[dry-run] ${node.name} finished` });
-
-    if (random() < (this.opts.dryRunFailureRate ?? 0)) {
-      return this.failAttempt(ctx, attemptId, `${node.name}: simulated failure`, { ...end, exitCode: 1 });
-    }
-    const outputs = simulatedOutputs(node.outputs, node.enabledOptionalOutputs, random, { branch: ctx.run.branch ?? "dry-run" });
-    await finishAttempt(this.opts.db, attemptId, { state: "succeeded", ...end, outputs });
-    await this.advance(runId);
   }
 
   /** Every input's value: the Output on its edge from the latest succeeded Attempt of this pass. */
@@ -453,7 +412,7 @@ export class RunEngine {
     const ctx = await getRunContext(this.opts.db, runId);
     if (!ctx) return;
     const { run } = ctx;
-    if (run.mode !== "real" || (run.state !== "succeeded" && run.state !== "cancelled")) return;
+    if ((run.state !== "succeeded" && run.state !== "cancelled")) return;
     if (!run.machineId || !run.worktreePath || !run.branch) return;
     this.opts.links.send(run.machineId, "workspace.cleanup", {
       runId,
@@ -485,32 +444,19 @@ export class RunEngine {
   }
 
   /**
-   * The Gateway (re)started (spec M3 §6): Dry-run Nodes were simulated in the
-   * process that stopped, so their Runs are Interrupted; a Dry-run between
-   * Nodes goes on. Real Runs wait for their Machine's hello.
-   */
-  booted(): Promise<void> {
-    return this.serial(async () => {
-      const dry = (await runningRuns(this.opts.db)).filter((r) => r.mode === "dry");
-      await this.interrupt(dry.filter((r) => r.attemptIds.length > 0).map((r) => r.id), "Lost while the Gateway restarted");
-      for (const r of dry) if (r.attemptIds.length === 0) await this.advance(r.id);
-    });
-  }
-
-  /**
    * A Machine is gone (spec M3 §6, ADR 0006): no heartbeat for 30 s, or it
-   * was paired anew. Its Real Running Runs become Interrupted.
+   * was paired anew. Its Running Runs become Interrupted.
    */
   machineLost(machineId: string, reason: string): Promise<void> {
     return this.serial(async () => {
-      const runs = (await runningRuns(this.opts.db, machineId)).filter((r) => r.mode === "real");
+      const runs = await runningRuns(this.opts.db, machineId);
       await this.interrupt(runs.map((r) => r.id), reason);
     });
   }
 
   /**
    * A Machine's Agent said hello (spec M3 §6). After an Agent restart or a
-   * Gateway restart, its Real Running Runs whose Attempts are not live can
+   * Gateway restart, its Running Runs whose Attempts are not live can
    * never report and become Interrupted. Then every live Attempt that is not
    * running in the database is killed, and Runs that lost a command go on.
    */
@@ -520,7 +466,6 @@ export class RunEngine {
       const lost: string[] = [];
       if (back.checkLive) {
         for (const r of await runningRuns(this.opts.db, machineId)) {
-          if (r.mode === "dry") continue;
           if (r.attemptIds.length > 0 ? r.attemptIds.some((id) => !live.has(id)) : r.branch !== null && r.worktreePath === null) {
             // A Node, or a Workspace being prepared, that can no longer report.
             lost.push(r.id);
@@ -542,8 +487,8 @@ export class RunEngine {
   private async reconcile(machineId: string): Promise<void> {
     for (const r of await runningRuns(this.opts.db, machineId)) {
       if (r.attemptIds.length > 0) continue;
-      const waitingForLogins = r.mode === "real" && (r.branch === null || (r.pendingRetry !== null && !r.pendingRetry.loginsChecked));
-      if (r.mode === "dry" || (!waitingForLogins && r.worktreePath !== null)) await this.advance(r.id);
+      const waitingForLogins = r.branch === null || (r.pendingRetry !== null && !r.pendingRetry.loginsChecked);
+      if (!waitingForLogins && r.worktreePath !== null) await this.advance(r.id);
     }
     await this.scheduleNow(machineId);
   }

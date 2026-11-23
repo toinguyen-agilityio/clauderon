@@ -7,6 +7,7 @@ import { Icon } from "../../../../components/icons";
 import { StatePill } from "../../../../components/state-pill";
 import { viewRun } from "../../../../server/runs";
 import { deps, gatewayUrl, requireMember } from "../../../../server/runtime";
+import { DISK_ADVICE, diskFree } from "../../machines/machine-parts";
 import { CancelRun } from "./cancel-run";
 import { RunLive } from "./run-live";
 
@@ -25,6 +26,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const waitingAt = run.timeline.find((n) => n.openRequest);
   const runningAt = run.timeline.find((n) => n.state === "running");
   const active = isActive(r.state);
+  const disk = diskFree({ connected: run.machineConnected ?? false, usage: run.machineUsage });
   // A failed Agent Node may be out of Claude usage or logged out: its Machine's
   // owner can sign in to another Claude account on it, then Retry (POD-5).
   // Only when Claude Code itself failed (usage limit, logged out); not for
@@ -43,7 +45,6 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
             <h1>{run.ticket.title}</h1>
             <div className="row" style={{ marginTop: 8 }}>
               <StatePill state={r.state} />
-              <span className={`tag ${r.mode === "dry" ? "dry" : "real"}`}>{r.mode === "dry" ? "Dry-run" : "Real"}</span>
               <a className="mono small row" style={{ gap: 4 }} href={run.ticket.url} target="_blank" rel="noreferrer">
                 {run.key} {Icon.external}
               </a>
@@ -96,6 +97,16 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
       )}
+      {active && (disk.state === "low" || disk.state === "critical") && (
+        <div className={`banner ${disk.state === "critical" ? "fail" : "wait"}`} role="status" data-testid="disk-banner">
+          <div className="grow">
+            <p>
+              <b>{disk.state === "critical" ? "Disk almost full" : "Low disk"} on {machineLabel}: {disk.text}</b>
+            </p>
+            <p className="small">{DISK_ADVICE} Cancel the Run above to stop it.</p>
+          </div>
+        </div>
+      )}
       {r.state === "waiting_for_human" && (
         <div className="banner wait" role="status">
           <div className="grow">
@@ -116,8 +127,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
       )}
-      {/* A Dry-run needs no logins and no worktree, so it never gets a branch. */}
-      {r.state === "running" && r.mode === "real" && !r.branch && (
+      {r.state === "running" && !r.branch && (
         <div className="banner info" role="status">
           <div className="grow small">Checking the Machine&apos;s logins and preparing the worktree…</div>
         </div>
@@ -155,6 +165,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
 
       <div className="stats">
         <Stat label="Duration" value={run.durationMs === null ? "—" : duration(run.durationMs)} sub={runningAt ? `running “${runningAt.name}”` : undefined} />
+        <Stat label="Machine disk" value={active ? <span data-disk={disk.state}>{disk.text}</span> : "—"} sub={disk.state === "low" ? "low" : disk.state === "critical" ? "almost full" : undefined} />
         <Stat label="Tokens" value={run.tokens ? tokens(run.tokens) : "—"} />
         <Stat label="Branch" value={r.branch ? <span className="mono" style={{ fontSize: 12 }}>{r.branch}</span> : "—"} />
         <Stat

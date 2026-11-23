@@ -20,7 +20,7 @@
 | Masking and stored logs | NFR-1, NFR-5 (logs per Attempt) |
 | Ending terminals and live connections when an email is removed | A7 |
 
-**Not in M1:** the canvas editor (M1 runs the seeded *Basic ticket delivery* Flow as is), Dry-run, Slot and limit editing, Human Nodes, Retry, Cancel, Interrupted, Recreate and Delete. The Slot scheduler from M0 already caps running Runs at the Pod's 2 default Slots; the queue view and editing come in M2.
+**Not in M1:** the canvas editor (M1 runs the seeded *Basic ticket delivery* Flow as is), Slot and limit editing, Human Nodes, Retry, Cancel, Interrupted, Recreate and Delete. The Slot scheduler from M0 already caps running Runs at the Pod's 2 default Slots; the queue view and editing come in M2.
 
 ## 2. Pods
 
@@ -81,7 +81,7 @@ Table per Project or across Projects: key (`repo#n`, or `owner/repo#n` when two 
 
 ### 4.1 Start dialog (RUN-1, TIC-9)
 
-- Fields: Flow (only Flows without problems), extra instructions, mode (`Real` only in M1; `Dry-run` arrives in M2), the selected Tickets.
+- Fields: Flow (only Flows without problems), extra instructions, the selected Tickets.
 - Shows the Starter's Pod with its Slots in use and queue length, and the Pod Ready state.
 - Warns, without blocking, for each Ticket whose `author_association` is not `OWNER`, `MEMBER` or `COLLABORATOR`.
 - **Start** creates one `batch` and one `run` per Ticket (`queued`, `pod_id` = Starter's Pod, `flow_snapshot`), all in one transaction; a Ticket that gained an Active Run meanwhile fails the whole Start with a message naming it (the partial unique index of M0 enforces it). Audit: `run.start` per Run.

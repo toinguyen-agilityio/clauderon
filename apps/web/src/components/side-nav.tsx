@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "./icons";
+import { useNeedsYou } from "./needs-you-live";
 
 type Item = { href: string; label: string; icon: React.ReactNode; badge?: number };
 type Group = { title: string; items: Item[] };
 
 /** `needsYou`: open requests across all Runs, shown beside Needs you (spec M3 §3). */
-export function SideNav({ needsYou }: { needsYou: number }) {
+export function SideNav({ needsYou: initial }: { needsYou: number }) {
+  const needsYou = useNeedsYou(initial);
   const path = usePathname();
   const groups: Group[] = [
     {

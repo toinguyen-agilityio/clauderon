@@ -32,7 +32,7 @@ export async function viewProjects(deps: AppDeps) {
     return {
       ...p,
       openTickets: own.filter((t) => t.issueState === "open").length,
-      activeRuns: own.flatMap((t) => t.runs).filter((r) => r.mode === "real" && isActive(r.state)).length,
+      activeRuns: own.flatMap((t) => t.runs).filter((r) => isActive(r.state)).length,
     };
   });
 }
@@ -77,7 +77,7 @@ export type SyncResult = { ok: true; summary: { added: number; updated: number; 
 
 /**
  * Sync (TIC-5): upsert every open issue, read the state of every known Ticket
- * that did not come back open, and refresh every recorded pull request.
+ * that did not come back open, and refresh every recorded pull request that is not merged or closed.
  * GitHub's errors are kept on the Project, not swallowed.
  */
 export async function syncProject(deps: AppDeps, viewer: Viewer, projectId: string): Promise<SyncResult | "not-found"> {
@@ -90,14 +90,35 @@ export async function syncProject(deps: AppDeps, viewer: Viewer, projectId: stri
   return result;
 }
 
+const SYNC_THROTTLE_MS = 60_000;
+const PR_LOOKUP_LIMIT = 5;
+// Last attempt per Project in this process, so a Project that keeps failing is not retried on every visit.
+const lastAttempt = new Map<string, number>();
+
 /**
- * Sync every Project when the Tickets page opens, so it shows GitHub as it is now.
- * Not audited (no one asked for it); a failure stays on its Project and the page
- * still renders with the last synced Tickets.
+ * Sync every Project that was not synced in the last minute. Called in the
+ * background after the Tickets page rendered, never in its render path. Not
+ * audited (no one asked for it); a failure stays on its Project and the page
+ * keeps showing the last synced Tickets. Returns whether any Project was synced.
  */
-export async function syncAllProjects(deps: AppDeps): Promise<void> {
-  const projects = await listProjects(deps.db);
-  await Promise.all(projects.map((p) => pullFromGitHub(deps, p)));
+export async function syncAllProjects(deps: AppDeps): Promise<boolean> {
+  const now = deps.clock.now().getTime();
+  const due = (await listProjects(deps.db)).filter((p) => {
+    const last = Math.max(p.lastSyncedAt?.getTime() ?? 0, lastAttempt.get(p.id) ?? 0);
+    return now - last >= SYNC_THROTTLE_MS;
+  });
+  for (const p of due) lastAttempt.set(p.id, now);
+  await Promise.all(due.map((p) => pullFromGitHub(deps, p)));
+  return due.length > 0;
+}
+
+/** Runs `task` over `items`, at most `limit` at a time. */
+async function mapLimit<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await task(items[next++]!);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
 async function pullFromGitHub(deps: AppDeps, project: { id: string; owner: string; repo: string }): Promise<SyncResult> {
@@ -118,10 +139,10 @@ async function pullFromGitHub(deps: AppDeps, project: { id: string; owner: strin
       if (!issue || issue.state === "closed") closed++;
     }
 
-    for (const run of await runsWithPullRequests(deps.db, project.id)) {
+    await mapLimit(await runsWithPullRequests(deps.db, project.id), PR_LOOKUP_LIMIT, async (run) => {
       const pr = await deps.github.findPullRequest(project.owner, project.repo, run.branch);
       if (pr) await setPullRequestState(deps.db, run.id, pr.state, now);
-    }
+    });
 
     const summary = { added, updated, closed };
     await recordSync(deps.db, project.id, { summary }, now);

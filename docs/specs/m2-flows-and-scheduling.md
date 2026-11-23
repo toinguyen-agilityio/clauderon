@@ -14,7 +14,6 @@
 | Node library editing | FLW-9, FLW-10 |
 | Flow edit lock | FLW-7 |
 | Slots and limits editing, queue view | POD-2 (owner edits), POD-3, POD-6 (Slots apply at once) |
-| Dry-run runner and mode | RUN-1 (Dry-run), RUN-13 |
 | A second Member's Pod and pull request | A6 |
 
 **Not in M2:** Human Nodes (a Flow may contain Approve or Grill Nodes and validate, but Start refuses Flows with Human Nodes until M3 with "Human Nodes arrive in M3"), the Batch page (M4).
@@ -44,7 +43,7 @@
 
 ## 5. Flow edit lock (FLW-7)
 
-A Flow is locked while any Active Run uses it, Dry-run included. Locked: the editor opens read-only with a banner "Locked by Run <link> (<state>)" (the oldest Active Run), and update and delete are refused on the server, not only in the UI. The lock is a query over `run`, never a stored flag, so it can never be left behind.
+A Flow is locked while any Active Run uses it. Locked: the editor opens read-only with a banner "Locked by Run <link> (<state>)" (the oldest Active Run), and update and delete are refused on the server, not only in the UI. The lock is a query over `run`, never a stored flag, so it can never be left behind.
 
 ## 6. Slots, limits and the queue (POD-2, POD-3, POD-6)
 
@@ -52,12 +51,9 @@ A Flow is locked while any Active Run uses it, Dry-run included. Locked: the edi
 - The Pod row's **queue** expands to list Queued Runs in order with Ticket, Flow, mode and queued time.
 - The Start dialog shows the queue position the new Runs will get.
 
-## 7. Dry-run (RUN-1, RUN-13)
+## 7. Dry-run (removed)
 
-- The Start dialog offers `Dry-run`. It needs the Starter to have a Pod (stopped is fine; Runs wait), but no logins and no Pod Ready.
-- A Dry-run Run is `mode = 'dry'`: it takes a Slot and locks the Flow, does not count toward the Ticket's Active Run, never sends `workspace.prepare` or `node.run`, and never calls GitHub or Claude.
-- The **simulated runner** lives in the Gateway: each Node takes a random 2–8 s on the fake clock, fails with probability `DRY_RUN_FAILURE_RATE` (configuration, default 0), writes a few log lines, and produces fake Outputs of the right Output Types (optional ones 50 % of the time). The same Run engine drives it; only the executor differs.
-- Dry-run Runs are marked with a "Dry-run" badge on the Run page, the Runs list, the queue and the Batch.
+The Dry-run Run mode, its simulated runner in the Gateway and its `DRY_RUN_FAILURE_RATE` setting were removed (ADR 0009). The editor's Test run stays (it uses core's `simulatedOutputs` and runs in the browser). The queue and Slots (A2) are checked by a Gateway test with a fake Agent.
 
 ## 8. Second Member (A6)
 
@@ -67,11 +63,11 @@ No new code beyond M1 if M1 holds; this milestone proves it: a second Member cre
 
 | # | Given / when / then | Covers |
 | --- | --- | --- |
-| T2-1 | **A2:** start 10 Tickets as a Dry-run Batch on a 2-Slot Pod; stepping the fake clock, at most 2 Runs are ever running, the other 8 stay Queued and start in `queued_at` order | A2, POD-3, RUN-13 |
-| T2-2 | A Dry-run Run never emits `workspace.prepare` or `node.run` to the fake Host Agent and never calls the fake GitHub | RUN-13 |
-| T2-3 | A Ticket with an Active Dry-run Run can still start a Real Run | RUN-13, TIC-7 |
+| T2-1 | **A2:** start 10 Tickets as a Batch on a 2-Slot Pod with a fake Agent that holds every Node open; at most 2 Runs are ever running, the other 8 stay Queued and start in `queued_at` order | A2, POD-3 |
+| T2-2 | _Dropped_ with the Dry-run Run mode (ADR 0009) | |
+| T2-3 | _Dropped_ with the Dry-run Run mode (ADR 0009) | |
 | T2-4 | **A3:** saving a Flow with a `plan` → `issue` edge or a cycle reports the problem, and the Start dialog does not offer the Flow | A3, FLW-4, FLW-5 |
-| T2-5 | Updating or deleting a Flow with an Active Dry-run Run is refused by the server, naming the Run; cloning it works | FLW-7 |
+| T2-5 | Updating or deleting a Flow with an Active Run is refused by the server, naming the Run; cloning it works | FLW-7 |
 | T2-6 | Editing a library Node used by a locked Flow is refused; editing an unlocked one re-validates every Flow using it | FLW-10 |
 | T2-7 | Samples cannot be updated or deleted; clone produces an editable copy with the same placements and edges | FLW-8 |
 | T2-8 | Lowering Slots from 2 to 1 with 2 running stops neither; the next Run waits until both end | POD-6 |
@@ -90,5 +86,5 @@ No new code beyond M1 if M1 holds; this milestone proves it: a second Member cre
 | M2-03 | Node panel: label, extra instructions, optional Outputs | M2-02 |
 | M2-04 | Node library page and editing with FLW-10 rules | M2-01 |
 | M2-05 | Slots and limits editing, queue view, queue position in Start | M1 |
-| M2-06 | Simulated runner and Dry-run mode in Start; badges | M1 |
-| M2-07 | A2 automated test with the fake clock | M2-06 |
+| M2-06 | _Removed_: the simulated runner and Dry-run mode (ADR 0009) | |
+| M2-07 | A2 automated test with a fake Agent that holds Nodes open | M1 |

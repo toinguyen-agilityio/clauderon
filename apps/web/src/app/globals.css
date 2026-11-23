@@ -297,6 +297,9 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .slot.run { background: var(--run); border-color: var(--run); }
 .slot.wait { background: var(--wait); border-color: var(--wait); }
 .meter-row { display: flex; flex-direction: column; gap: 4px; }
+.res-list { display: grid; gap: 6px; margin: 0; font-size: 12.5px; }
+.res-item { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 8px; align-items: start; }
+.res-item dt, .res-item dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .meter { width: 100%; max-width: 160px; height: 6px; border-radius: 3px; background: var(--line-strong); overflow: hidden; }
 .meter-fill { display: block; height: 100%; border-radius: 3px; }
 .meter-fill.ok { background: var(--ok); }

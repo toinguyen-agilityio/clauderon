@@ -1,4 +1,5 @@
 export * from "./clock";
+export * from "./disk";
 export * from "./flow";
 export * from "./flow-file";
 export * from "./node-file";

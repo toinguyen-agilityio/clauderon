@@ -18,7 +18,7 @@ describe("simulatedOutputs (RUN-13)", () => {
     const byType = Object.fromEntries(made.map((o) => [o.type, o.value])) as Record<string, unknown>;
     expect(byType["branch"]).toEqual({ branch: "clauderon/1-x-abcdef", headCommit: expect.any(String) });
     expect(byType["test-result"]).toEqual({ exitCode: 0, tail: expect.any(String) });
-    expect(byType["pull-request"]).toEqual({ number: expect.any(Number), url: expect.stringContaining("dry-run") });
+    expect(byType["pull-request"]).toEqual({ number: expect.any(Number), url: expect.stringContaining("simulated") });
     expect(byType["summary"]).toEqual(expect.any(String));
     expect(byType["plan"]).toEqual(expect.any(String));
     expect(byType["issue"]).toEqual(expect.objectContaining({ number: expect.any(Number) }));

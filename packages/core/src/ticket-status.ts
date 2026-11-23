@@ -14,7 +14,6 @@ export type TicketStatus =
 export type PullRequestState = "open" | "merged" | "closed";
 
 export type RunForStatus = {
-  mode: "real" | "dry";
   state: RunState;
   queuedAt: Date;
   pullRequestState: PullRequestState | null;
@@ -31,12 +30,11 @@ const ACTIVE_STATUS: Partial<Record<RunState, TicketStatus>> = {
 /**
  * A Ticket's Status is derived, never stored (TIC-6). First match wins:
  * closed issue, the Active Run's state, the latest pull request, then Open.
- * Dry-run Runs never count (TIC-7).
  */
 export function ticketStatus(ticket: { issueState: "open" | "closed" }, runs: readonly RunForStatus[]): TicketStatus {
   if (ticket.issueState === "closed") return "Closed";
 
-  const real = runs.filter((r) => r.mode === "real").sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime());
+  const real = [...runs].sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime());
   const active = real.find((r) => isActive(r.state));
   if (active) return ACTIVE_STATUS[active.state] ?? "Open";
 

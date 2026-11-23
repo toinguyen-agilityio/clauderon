@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPairing, hashToken, schema, sql, type Db, type GatewayCommand } from "@clauderon/db";
 import {
   FakeClock,
@@ -308,12 +308,51 @@ describe("Tickets page Sync", () => {
     await projectRow(db, "acme", "web");
     await projectRow(db, "acme", "gone");
 
-    await syncAllProjects(deps);
+    expect(await syncAllProjects(deps)).toBe(true);
 
     expect((await viewTickets(deps, {})).rows.map((r) => r.number)).toEqual([1]);
     expect(await actions()).toEqual([]);
     const [gone] = await db.select().from(schema.project).where(sql`repo = 'gone'`);
     expect(gone!.syncError).toContain("acme/gone");
+  });
+
+  it("syncs a Project at most once a minute, however often it is asked", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    github.addIssue("acme", "web", { number: 1, title: "One" });
+    await projectRow(db, "acme", "web");
+    const listed = vi.spyOn(github, "listOpenIssues");
+    const clock = new FakeClock(new Date("2026-11-23T10:00:00Z"));
+    deps.clock = clock;
+
+    expect(await syncAllProjects(deps)).toBe(true);
+    await clock.advance(30_000);
+    expect(await syncAllProjects(deps)).toBe(false);
+    expect(listed).toHaveBeenCalledTimes(1);
+
+    await clock.advance(31_000);
+    expect(await syncAllProjects(deps)).toBe(true);
+    expect(listed).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not look up pull requests that are already merged or closed", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    const ann = await memberRow(db, "ann@example.com");
+    const machine = await machineRow(db, ann.id);
+    const project = await projectRow(db);
+    const tickets = [await ticketRow(db, project.id, 1), await ticketRow(db, project.id, 2), await ticketRow(db, project.id, 3)];
+    await startSampleBatch(db, ann, machine.id, tickets.map((t) => t.id), deps.clock.now());
+    const runs = await db.select().from(schema.run).orderBy(schema.run.id);
+    const states = ["merged", "closed", "open"];
+    for (const [i, r] of runs.entries()) {
+      await db.update(schema.run).set({ branch: `b${i}`, pullRequestNumber: i + 1, pullRequestState: states[i] }).where(sql`id = ${r.id}`);
+    }
+    const lookups: string[] = [];
+    const find = github.findPullRequest.bind(github);
+    vi.spyOn(github, "findPullRequest").mockImplementation(async (o, r, branch) => (lookups.push(branch), find(o, r, branch)));
+
+    await syncProject(deps, ann, project.id);
+
+    expect(lookups).toEqual(["b2"]);
   });
 });
 
@@ -480,14 +519,6 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     expect(await db.select().from(schema.run)).toEqual([]);
   });
 
-  it("a Dry-run Start needs no logins and queues a dry Run", async () => {
-    const { ann, machine, mine, flowId } = await ready({ ghLoggedIn: false, claudeLoggedIn: false });
-    const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "", mode: "dry" });
-    expect(result).toMatchObject({ ok: true });
-    expect(await db.select().from(schema.run)).toEqual([expect.objectContaining({ mode: "dry", state: "queued", machineId: machine.id })]);
-    expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
-  });
-
   it("refuses a Member with no paired Machine", async () => {
     const bob = await memberRow(db, "bob@example.com");
     const { ann, mine, flowId } = await ready();
@@ -501,7 +532,7 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id, outside.id], extraInstructions: "Be brief." });
     expect(result).toEqual({ ok: true, batchId: expect.any(String), runIds: [expect.any(String), expect.any(String)] });
     const runs = await db.select().from(schema.run);
-    expect(runs.every((r) => r.state === "queued" && r.machineId === machine.id && r.mode === "real")).toBe(true);
+    expect(runs.every((r) => r.state === "queued" && r.machineId === machine.id)).toBe(true);
     expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
     expect(await actions()).toEqual(["run.start", "run.start"]);
   });
@@ -551,8 +582,10 @@ describe("Runs (TRK-1, TRK-2, TRK-7)", () => {
     expect((await viewRuns(deps, { state: "failed", flowId: "00000000-0000-0000-0000-000000000000" }, 1)).rows).toEqual([]);
 
     const run = await viewRun(deps, first.runIds[0]!);
-    expect(run).not.toBe("not-found");
-    if (run === "not-found") return;
+    if (run === "not-found") throw new Error("run not found");
+    expect(run.key).toBe("web#1");
+    expect(run).toHaveProperty("machineUsage");
+    expect(run).toHaveProperty("machineConnected");
     expect(run.key).toBe("web#1");
     expect(run.timeline.map((n) => [n.name, n.state])).toEqual([
       ["Ticket", "not reached"],

@@ -270,7 +270,6 @@ export async function viewNeedsYou(deps: AppDeps) {
     kind: r.request.kind,
     round: r.request.round,
     runId: r.runId,
-    mode: r.mode,
     key: keyOf(r.projectId, r.ticketNumber),
     ticketTitle: r.ticketTitle,
     ticketUrl: r.ticketUrl,

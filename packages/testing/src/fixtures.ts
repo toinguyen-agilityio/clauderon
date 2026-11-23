@@ -59,7 +59,7 @@ export async function sampleFlowId(db: Db, slug = "basic-ticket-delivery"): Prom
   return row!.id;
 }
 
-/** Starts a Real Batch of the sample Flow for some Tickets, as the Start dialog does. */
+/** Starts a Batch of the sample Flow for some Tickets, as the Start dialog does. */
 export async function startSampleBatch(
   db: Db,
   starter: { id: string; email: string },
@@ -67,10 +67,9 @@ export async function startSampleBatch(
   ticketIds: string[],
   now: Date,
   extraInstructions = "",
-  mode: "real" | "dry" = "real",
   slug = "basic-ticket-delivery",
 ) {
   const flowId = await sampleFlowId(db, slug);
   const flowSnapshot = (await buildFlowSnapshot(db, flowId))!;
-  return startBatch(db, { flowId, flowSnapshot, starter, machineId, mode, extraInstructions, ticketIds }, now);
+  return startBatch(db, { flowId, flowSnapshot, starter, machineId, extraInstructions, ticketIds }, now);
 }

@@ -42,12 +42,12 @@ beforeEach(async () => {
 
 const actions = async () => (await db.select().from(schema.auditEntry)).map((a) => a.action);
 
-async function withDryRun(flowId: string) {
+async function withRun(flowId: string) {
   const ann = await memberRow(db, "ann@example.com", "Ann");
   const machine = await machineRow(db, ann.id);
   const project = await projectRow(db);
   const ticket = await ticketRow(db, project.id, 1);
-  await startSampleBatch(db, ann, machine.id, [ticket.id], new Date("2026-11-16T09:00:00Z"), "", "dry");
+  await startSampleBatch(db, ann, machine.id, [ticket.id], new Date("2026-11-16T09:00:00Z"), "");
   return { ann, flowId };
 }
 
@@ -109,18 +109,18 @@ describe("Flows page (spec M2 §2)", () => {
     expect(await actions()).toEqual(["flow.create", "flow.delete", "flow.delete"]);
   });
 
-  it("T2-5: a Flow with an Active Dry-run Run shows the lock, refuses delete on the server, and can still be cloned", async () => {
+  it("T2-5: a Flow with an Active Run shows the lock, refuses delete on the server, and can still be cloned", async () => {
     const flowId = await sampleFlowId(db);
     const ann = await memberRow(db, "ann@example.com");
     const copy = await cloneMyFlow(deps, ann, flowId);
     if (!copy.ok) throw new Error("clone failed");
-    // A Run of the clone (Dry-run counts: FLW-7).
+    // A Run of the clone (FLW-7).
     const machine = await machineRow(db, ann.id);
     const project = await projectRow(db);
     const ticket = await ticketRow(db, project.id, 7);
     const { buildFlowSnapshot, startBatch } = await import("@clauderon/db");
     const snapshot = (await buildFlowSnapshot(db, copy.flowId))!;
-    const started = await startBatch(db, { flowId: copy.flowId, flowSnapshot: snapshot, starter: ann, machineId: machine.id, mode: "dry", extraInstructions: "", ticketIds: [ticket.id] }, new Date());
+    const started = await startBatch(db, { flowId: copy.flowId, flowSnapshot: snapshot, starter: ann, machineId: machine.id, extraInstructions: "", ticketIds: [ticket.id] }, new Date());
     if (!started.ok) throw new Error("start failed");
 
     const { flows } = await viewFlows(deps);
@@ -150,7 +150,7 @@ describe("Flows page (spec M2 §2)", () => {
 
   it("a Flow whose Runs have all ended is kept while it has Runs in its history", async () => {
     const flowId = await sampleFlowId(db);
-    const { ann } = await withDryRun(flowId);
+    const { ann } = await withRun(flowId);
     await db.update(schema.run).set({ state: "succeeded" });
     const copy = await cloneMyFlow(deps, ann, flowId);
     if (!copy.ok) throw new Error("clone failed");
@@ -213,14 +213,14 @@ describe("Canvas editor save (spec M2 §3)", () => {
     expect((await startDialog(deps, ann, [ticket.id])).flows.map((f) => f.id)).not.toContain(copyId);
   });
 
-  it("T2-5: updating a Flow with an Active Dry-run Run is refused by the server, naming the Run", async () => {
+  it("T2-5: updating a Flow with an Active Run is refused by the server, naming the Run", async () => {
     const { ann, copyId } = await cloneOf("basic-ticket-delivery");
     const machine = await machineRow(db, ann.id);
     const ticket = await ticketRow(db, (await projectRow(db)).id, 5);
     const { buildFlowSnapshot, startBatch } = await import("@clauderon/db");
     const started = await startBatch(
       db,
-      { flowId: copyId, flowSnapshot: (await buildFlowSnapshot(db, copyId))!, starter: ann, machineId: machine.id, mode: "dry", extraInstructions: "", ticketIds: [ticket.id] },
+      { flowId: copyId, flowSnapshot: (await buildFlowSnapshot(db, copyId))!, starter: ann, machineId: machine.id, extraInstructions: "", ticketIds: [ticket.id] },
       new Date(),
     );
     if (!started.ok) throw new Error("start failed");
@@ -522,7 +522,7 @@ describe("Node library (spec M2 §4)", () => {
     const { buildFlowSnapshot, startBatch } = await import("@clauderon/db");
     const started = await startBatch(
       db,
-      { flowId, flowSnapshot: (await buildFlowSnapshot(db, flowId))!, starter: ann, machineId: machine.id, mode: "dry", extraInstructions: "", ticketIds: [ticket.id] },
+      { flowId, flowSnapshot: (await buildFlowSnapshot(db, flowId))!, starter: ann, machineId: machine.id, extraInstructions: "", ticketIds: [ticket.id] },
       new Date(),
     );
     if (!started.ok) throw new Error("start failed");

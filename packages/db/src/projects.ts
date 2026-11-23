@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, notExists, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, notExists, notInArray, or } from "drizzle-orm";
 import type { Issue } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
@@ -158,13 +158,23 @@ export async function recordSync(
 
 export type RunWithPullRequest = { id: string; branch: string; pullRequestNumber: number; pullRequestCheckedAt: Date | null };
 
-/** Runs of a Project that recorded a pull request (TIC-5 step 3). */
+/** Pull request states that never change again, so Sync skips them. */
+const FINAL_PR_STATES = ["merged", "closed"];
+
+/** Runs of a Project whose recorded pull request may still change: not merged or closed (TIC-5 step 3). */
 export async function runsWithPullRequests(db: Db, projectId: string): Promise<RunWithPullRequest[]> {
   const rows = await db
     .select({ id: run.id, branch: run.branch, pullRequestNumber: run.pullRequestNumber, pullRequestCheckedAt: run.pullRequestCheckedAt })
     .from(run)
     .innerJoin(ticket, eq(ticket.id, run.ticketId))
-    .where(and(eq(ticket.projectId, projectId), isNotNull(run.pullRequestNumber), isNotNull(run.branch)));
+    .where(
+      and(
+        eq(ticket.projectId, projectId),
+        isNotNull(run.pullRequestNumber),
+        isNotNull(run.branch),
+        or(isNull(run.pullRequestState), notInArray(run.pullRequestState, FINAL_PR_STATES)),
+      ),
+    );
   return rows as RunWithPullRequest[];
 }
 
@@ -172,7 +182,7 @@ export async function setPullRequestState(db: Db, runId: string, state: string, 
   await db.update(run).set({ pullRequestState: state, pullRequestCheckedAt: now }).where(eq(run.id, runId));
 }
 
-export type TicketRunView = { id: string; mode: "real" | "dry"; state: (typeof run.$inferSelect)["state"]; queuedAt: Date; pullRequestState: string | null };
+export type TicketRunView = { id: string; state: (typeof run.$inferSelect)["state"]; queuedAt: Date; pullRequestState: string | null };
 export type TicketWithRuns = Ticket & { runs: TicketRunView[] };
 
 /** Tickets with their Runs, for the derived Ticket Status (TIC-6). */
@@ -184,7 +194,7 @@ export async function listTicketsWithRuns(db: Db, projectId?: string): Promise<T
     .orderBy(asc(ticket.projectId), desc(ticket.number));
   if (tickets.length === 0) return [];
   const runs = await db
-    .select({ id: run.id, ticketId: run.ticketId, mode: run.mode, state: run.state, queuedAt: run.queuedAt, pullRequestState: run.pullRequestState })
+    .select({ id: run.id, ticketId: run.ticketId, state: run.state, queuedAt: run.queuedAt, pullRequestState: run.pullRequestState })
     .from(run)
     .where(
       inArray(
