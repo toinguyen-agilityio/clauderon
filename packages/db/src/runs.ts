@@ -511,7 +511,7 @@ export async function runStateCounts(db: Db): Promise<Partial<Record<RunState, n
 export async function getRunView(db: Db, runId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(runId)) return null;
   const [row] = await db
-    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, machineOwnerId: machine.memberId, machineName: machine.name, machineConnected: machine.connected })
+    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, machineOwnerId: machine.memberId, machineName: machine.name, machineConnected: machine.connected, machineUsage: machine.usage })
     .from(run)
     .innerJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, ticket.projectId))

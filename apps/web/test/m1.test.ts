@@ -552,7 +552,9 @@ describe("Runs (TRK-1, TRK-2, TRK-7)", () => {
 
     const run = await viewRun(deps, first.runIds[0]!);
     expect(run).not.toBe("not-found");
-    if (run === "not-found") return;
+    expect(run.key).toBe("web#1");
+    expect(run).toHaveProperty("machineUsage");
+    expect(run).toHaveProperty("machineConnected");
     expect(run.key).toBe("web#1");
     expect(run.timeline.map((n) => [n.name, n.state])).toEqual([
       ["Ticket", "not reached"],
