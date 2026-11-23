@@ -135,6 +135,19 @@ export function saveOutcome(
   return { close: false, message: { kind: "ok", text: `Saved. It changed ${plural(result.flows, "Flow")}${problems}.` } };
 }
 
+/** What the Member is told after an import: how many Nodes were created and skipped, and why. */
+export function importSummary(result: { created: readonly unknown[]; skipped: readonly string[]; tickets: readonly string[] }): string {
+  const parts = [`Created ${plural(result.created.length, "Node")}`];
+  if (result.skipped.length > 0) parts.push(`skipped ${result.skipped.length} already in the library (${result.skipped.join(", ")})`);
+  if (result.tickets.length > 0) parts.push(`skipped ${plural(result.tickets.length, "Ticket Node")} (${result.tickets.join(", ")}): a Member cannot create one`);
+  return `${parts.join("; ")}.`;
+}
+
+/** The empty-list text: "No Nodes yet." for the whole library, "No Agent Nodes yet." for one Kind. */
+export function emptyText(group: KindGroup | "all"): string {
+  return group === "all" ? "No Nodes yet." : `No ${KIND_GROUP_LABEL[group]} Nodes yet.`;
+}
+
 /** A name for a copy that does not clash with an existing Node: "Copy of X", then "Copy of X (2)", "(3)"... (names are at most 120 characters). */
 export function copyName(name: string, existing: readonly string[]): string {
   const taken = new Set(existing.map((n) => n.trim().toLowerCase()));
