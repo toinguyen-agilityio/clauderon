@@ -19,7 +19,6 @@ pnpm --filter @clauderon/host-agent pair http://localhost:3000  # pair this comp
 pnpm --filter @clauderon/host-agent build   # bundle the Agent into apps/host-agent/dist (served at /agent/agent.mjs)
 pnpm lint | typecheck | test | build
 pnpm features:build        # regenerate docs/features.json (CI runs `pnpm features:check`)
-pnpm features:summary      # regenerate docs/features-summary.html from features.json (CI runs `pnpm features:summary:check`)
 ```
 
 Tests are Vitest and need `TEST_DATABASE_URL` (copy `.env.example` to `.env`; each test file creates and drops its own database, so the Postgres server from `db:up` is enough). CI runs lint, typecheck and test, plus the Agent's tests and an install smoke test (`apps/web/scripts/agent-smoke.ts`) on macOS, Linux and Windows (`agent.yml`: on pull requests only when they touch the Agent or the packages and web files it depends on; always on pushes to `staging` and `main`).
