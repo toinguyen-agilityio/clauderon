@@ -61,6 +61,8 @@ When the check right before a Run fails, the Run fails with `failure_reason = "C
 
 Projects page: **Enable a repository** lists the repositories `GITHUB_TOKEN` can read (`GET /user/repos`), minus enabled ones. Pick one, then its base branch from its branches (default branch preselected). All Projects must share one owner: once one is enabled, the list shows only that owner's repositories. Audit: `project.enable`.
 
+**Decision (issue #89): whose repositories the list shows.** Always the app token's, whoever is signed in and however many Members have Machines. The app cannot read a Member's `gh` access to a repository that is not yet a Project (ADR 0001; the Agent reports only `tokenRepos`, the Projects' repositories its `gh` login reaches, POD-4), so an intersection or union across Machines is not computable, and the signed-in Member's Machines say nothing about the Project every Member shares. The list is therefore not per Member and does not change with Machines. Whether a Member's Machine can push to an enabled Project is shown after enabling, per Machine, from `tokenRepos` on the Machines page.
+
 ### 3.2 Sync (TIC-5, TIC-9)
 
 **Sync** on a Project, from the web app:
