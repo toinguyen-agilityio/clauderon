@@ -98,3 +98,12 @@ describe("ResumeBuffer", () => {
     expect(buffer.accept({ id: 4, type: "x", payload: {} })).toBe("duplicate");
   });
 });
+
+describe("heartbeat usage", () => {
+  const parse = (payload: object) => parseEnvelope(serialize(controlMessage("heartbeat", payload as never)));
+  it("parses with free disk, without it (disk unreadable) and without usage (older Agent)", () => {
+    expect(parse({ at: "now", usage: { memoryUsedMb: 1, diskFreeGb: 65, cpuPercent: 3 } }).ok).toBe(true);
+    expect(parse({ at: "now", usage: { memoryUsedMb: 1, cpuPercent: 3 } }).ok).toBe(true);
+    expect(parse({ at: "now" }).ok).toBe(true);
+  });
+});

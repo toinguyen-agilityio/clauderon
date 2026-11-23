@@ -27,7 +27,7 @@ export const messageSchemas = {
     usage: z
       .object({
         memoryUsedMb: z.number().nonnegative(),
-        diskFreeGb: z.number().nonnegative(),
+        diskFreeGb: z.number().nonnegative().optional(),
         /** Busy share of all cores since the previous heartbeat, 0-100. */
         cpuPercent: z.number().min(0).max(100),
       })
