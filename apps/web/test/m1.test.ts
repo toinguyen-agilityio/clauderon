@@ -204,6 +204,20 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     expect(await actions()).toEqual(["project.enable"]);
   });
 
+  it("the list is the app token's, the same whichever Members have Machines and whatever their gh logins reach", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    github.addRepository({ owner: "acme", repo: "api", defaultBranch: "main" });
+    const before = (await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`);
+
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    await machineRow(db, ann.id, { ghTokenScope: { tokenRepos: ["acme/web"] } });
+    await machineRow(db, bob.id, { ghTokenScope: { tokenRepos: [] } });
+
+    expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(before);
+    expect(before).toEqual(["acme/api", "acme/web"]);
+  });
+
   it("only an Operator enables a Project", async () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
     const bob = await memberRow(db, "bob@example.com");
