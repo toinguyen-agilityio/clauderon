@@ -97,7 +97,7 @@ The repository README gains: how to install the Agent (the one-line installer fr
 | T4-7 | _Kept (#42)._ Succeeded and Cancelled Runs send `workspace.cleanup`; Failed and Interrupted do not | RUN-14 |
 | T4-8 | _Kept._ The retention job deletes 91-day-old log chunks and keeps 89-day-old ones | NFR-5 |
 | T4-9 | _Dropped_ with TRK-6 (#40). Batch page counts match the Runs' states | TRK-6 |
-| T4-10 | _Dropped_ with TIC-4 (#40). Ticket detail lists every Run of the Ticket, Dry-run marked | TIC-4 |
+| T4-10 | _Dropped_ with TIC-4 (#40). Ticket detail lists every Run of the Ticket | TIC-4 |
 
 **Manual checks:** the full journey and A1–A7 on the deployed app (no staging).
 

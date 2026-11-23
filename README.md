@@ -39,7 +39,7 @@ Implemented today:
 - **Projects and Tickets**: enable GitHub repositories with a base branch, then pull open issues in with a manual **Sync**.
 - **Flow editor**: build Flows on a canvas from a shared **Node library**. Edges are type-checked by Output Type (`issue`, `plan`, `branch`, `test-result`, `pull-request`, `summary`, `screenshot`) and cycles are rejected. Sample Nodes and Flows are seeded; Flows can be cloned, exported to a file and imported.
 - **Node kinds**: Ticket (entry), Agent (Claude Code), Command (bash), and two Human Nodes: **Approve** (approve, or reject with feedback) and **Grill** (Claude asks batches of questions that a Member answers in a form).
-- **Runs**: one Run per Ticket in its own git worktree and branch. Batches, a per-Machine queue with Member-set **Slots**, **Dry-run** with a simulated runner, **Retry** from any Node, **Cancel**, and **Interrupted** Runs when a Machine drops for 30 seconds.
+- **Runs**: one Run per Ticket in its own git worktree and branch. Batches, a per-Machine queue with Member-set **Slots**, **Retry** from any Node, **Cancel**, and **Interrupted** Runs when a Machine drops for 30 seconds.
 - **People in the loop**: a **Needs you** inbox for every Run waiting on a person; any Member can respond to or cancel any Run.
 - **Observability**: live, masked logs streamed to the browser, token counts per Run, a Runs list with filters, a Pull requests page and an audit log of every Member action.
 - **Access**: Google sign-in behind an email allowlist managed by the Operator on the Members page.
@@ -199,7 +199,7 @@ Approve the code on the page it opens. The Agent then runs in that terminal. Che
 
 **6. Try it**
 
-Enable a Project, **Sync** its Tickets, clone a sample Flow, and start a **Dry-run** first: it simulates every Node and never calls Claude or GitHub.
+Enable a Project, **Sync** its Tickets, clone a sample Flow, and try the Flow in the editor with **Test run** first: it steps through every Node in the browser and never calls Claude or GitHub.
 
 > [!TIP]
 > Tests need only the Postgres from step 3. Each test file creates and drops its own database: `pnpm test`.
@@ -223,7 +223,6 @@ Secrets live only in the environment, never in the database. Local development r
 | `WEB_URL` | gateway | No | Public web URL for the approve links Agents open. Defaults to `AUTH_URL`. |
 | `GITHUB_TOKEN` | web, gateway | For Sync | Fine-grained, read-only GitHub token. Also masked in logs. |
 | `AGENT_BUNDLE_DIR` | web | No | Folder with the built `agent.mjs` and `agent.json`. Default `../host-agent/dist`. |
-| `DRY_RUN_FAILURE_RATE` | gateway | No | Chance from 0 to 1 that a simulated Dry-run Node fails. Default `0`. |
 
 ### Production (`deploy/.env.production`)
 

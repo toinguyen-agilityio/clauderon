@@ -107,7 +107,7 @@ export type DeleteMachineResult = { ok: true } | { ok: false; reason: "missing" 
 
 /**
  * Removes a Machine's row, refused while it has an Active Run: anything
- * not Succeeded or Cancelled, Dry-runs included. Ended Runs keep their history
+ * not Succeeded or Cancelled. Ended Runs keep their history
  * with no Machine. The row lock serializes this with a Start queuing on the Machine.
  */
 export async function deleteMachine(db: Db, machineId: string, actorEmail: string): Promise<DeleteMachineResult> {
@@ -173,7 +173,6 @@ export async function saveMachineLinkIds(db: Db, machineId: string, ids: { lastR
 export type MachineRun = {
   runId: string;
   state: (typeof run.$inferSelect)["state"];
-  mode: "real" | "dry";
   queuedAt: Date;
   startedAt: Date | null;
   ticketNumber: number;
@@ -192,7 +191,6 @@ async function machineRunsIn(db: Db, machineIds: readonly string[], states: Mach
       machineId: run.machineId,
       runId: run.id,
       state: run.state,
-      mode: run.mode,
       queuedAt: run.queuedAt,
       startedAt: run.startedAt,
       ticketNumber: ticket.number,

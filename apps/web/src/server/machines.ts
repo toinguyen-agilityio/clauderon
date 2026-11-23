@@ -24,7 +24,6 @@ import type { AppDeps, Viewer } from "./deps";
 export type QueueEntry = {
   runId: string;
   state: string;
-  mode: "real" | "dry";
   queuedAt: Date;
   startedAt: Date | null;
   ticketTitle: string;

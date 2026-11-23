@@ -65,7 +65,7 @@ export async function buildFlowSnapshot(db: Db, flowId: string): Promise<FlowSna
 export type FlowLock = { runId: string; state: (typeof run.$inferSelect)["state"] };
 
 /**
- * The Flows locked by an Active Run, Dry-run included (FLW-7): the oldest such
+ * The Flows locked by an Active Run (FLW-7): the oldest such
  * Run of each. A query over `run`, never a stored flag, so it cannot be left behind.
  */
 export async function flowLocks(db: Db, flowIds: readonly string[]): Promise<Map<string, FlowLock>> {

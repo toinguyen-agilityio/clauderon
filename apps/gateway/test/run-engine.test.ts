@@ -28,23 +28,27 @@ beforeEach(async () => {
   await db.execute(sql`truncate member, machine, pairing, project, ticket, batch, run, attempt, output, log_chunk, audit_entry cascade`);
 });
 
-/** An Agent that logs in, prepares workspaces and runs every Node successfully. */
-function succeedEverything(agent: FakeAgent, options: { pullRequest?: boolean } = {}) {
+/** An Agent that logs in, prepares workspaces and runs every Node successfully; with `hold`, each Node waits until the test calls its `finish`. */
+function succeedEverything(agent: FakeAgent, options: { pullRequest?: boolean; hold?: (finish: () => void) => void } = {}) {
   agent.respond("machine.checkLogins", (_, a) =>
     a.send("machine.logins", { claude: true, gh: true, ghAccount: "octocat", tokenRepos: ["acme/web", "other/x"], checkedAt: new Date().toISOString() }),
   );
   agent.respond("workspace.prepare", ({ runId }, a) => a.send("workspace.ready", { runId, worktreePath: `/workspace/runs/${runId}` }));
   agent.respond("node.run", (run, a) => {
-    a.send("node.log", { attemptId: run.attemptId, seq: 0, stream: "stdout", text: `running ${run.kind}` });
-    if (run.kind === "agent") {
-      a.send("node.usage", { attemptId: run.attemptId, inputTokens: 100, outputTokens: 20 });
-      a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { outputs: { summary: "Fixed it" } }, sessionId: "s1", headCommit: "c0ffee" });
-    } else if (run.command === "clauderon-open-pr") {
-      const result = options.pullRequest === false ? { tail: "no changes" } : { tail: "ok", pullRequest: { number: 77, url: "https://github.com/acme/web/pull/77" } };
-      a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result, headCommit: "c0ffee" });
-    } else {
-      a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { tail: "1 passing" }, headCommit: "c0ffee" });
-    }
+    const finish = () => {
+      a.send("node.log", { attemptId: run.attemptId, seq: 0, stream: "stdout", text: `running ${run.kind}` });
+      if (run.kind === "agent") {
+        a.send("node.usage", { attemptId: run.attemptId, inputTokens: 100, outputTokens: 20 });
+        a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { outputs: { summary: "Fixed it" } }, sessionId: "s1", headCommit: "c0ffee" });
+      } else if (run.command === "clauderon-open-pr") {
+        const result = options.pullRequest === false ? { tail: "no changes" } : { tail: "ok", pullRequest: { number: 77, url: "https://github.com/acme/web/pull/77" } };
+        a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result, headCommit: "c0ffee" });
+      } else {
+        a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { tail: "1 passing" }, headCommit: "c0ffee" });
+      }
+    };
+    if (options.hold) options.hold(finish);
+    else finish();
   });
 }
 
@@ -358,7 +362,7 @@ describe("Worktree cleanup (RUN-14, T4-7)", () => {
     expect((await getRun(db, second))!.worktreePath).toBe(`/workspace/runs/${second}`);
   });
 
-  it("T4-7: a Dry-run has no worktree and sends nothing", async () => {
+  it("T4-7: a Machine with no ended Runs is sent no cleanup", async () => {
     const { gateway, agent, flush, machine } = await setup();
     await gateway.engine.schedule(machine.id);
     await flush();
@@ -366,50 +370,13 @@ describe("Worktree cleanup (RUN-14, T4-7)", () => {
   });
 });
 
-describe("Dry-run (spec M2 §7)", () => {
-  /** Steps the fake clock until every Run has ended, checking the Slot cap each second. */
-  async function runToTheEnd(db: Db, clock: { advance(ms: number): Promise<void> }, flush: () => Promise<void>, slots: number) {
-    for (let second = 0; second < 400; second++) {
-      const runs = await db.select().from(schema.run);
-      expect(runs.filter((r) => r.state === "running").length).toBeLessThanOrEqual(slots);
-      if (runs.every((r) => r.state === "succeeded" || r.state === "failed")) return;
-      await clock.advance(1000);
-      await flush();
-    }
-    throw new Error("Runs did not end");
-  }
-
-  it("T2-2: never sends workspace.prepare, node.run or a login check, and succeeds with fake Outputs", async () => {
-    // random() = 0: every optional Output is made, so the pull request is there to see.
-    const { member, machine, tickets, gateway, agent, clock, flush } = await setup(2, 1, { random: () => 0 });
-    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "", "dry");
-    if (!start.ok) throw new Error("start failed");
-    await gateway.engine.schedule(machine.id);
-    await flush();
-    await runToTheEnd(db, clock, flush, 2);
-
-    // Only the check every newly connected Agent gets.
-    expect(agent.received.map((e) => e.type)).toEqual(["machine.checkLogins"]);
-    const run = (await getRun(db, start.runIds[0]!))!;
-    expect(run).toMatchObject({ state: "succeeded", mode: "dry", branch: null });
-    const attempts = await attemptsOfRun(db, run.id);
-    expect(attempts.map((a) => a.state)).toEqual(["succeeded", "succeeded", "succeeded", "succeeded"]);
-    expect(attempts.at(-1)!.outputs.some((o) => o.type === "pull-request")).toBe(true);
-    const logs = await logChunksOf(db, attempts[1]!.id);
-    expect(logs.map((l) => l.text)).toEqual(expect.arrayContaining([expect.stringContaining("[dry-run]")]));
-  });
-
-  it("T2-3: a Ticket with an Active Dry-run Run can still start a Real Run", async () => {
-    const { member, machine, tickets, clock } = await setup();
-    const dry = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "", "dry");
-    expect(dry.ok).toBe(true);
-    const real = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "", "real");
-    expect(real.ok).toBe(true);
-  });
-
-  it("T2-1 (A2): 10 Tickets as a Dry-run Batch on 2 Slots never run more than 2 at once, and all succeed", async () => {
-    const { member, machine, tickets, gateway, clock, flush } = await setup(2, 10);
-    const start = await startSampleBatch(db, member, machine.id, tickets.map((t) => t.id), clock.now(), "", "dry");
+describe("Queue and Slots (A2)", () => {
+  it("T2-1 (A2): 10 Tickets on 2 Slots never run more than 2 at once, start first in, first out, and all succeed", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup(2, 10);
+    // A fake Agent that holds every Node until the test lets it finish, so the Slots stay busy.
+    const held: (() => void)[] = [];
+    succeedEverything(agent, { hold: (finish) => held.push(finish) });
+    const start = await startSampleBatch(db, member, machine.id, tickets.map((t) => t.id), clock.now(), "");
     if (!start.ok) throw new Error("start failed");
     await gateway.engine.schedule(machine.id);
     await flush();
@@ -418,7 +385,13 @@ describe("Dry-run (spec M2 §7)", () => {
     expect(first.filter((r) => r.state === "running")).toHaveLength(2);
     expect(first.filter((r) => r.state === "queued")).toHaveLength(8);
 
-    await runToTheEnd(db, clock, flush, 2);
+    for (let step = 0; step < 200 && held.length > 0; step++) {
+      held.shift()!();
+      await clock.advance(1000);
+      await flush();
+      const runs = await db.select().from(schema.run);
+      expect(runs.filter((r) => r.state === "running").length).toBeLessThanOrEqual(2);
+    }
     const runs = await db.select().from(schema.run);
     expect(runs).toHaveLength(10);
     expect(runs.every((r) => r.state === "succeeded")).toBe(true);
@@ -427,18 +400,8 @@ describe("Dry-run (spec M2 §7)", () => {
     const byQueue = [...runs].sort((a, b) => a.queuedAt.getTime() - b.queuedAt.getTime() || (a.id < b.id ? -1 : 1));
     const starts = byQueue.map((r) => r.startedAt!.getTime());
     expect(starts).toEqual([...starts].sort((a, b) => a - b));
-    // At no moment did a later Run run before an earlier one had started: the first two start together, the rest one by one as Slots free up.
+    // The first two start together, the rest one by one as Slots free up.
     expect(new Set(starts.slice(0, 2)).size).toBe(1);
     expect(starts[2]!).toBeGreaterThan(starts[0]!);
-  });
-
-  it("a Node fails with the configured rate, ending the Run", async () => {
-    const { member, machine, tickets, gateway, clock, flush } = await setup(2, 1, { dryRunFailureRate: 1 });
-    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "", "dry");
-    if (!start.ok) throw new Error("start failed");
-    await gateway.engine.schedule(machine.id);
-    await flush();
-    await runToTheEnd(db, clock, flush, 2);
-    expect(await getRun(db, start.runIds[0]!)).toMatchObject({ state: "failed", failureReason: expect.stringContaining("simulated failure") });
   });
 });

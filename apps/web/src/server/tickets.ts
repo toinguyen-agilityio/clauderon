@@ -34,7 +34,7 @@ export async function viewTickets(deps: AppDeps, filters: TicketFilters) {
 
   const rows: TicketRow[] = tickets.map((t) => {
     const runs = t.runs.map((r) => ({ ...r, pullRequestState: asPrState(r.pullRequestState) }));
-    const real = runs.filter((r) => r.mode === "real").sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime());
+    const real = [...runs].sort((a, b) => b.queuedAt.getTime() - a.queuedAt.getTime());
     const active = real.find((r) => isActive(r.state));
     const latest = real[0];
     return {

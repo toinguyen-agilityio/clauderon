@@ -268,7 +268,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
                     <tr key={q.runId}>
                       <td className="num faint">{q.position}</td>
                       <td className="grow-cell">
-                        <span className="mono faint small">{q.key}</span> {q.mode === "dry" && <span className="tag dry">Dry-run</span>}
+                        <span className="mono faint small">{q.key}</span>
                         <div>
                           <Link className="plain-link" href={`/runs/${q.runId}`}>
                             {q.ticketTitle}

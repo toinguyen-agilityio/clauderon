@@ -45,7 +45,6 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
             <h1>{run.ticket.title}</h1>
             <div className="row" style={{ marginTop: 8 }}>
               <StatePill state={r.state} />
-              <span className={`tag ${r.mode === "dry" ? "dry" : "real"}`}>{r.mode === "dry" ? "Dry-run" : "Real"}</span>
               <a className="mono small row" style={{ gap: 4 }} href={run.ticket.url} target="_blank" rel="noreferrer">
                 {run.key} {Icon.external}
               </a>
@@ -128,8 +127,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
       )}
-      {/* A Dry-run needs no logins and no worktree, so it never gets a branch. */}
-      {r.state === "running" && r.mode === "real" && !r.branch && (
+      {r.state === "running" && !r.branch && (
         <div className="banner info" role="status">
           <div className="grow small">Checking the Machine&apos;s logins and preparing the worktree…</div>
         </div>

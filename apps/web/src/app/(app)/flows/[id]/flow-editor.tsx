@@ -161,14 +161,14 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
     return () => clearTimeout(t);
   }, [flash]);
 
-  // --- the Test run: steps through the Flow on a timer, making up Outputs as a Dry-run would ---
+  // --- the Test run: steps through the Flow on a timer, making up Outputs ---
   const running = testRun !== null && testRun.phase !== "done";
   const runNodeStates = useMemo(() => (testRun ? nodeStates(testRun) : null), [testRun]);
   const runEdgeStates = useMemo(() => (testRun ? edgeStates(testRun, graphEdges) : null), [testRun, graphEdges]);
   useEffect(() => {
     if (!testRun || testRun.phase === "done") return;
     const current = testRun.order[testRun.index]!;
-    // A Dry-run Node takes 2–8 s; the Test run plays them four times faster.
+    // A simulated Node takes 2–8 s; the Test run plays them four times faster.
     const delay = testRun.phase === "waiting" ? 1200 : Math.round(simulatedDelayMs(Math.random) / 4);
     const timer = setTimeout(() => {
       const kindOf = (id: string) => libOf(id)?.kind;

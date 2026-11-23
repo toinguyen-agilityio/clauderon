@@ -74,7 +74,7 @@ Three choices worth knowing:
 | GitHub Issues and GitHub repositories | Jira, GitLab, other agents than Claude Code |
 | Personal Pods on one team machine | Several machines, shared Pods, VMs |
 | Flow editor with sample Flows to clone | Loops, parallel steps, Flow versions |
-| Batches, queue, approvals, retry, cancel, dry-run | Automatic sync or auto-start on new issues |
+| Batches, queue, approvals, retry, cancel | Automatic sync or auto-start on new issues |
 | Live logs, diff, token usage, a summary per Run | Comments or label changes on GitHub issues |
 
 ## How we will know it works
@@ -90,7 +90,7 @@ Each milestone ends when its check passes. The proposed schedule fits all five i
 | --- | --- |
 | **M0** Foundations | Data model, sample Flows, Google sign-in, the link to the Pod Host |
 | **M1** Walking skeleton | First real issue → real pull request on a member's Pod |
-| **M2** Flows and scheduling | Flow editor, queue, batches, dry-run, a second member's Pod |
+| **M2** Flows and scheduling | Flow editor, queue, batches, a second member's Pod |
 | **M3** People in the loop | Approve and Q&A steps, "Needs you" inbox, retry, cancel, interrupted runs, audit |
 | **M4** Refinement and release | Usage, summaries, diff, Pod lifecycle and health, production |
 

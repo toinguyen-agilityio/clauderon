@@ -26,7 +26,6 @@ export type StartBatchInput = {
   flowSnapshot: FlowSnapshot;
   starter: { id: string; email: string };
   machineId: string;
-  mode: "real" | "dry";
   extraInstructions: string;
   ticketIds: readonly string[];
 };
@@ -41,30 +40,28 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
-async function activeRealRun(db: Db, ticketIds: readonly string[]) {
+async function activeRun(db: Db, ticketIds: readonly string[]) {
   const [row] = await db
     .select({ id: run.id, ticketId: run.ticketId })
     .from(run)
-    .where(and(inArray(run.ticketId, [...ticketIds]), eq(run.mode, "real"), sql`${run.state} not in ('succeeded', 'cancelled')`))
+    .where(and(inArray(run.ticketId, [...ticketIds]), sql`${run.state} not in ('succeeded', 'cancelled')`))
     .limit(1);
   return row ?? null;
 }
 
 /**
  * One Batch and one queued Run per Ticket, in one transaction (RUN-1). A
- * Ticket with an Active Real Run fails the whole Start (TIC-7); the partial
+ * Ticket with an Active Run fails the whole Start (TIC-7); the partial
  * unique index catches one gained meanwhile.
  */
 export async function startBatch(db: Db, input: StartBatchInput, now: Date): Promise<StartBatchResult> {
-  if (input.mode === "real") {
-    const active = await activeRealRun(db, input.ticketIds);
-    if (active) return { ok: false, reason: "active-run", ticketId: active.ticketId, runId: active.id };
-  }
+  const active = await activeRun(db, input.ticketIds);
+  if (active) return { ok: false, reason: "active-run", ticketId: active.ticketId, runId: active.id };
   try {
     return await db.transaction(async (tx) => {
       const [b] = await tx
         .insert(batch)
-        .values({ flowId: input.flowId, starterMemberId: input.starter.id, mode: input.mode, extraInstructions: input.extraInstructions })
+        .values({ flowId: input.flowId, starterMemberId: input.starter.id, extraInstructions: input.extraInstructions })
         .returning({ id: batch.id });
       const runIds: string[] = [];
       // Queued in selection order, a millisecond apart, so the queue keeps it.
@@ -78,7 +75,6 @@ export async function startBatch(db: Db, input: StartBatchInput, now: Date): Pro
             flowSnapshot: input.flowSnapshot,
             machineId: input.machineId,
             starterMemberId: input.starter.id,
-            mode: input.mode,
             state: "queued",
             queuedAt: new Date(now.getTime() + i),
           })
@@ -90,7 +86,7 @@ export async function startBatch(db: Db, input: StartBatchInput, now: Date): Pro
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    const active = await activeRealRun(db, input.ticketIds);
+    const active = await activeRun(db, input.ticketIds);
     return { ok: false, reason: "active-run", ticketId: active?.ticketId ?? input.ticketIds[0]!, runId: active?.id ?? null };
   }
 }
@@ -116,17 +112,17 @@ export async function getRunContext(db: Db, runId: string) {
 
 export async function runsOfMachine(db: Db, machineId: string, states: readonly RunState[]) {
   return db
-    .select({ id: run.id, state: run.state, mode: run.mode, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
+    .select({ id: run.id, state: run.state, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
     .from(run)
     .where(and(eq(run.machineId, machineId), inArray(run.state, [...states])));
 }
 
-/** Ended Real Runs of a Machine that still have a worktree to remove (RUN-14): Succeeded or Cancelled only. */
+/** Ended Runs of a Machine that still have a worktree to remove (RUN-14): Succeeded or Cancelled only. */
 export async function runsToCleanUp(db: Db, machineId: string) {
   return db
     .select({ id: run.id })
     .from(run)
-    .where(and(eq(run.machineId, machineId), eq(run.mode, "real"), inArray(run.state, ["succeeded", "cancelled"]), isNotNull(run.worktreePath)));
+    .where(and(eq(run.machineId, machineId), inArray(run.state, ["succeeded", "cancelled"]), isNotNull(run.worktreePath)));
 }
 
 export async function updateRun(db: Db, runId: string, patch: Partial<Omit<Run, "id">>): Promise<void> {
@@ -274,7 +270,7 @@ export async function retryRun(db: Db, runId: string, flowNodeId: string, note: 
         queuedAt: now,
         endedAt: null,
         failureReason: null,
-        pendingRetry: { flowNodeId, context, loginsChecked: current.mode === "dry" },
+        pendingRetry: { flowNodeId, context, loginsChecked: false },
       })
       .where(eq(run.id, runId));
     await recordAudit(tx, {
@@ -299,7 +295,7 @@ export async function markRetryLoginsChecked(db: Db, runId: string): Promise<voi
 /** Running Runs with their running Attempts, for the heartbeat watcher and recovery (RUN-12). */
 export async function runningRuns(db: Db, machineId?: string) {
   const runs = await db
-    .select({ id: run.id, machineId: run.machineId, mode: run.mode, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
+    .select({ id: run.id, machineId: run.machineId, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
     .from(run)
     .where(machineId ? and(eq(run.state, "running"), eq(run.machineId, machineId)) : eq(run.state, "running"));
   if (runs.length === 0) return [];
@@ -446,7 +442,6 @@ export const RUNS_PAGE_SIZE = 25;
 const runListColumns = {
   id: run.id,
   state: run.state,
-  mode: run.mode,
   queuedAt: run.queuedAt,
   startedAt: run.startedAt,
   endedAt: run.endedAt,

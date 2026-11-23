@@ -136,9 +136,9 @@ _Avoid_: Rerun, restart, Loop-back
 A Member ending any Active Run for good, as Cancelled.
 _Avoid_: Close, abort, stop
 
-**Dry-run**:
-A Run using the simulated runner, which never calls Claude or GitHub; it occupies a Slot but does not count toward the Ticket's Active Run.
-_Avoid_: Mock run, test run, simulation
+**Test run**:
+The editor's button that steps through a Flow in the browser with made-up Outputs. It stores nothing and never touches a Machine, Claude or GitHub. (The Run mode "Dry-run" was removed: ADR 0009.)
+_Avoid_: Dry-run, mock run, simulation
 
 **Artifact**:
 The summary of a Run's work, produced when it ends: what changed, how to test it, screenshots and the pull request link.

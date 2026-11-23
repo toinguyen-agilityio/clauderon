@@ -30,7 +30,7 @@ export class MachineWatch {
   async start(): Promise<void> {
     this.opts.links.onHello((machineId, hello, info) => this.hello(machineId, hello, info.processChanged));
     this.opts.links.onHeartbeat((machineId) => this.arm(machineId));
-    for (const r of await runningRuns(this.opts.db)) if (r.machineId && r.mode === "real") this.arm(r.machineId);
+    for (const r of await runningRuns(this.opts.db)) if (r.machineId) this.arm(r.machineId);
   }
 
   stop(): void {

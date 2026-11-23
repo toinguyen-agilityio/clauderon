@@ -480,14 +480,6 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     expect(await db.select().from(schema.run)).toEqual([]);
   });
 
-  it("a Dry-run Start needs no logins and queues a dry Run", async () => {
-    const { ann, machine, mine, flowId } = await ready({ ghLoggedIn: false, claudeLoggedIn: false });
-    const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "", mode: "dry" });
-    expect(result).toMatchObject({ ok: true });
-    expect(await db.select().from(schema.run)).toEqual([expect.objectContaining({ mode: "dry", state: "queued", machineId: machine.id })]);
-    expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
-  });
-
   it("refuses a Member with no paired Machine", async () => {
     const bob = await memberRow(db, "bob@example.com");
     const { ann, mine, flowId } = await ready();
@@ -501,7 +493,7 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id, outside.id], extraInstructions: "Be brief." });
     expect(result).toEqual({ ok: true, batchId: expect.any(String), runIds: [expect.any(String), expect.any(String)] });
     const runs = await db.select().from(schema.run);
-    expect(runs.every((r) => r.state === "queued" && r.machineId === machine.id && r.mode === "real")).toBe(true);
+    expect(runs.every((r) => r.state === "queued" && r.machineId === machine.id)).toBe(true);
     expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
     expect(await actions()).toEqual(["run.start", "run.start"]);
   });
