@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Brand } from "./brand";
 import { Icon } from "./icons";
+import { useNeedsYou } from "./needs-you-live";
 
 const MOBILE_QUERY = "(max-width: 860px)";
 
@@ -11,7 +12,8 @@ const MOBILE_QUERY = "(max-width: 860px)";
  * The left rail. On desktop it is the sticky sidebar; on phone widths it becomes a
  * drawer opened from a top bar with a menu button (the CSS does the switch).
  */
-export function MobileShell({ needsYou, children }: { needsYou: number; children: ReactNode }) {
+export function MobileShell({ needsYou: initial, children }: { needsYou: number; children: ReactNode }) {
+  const needsYou = useNeedsYou(initial);
   const [open, setOpen] = useState(false);
   const path = usePathname();
   const menuRef = useRef<HTMLButtonElement>(null);

@@ -28,7 +28,7 @@ const asPrState = (state: string | null): PullRequestState | null => (state === 
  * derived Ticket Status; search by title or key, filter by Project and status.
  */
 export async function viewTickets(deps: AppDeps, filters: TicketFilters) {
-  const [projects, tickets] = await Promise.all([listProjects(deps.db), listTicketsWithRuns(deps.db, filters.projectId || undefined)]);
+  const [projects, tickets] = await Promise.all([listProjects(deps.db), listTicketsWithRuns(deps.db)]);
   const keyOf = ticketKeys(projects);
   const q = filters.q?.trim().toLowerCase() ?? "";
 
@@ -53,10 +53,12 @@ export async function viewTickets(deps: AppDeps, filters: TicketFilters) {
     };
   });
 
+  // One read serves the whole page: `all` has every Ticket (for the per-Project counts), the rest is filtered.
+  const inProject = filters.projectId ? rows.filter((r) => r.projectId === filters.projectId) : rows;
   // Counts for the status chips: every Ticket the search matches, any status.
-  const matching = rows.filter((r) => !q || r.title.toLowerCase().includes(q) || r.key.toLowerCase().includes(q));
+  const matching = inProject.filter((r) => !q || r.title.toLowerCase().includes(q) || r.key.toLowerCase().includes(q));
   const counts: Record<string, number> = {};
   for (const r of matching) counts[r.status] = (counts[r.status] ?? 0) + 1;
 
-  return { projects, counts, total: matching.length, rows: matching.filter((r) => !filters.status || r.status === filters.status) };
+  return { projects, all: rows, counts, total: matching.length, rows: matching.filter((r) => !filters.status || r.status === filters.status) };
 }
