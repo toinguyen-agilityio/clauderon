@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -28,5 +30,19 @@ describe("MobileShell", () => {
     const out = html(3);
     expect(out).toContain("Open menu, 3 waiting");
     expect(out).toContain('class="dot"');
+  });
+});
+
+describe("mobile drawer nav styles", () => {
+  const css = readFileSync(join(__dirname, "../src/app/globals.css"), "utf8");
+  const mobileBlocks = [...css.matchAll(/@media \(max-width: 860px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join("\n");
+
+  it("does not lay nav groups out in a row or hide their titles on phones", () => {
+    expect(mobileBlocks).not.toMatch(/\.nav-group\s*\{[^}]*flex-direction:\s*row/);
+    expect(mobileBlocks).not.toMatch(/\.nav-group-title\s*\{[^}]*display:\s*none/);
+  });
+
+  it("only scrolls the drawer vertically", () => {
+    expect(mobileBlocks).toMatch(/\.side \{[^}]*overflow-x: hidden; overflow-y: auto/);
   });
 });
