@@ -551,7 +551,7 @@ describe("Runs (TRK-1, TRK-2, TRK-7)", () => {
     expect((await viewRuns(deps, { state: "failed", flowId: "00000000-0000-0000-0000-000000000000" }, 1)).rows).toEqual([]);
 
     const run = await viewRun(deps, first.runIds[0]!);
-    expect(run).not.toBe("not-found");
+    if (run === "not-found") throw new Error("run not found");
     expect(run.key).toBe("web#1");
     expect(run).toHaveProperty("machineUsage");
     expect(run).toHaveProperty("machineConnected");
