@@ -10,6 +10,7 @@
 | [agents/](agents/) | How the engineering agent skills use this repo: issue tracker, triage labels, domain docs |
 | [adr/](adr/) | Architecture decision records, one decision per file |
 | [prototype/clauderon-prototype.html](prototype/clauderon-prototype.html) | Clickable UI prototype built from the v1 requirements, on simulated data; open it in a browser |
+| [Feature guide](https://claude.ai/artifact/Na23vn2TEXZ6VPgy5Wrovy) | Plain-language page (EN/VI) for non-technical readers: features, how it works, what changed in each release, FAQ. Hosted as a Claude artifact; source in [feature-page/clauderon-features.html](feature-page/clauderon-features.html) |
 | [Product brief](https://claude.ai/artifact/2tCo9jMTGf5jVfXKqegs3t) | Client-facing product brief (EN/VI): problem, idea, screens, requirements, roadmap, open questions. Hosted as a Claude artifact |
 | [../CONTEXT.md](../CONTEXT.md) | Domain glossary: the words to use in code, UI and conversation |
 

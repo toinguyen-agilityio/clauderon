@@ -10,7 +10,7 @@ Pick issues, run each one through a configurable Flow of Claude Code, shell and 
 ![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-ESM-3178C6?logo=typescript&logoColor=white)
 
-[Overview](#overview) · [How it works](#how-it-works) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#environment-variables) · [Docs](#documentation)
+[Feature guide](https://claude.ai/artifact/Na23vn2TEXZ6VPgy5Wrovy) · [Overview](#overview) · [How it works](#how-it-works) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#environment-variables) · [Docs](#documentation)
 
 </div>
 
@@ -287,6 +287,7 @@ CI runs lint, typecheck and tests against Postgres, plus the Agent's tests, its 
 | [docs/specs/](docs/specs/README.md) | One spec per milestone (M0–M4): contracts, behaviour, acceptance tests, slices |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [deploy/README.md](deploy/README.md) | Production deployment and operations |
+| [Feature guide](https://claude.ai/artifact/Na23vn2TEXZ6VPgy5Wrovy) | Plain-language page (EN/VI): features, how it works step by step, what changed in each release, FAQ. Source: [docs/feature-page/clauderon-features.html](docs/feature-page/clauderon-features.html) |
 | [docs/README.md](docs/README.md) · [docs/overview.md](docs/overview.md) | Docs index and one-page product brief |
 | [docs/roadmap/v1-seven-day-plan.md](docs/roadmap/v1-seven-day-plan.md) | The v1 delivery plan by milestone |
 | [docs/agents/](docs/agents/) | How coding agents use this repo: issue tracker, triage labels, domain docs |

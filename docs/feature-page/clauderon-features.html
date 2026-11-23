@@ -1,0 +1,225 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Clauderon Feature Guide</title>
+<style>
+/* One page, three sections (Features, How it works, What changed), a short FAQ and links. EN/VI toggle: elements carry data-en and data-vi. */
+:root{--bg:#f6f7fa;--surface:#fff;--line:#dde1ea;--fg:#1a2130;--muted:#586175;--accent:#2f5bd3;--ok:#1f7a4d;--ok-bg:#e3f3ea;--part:#9a6a00;--part-bg:#fbf1d6;--no:#586175;--no-bg:#eceef3;--warn:#a3361f;--warn-bg:#fbe7e2;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#11151c;--surface:#1a1f28;--line:#2b3341;--fg:#e5e9f0;--muted:#a0aabb;--accent:#8ea6ff;--ok:#5fcf96;--ok-bg:#173327;--part:#e6b84a;--part-bg:#362b10;--no:#a0aabb;--no-bg:#252b36;--warn:#f08a70;--warn-bg:#3a1c15;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#11151c;--surface:#1a1f28;--line:#2b3341;--fg:#e5e9f0;--muted:#a0aabb;--accent:#8ea6ff;--ok:#5fcf96;--ok-bg:#173327;--part:#e6b84a;--part-bg:#362b10;--no:#a0aabb;--no-bg:#252b36;--warn:#f08a70;--warn-bg:#3a1c15;color-scheme:dark}
+body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:70px}
+body{margin:0;min-width:0;background:var(--bg);color:var(--fg);font:16px/1.6 var(--sans)}
+a{color:var(--accent)}
+header{margin:0 calc(-1*max(16px,env(safe-area-inset-left,0px))) 0 calc(-1*max(16px,env(safe-area-inset-right,0px)));padding:0 max(16px,env(safe-area-inset-left,0px));position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar{max-width:980px;margin:0 auto;padding:10px 0;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.brand{font-weight:700;margin-right:auto}
+nav{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px}
+nav a{text-decoration:none;color:var(--muted)}nav a:hover{color:var(--accent)}
+button.lang,button.theme{border:1px solid var(--line);background:none;color:var(--fg);border-radius:6px;padding:4px 10px;font:inherit;font-size:13px;cursor:pointer}
+main{max-width:980px;margin:0 auto;padding:0 0 40px}
+.hero{padding:44px 0 28px}
+.hero h1{font-size:clamp(28px,6vw,42px);line-height:1.15;margin:0 0 12px}
+.hero p{font-size:18px;color:var(--muted);max-width:640px;margin:0 0 22px}
+.strip{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.strip span.s{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-weight:600}
+.strip span.arrow{color:var(--muted)}
+section{padding:28px 0;border-top:1px solid var(--line)}
+h2{font-size:26px;margin:0 0 6px}h3{font-size:18px;margin:26px 0 8px}
+.lead{color:var(--muted);margin:0 0 18px;max-width:680px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card b{display:block;margin-bottom:4px}.card p{margin:0;color:var(--muted);font-size:15px}
+.badge{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.done{color:var(--ok);background:var(--ok-bg)}.partial{color:var(--part);background:var(--part-bg)}.no{color:var(--no);background:var(--no-bg)}
+ul.feat{list-style:none;margin:0;padding:0}
+ul.feat li{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}
+ul.feat li:last-child{border:0}ul.feat li span.t{flex:1}
+.gloss{font-size:14px;color:var(--muted)}
+ol.steps{list-style:none;counter-reset:s;padding:0;margin:0;display:grid;gap:12px}
+ol.steps li{counter-increment:s;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px 14px 56px;position:relative}
+ol.steps li::before{content:counter(s);position:absolute;left:14px;top:12px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--bg);display:grid;place-items:center;font-weight:700}
+ol.steps b{display:block}
+svg.diagram{width:100%;height:auto;margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+svg text{fill:var(--fg);font:14px var(--sans)}svg .box{fill:var(--bg);stroke:var(--line);stroke-width:1.5}svg .own{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:6 4}svg .ln{stroke:var(--muted);stroke-width:2;fill:none}svg .cap{fill:var(--muted);font-size:12px}
+.rel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px}
+.rel h3{margin:0 0 2px;display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}.rel .date{font-size:14px;color:var(--muted);font-weight:400}
+.rel ul{margin:6px 0 0;padding-left:20px}.rel p{margin:6px 0}
+.brk{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:8px 12px;margin-top:8px;font-size:15px}
+.upd{color:var(--muted);font-size:14px}
+details{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 16px;margin-bottom:8px}
+summary{cursor:pointer;font-weight:600}details p{margin:8px 0 2px;color:var(--muted)}
+footer{max-width:980px;margin:0 auto;padding:20px 0 40px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+footer a{margin-right:14px}
+[data-vi]{display:none}html[lang=vi] [data-vi]{display:revert}html[lang=vi] [data-en]{display:none}
+</style>
+<header><div class="bar">
+<span class="brand">Clauderon</span>
+<nav>
+<a href="#features" data-en="Features" data-vi="Tính năng">Features</a>
+<a href="#how" data-en="How it works" data-vi="Cách hoạt động">How it works</a>
+<a href="#changes" data-en="What changed" data-vi="Có gì mới">What changed</a>
+<a href="#faq" data-en="FAQ" data-vi="Hỏi đáp">FAQ</a>
+<a href="#more" data-en="Read more" data-vi="Đọc thêm">Read more</a>
+</nav>
+<button class="lang" id="lang" type="button" aria-label="Switch language">EN / VI</button>
+<button class="theme" id="theme" type="button" aria-label="Switch light or dark theme">◐</button>
+</div></header>
+
+<main>
+<div class="hero">
+<h1 data-en="Turn GitHub issues into pull requests you can review." data-vi="Biến issue GitHub thành pull request để bạn xem lại.">Turn GitHub issues into pull requests you can review.</h1>
+<p data-en="Clauderon is a web app for one team. You pick the issues, an AI assistant (Claude Code) does the work on your own computer, and you come back to a pull request." data-vi="Clauderon là web app cho một nhóm. Bạn chọn issue, trợ lý AI (Claude Code) làm việc trên máy tính của bạn, và bạn quay lại thấy một pull request.">Clauderon is a web app for one team. You pick the issues, an AI assistant (Claude Code) does the work on your own computer, and you come back to a pull request.</p>
+<div class="strip"><span class="s" data-en="1 Pick tickets" data-vi="1 Chọn ticket">1 Pick tickets</span><span class="arrow">→</span><span class="s" data-en="2 Press Start" data-vi="2 Bấm Start">2 Press Start</span><span class="arrow">→</span><span class="s" data-en="3 Review the pull request" data-vi="3 Xem pull request">3 Review the pull request</span></div>
+</div>
+
+<section id="features">
+<h2 data-en="Features" data-vi="Tính năng">Features</h2>
+<p class="lead" data-en="What Clauderon does today. A green badge means it works now, yellow means partly, grey means not built yet." data-vi="Clauderon làm được gì hôm nay. Nhãn xanh là đã có, vàng là có một phần, xám là chưa làm.">What Clauderon does today. A green badge means it works now, yellow means partly, grey means not built yet.</p>
+<div class="grid">
+<div class="card"><b data-en="Tickets" data-vi="Ticket">Tickets</b><p data-en="Bring in the open issues of a GitHub project." data-vi="Lấy các issue đang mở của một dự án GitHub.">Bring in the open issues of a GitHub project.</p></div>
+<div class="card"><b data-en="Flows" data-vi="Flow">Flows</b><p data-en="A recipe of steps that every ticket of a kind follows." data-vi="Công thức gồm các bước mà mọi ticket cùng loại đều đi qua.">A recipe of steps that every ticket of a kind follows.</p></div>
+<div class="card"><b data-en="Runs" data-vi="Run">Runs</b><p data-en="Start many tickets at once and watch each one." data-vi="Chạy nhiều ticket cùng lúc và theo dõi từng cái.">Start many tickets at once and watch each one.</p></div>
+<div class="card"><b data-en="Your own computer" data-vi="Máy của bạn">Your own computer</b><p data-en="The work happens on your computer, with your own logins." data-vi="Việc chạy trên máy của bạn, với tài khoản của chính bạn.">The work happens on your computer, with your own logins.</p></div>
+<div class="card"><b data-en="People in the loop" data-vi="Có người duyệt">People in the loop</b><p data-en="The work stops and asks a person when it needs a decision." data-vi="Công việc dừng lại và hỏi người khi cần quyết định.">The work stops and asks a person when it needs a decision.</p></div>
+<div class="card"><b data-en="Team sign-in" data-vi="Đăng nhập nhóm">Team sign-in</b><p data-en="Only people on the team's list can sign in." data-vi="Chỉ người trong danh sách của nhóm mới đăng nhập được.">Only people on the team's list can sign in.</p></div>
+</div>
+
+<h3 data-en="Tickets" data-vi="Ticket">Tickets</h3>
+<p class="gloss" data-en="A Ticket is an open GitHub issue that Clauderon has pulled in. A Project is one GitHub repository you turned on." data-vi="Ticket là một issue GitHub đang mở mà Clauderon đã lấy về. Project là một kho GitHub bạn đã bật.">A Ticket is an open GitHub issue that Clauderon has pulled in. A Project is one GitHub repository you turned on.</p>
+<ul class="feat">
+<li><span class="t" data-en="Turn on a GitHub repository as a Project and choose its main branch." data-vi="Bật một kho GitHub thành Project và chọn nhánh chính.">Turn on a GitHub repository as a Project and choose its main branch.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Pull its open issues in as Tickets with one Sync button." data-vi="Lấy các issue đang mở về thành Ticket bằng nút Sync.">Pull its open issues in as Tickets with one Sync button.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="See every open pull request of a Project." data-vi="Xem mọi pull request đang mở của một Project.">See every open pull request of a Project.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="A detail page for each Ticket or batch." data-vi="Trang chi tiết cho từng Ticket hoặc từng đợt.">A detail page for each Ticket or batch.</span><span class="badge no" data-en="Not built" data-vi="Chưa làm">Not built</span></li>
+</ul>
+
+<h3 data-en="Flows and Nodes" data-vi="Flow và Node">Flows and Nodes</h3>
+<p class="gloss" data-en="A Flow is the recipe. A Node is one step in it, such as “ask Claude to plan”, “run the tests” or “wait for a person to approve”." data-vi="Flow là công thức. Node là một bước trong đó, ví dụ “nhờ Claude lên kế hoạch”, “chạy test” hay “chờ người duyệt”.">A Flow is the recipe. A Node is one step in it, such as “ask Claude to plan”, “run the tests” or “wait for a person to approve”.</p>
+<ul class="feat">
+<li><span class="t" data-en="Draw a Flow on a canvas from a shared library of steps." data-vi="Vẽ Flow trên canvas từ thư viện bước dùng chung.">Draw a Flow on a canvas from a shared library of steps.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Steps only connect when the data fits, and loops are not allowed." data-vi="Các bước chỉ nối được khi dữ liệu khớp, và không cho vòng lặp.">Steps only connect when the data fits, and loops are not allowed.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Start from ready-made sample Flows, copy them, edit them, export and import them as files." data-vi="Bắt đầu từ Flow mẫu, sao chép, sửa, xuất và nhập bằng file.">Start from ready-made sample Flows, copy them, edit them, export and import them as files.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Ask Claude to draft a Flow for you." data-vi="Nhờ Claude soạn nháp một Flow cho bạn.">Ask Claude to draft a Flow for you.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Four kinds of step: Claude does work, a command runs, a person approves, or Claude asks questions that a person answers." data-vi="Bốn loại bước: Claude làm việc, chạy lệnh, người duyệt, hoặc Claude hỏi và người trả lời.">Four kinds of step: Claude does work, a command runs, a person approves, or Claude asks questions that a person answers.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+</ul>
+
+<h3 data-en="Runs" data-vi="Run">Runs</h3>
+<p class="gloss" data-en="A Run is one Ticket going through a Flow." data-vi="Run là một Ticket đi qua một Flow.">A Run is one Ticket going through a Flow.</p>
+<ul class="feat">
+<li><span class="t" data-en="Start several Tickets at once; each gets its own safe copy of the code." data-vi="Chạy nhiều Ticket cùng lúc; mỗi cái có bản sao code riêng, an toàn.">Start several Tickets at once; each gets its own safe copy of the code.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="A practice mode (Dry-run) that pretends to do every step, so you can try a Flow for free." data-vi="Chế độ chạy thử (Dry-run) giả lập mọi bước, để thử Flow mà không tốn gì.">A practice mode (Dry-run) that pretends to do every step, so you can try a Flow for free.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Retry from any step, or cancel. A failed step stops the Run; nothing loops by itself." data-vi="Thử lại từ bất kỳ bước nào, hoặc hủy. Bước lỗi sẽ dừng Run; không có gì tự lặp.">Retry from any step, or cancel. A failed step stops the Run; nothing loops by itself.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Live logs with secrets hidden, a count of AI usage per Run, a Pull requests page and a record of who did what." data-vi="Log trực tiếp đã ẩn bí mật, số lượng dùng AI mỗi Run, trang Pull requests và nhật ký ai làm gì.">Live logs with secrets hidden, a count of AI usage per Run, a Pull requests page and a record of who did what.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Built-in view of the code changes inside the app." data-vi="Xem thay đổi code ngay trong app.">Built-in view of the code changes inside the app.</span><span class="badge no" data-en="Not built" data-vi="Chưa làm">Not built</span></li>
+</ul>
+
+<h3 data-en="Machines" data-vi="Máy tính (Machine)">Machines</h3>
+<p class="gloss" data-en="A Machine is your own computer, once you have connected it to Clauderon. A small helper program (the Agent) runs on it." data-vi="Machine là máy tính của bạn sau khi nối với Clauderon. Một chương trình nhỏ (Agent) chạy trên máy đó.">A Machine is your own computer, once you have connected it to Clauderon. A small helper program (the Agent) runs on it.</p>
+<ul class="feat">
+<li><span class="t" data-en="Connect your computer with one install command and a short code you approve in the app." data-vi="Nối máy bằng một lệnh cài đặt và một mã ngắn bạn duyệt trong app.">Connect your computer with one install command and a short code you approve in the app.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="A health check (Doctor) that tells you what is missing on your computer." data-vi="Công cụ kiểm tra (Doctor) cho biết máy bạn còn thiếu gì.">A health check (Doctor) that tells you what is missing on your computer.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="The helper updates itself. Works on Mac, Linux and Windows." data-vi="Chương trình tự cập nhật. Chạy trên Mac, Linux và Windows.">The helper updates itself. Works on Mac, Linux and Windows.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Choose how many Runs your computer does at once; extra Runs wait in line." data-vi="Chọn số Run chạy cùng lúc trên máy; Run thừa sẽ xếp hàng chờ.">Choose how many Runs your computer does at once; extra Runs wait in line.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Live CPU and memory use of your computer." data-vi="Xem CPU và RAM của máy trực tiếp.">Live CPU and memory use of your computer.</span><span class="badge no" data-en="Not built" data-vi="Chưa làm">Not built</span></li>
+<li><span class="t" data-en="Work in a sandbox. Today the helper has the same permissions as you, so use it with care." data-vi="Chạy trong sandbox. Hiện chương trình có cùng quyền như bạn, nên hãy dùng cẩn thận.">Work in a sandbox. Today the helper has the same permissions as you, so use it with care.</span><span class="badge no" data-en="Not built" data-vi="Chưa làm">Not built</span></li>
+</ul>
+
+<h3 data-en="People in the loop" data-vi="Có người duyệt">People in the loop</h3>
+<ul class="feat">
+<li><span class="t" data-en="A “Needs you” inbox lists every Run that is waiting for a person." data-vi="Hộp thư “Needs you” liệt kê mọi Run đang chờ người.">A “Needs you” inbox lists every Run that is waiting for a person.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Approve a plan, or reject it with feedback that the next try will read." data-vi="Duyệt kế hoạch, hoặc từ chối kèm góp ý để lần thử sau đọc được.">Approve a plan, or reject it with feedback that the next try will read.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Answer Claude's questions in a simple form." data-vi="Trả lời câu hỏi của Claude bằng một biểu mẫu đơn giản.">Answer Claude's questions in a simple form.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="Any team member can answer or cancel any Run, not only the person who started it." data-vi="Mọi thành viên đều có thể trả lời hoặc hủy mọi Run, không chỉ người đã bắt đầu.">Any team member can answer or cancel any Run, not only the person who started it.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+</ul>
+
+<h3 data-en="Sign-in and team" data-vi="Đăng nhập và nhóm">Sign-in and team</h3>
+<ul class="feat">
+<li><span class="t" data-en="Sign in with Google. Only emails on the team's list are let in." data-vi="Đăng nhập bằng Google. Chỉ email trong danh sách của nhóm được vào.">Sign in with Google. Only emails on the team's list are let in.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="One person (the Operator) looks after the app and manages that list." data-vi="Một người (Operator) quản lý app và danh sách đó.">One person (the Operator) looks after the app and manages that list.</span><span class="badge done" data-en="Done" data-vi="Xong">Done</span></li>
+<li><span class="t" data-en="A page that shows how far the project is on its plan." data-vi="Trang cho thấy dự án đã đi được bao xa so với kế hoạch.">A page that shows how far the project is on its plan.</span><span class="badge partial" data-en="Planned" data-vi="Dự kiến">Planned</span></li>
+<li><span class="t" data-en="A hosted production setup. The current release is a free demo that sleeps when idle." data-vi="Bản triển khai chính thức. Bản hiện tại là demo miễn phí, tự ngủ khi không dùng.">A hosted production setup. The current release is a free demo that sleeps when idle.</span><span class="badge partial" data-en="Partly" data-vi="Một phần">Partly</span></li>
+</ul>
+</section>
+
+<section id="how">
+<h2 data-en="How it works" data-vi="Cách hoạt động">How it works</h2>
+<p class="lead" data-en="Six steps from a GitHub issue to a pull request." data-vi="Sáu bước từ một issue GitHub đến pull request.">Six steps from a GitHub issue to a pull request.</p>
+<ol class="steps">
+<li><b data-en="Pair your computer" data-vi="Nối máy của bạn">Pair your computer</b><span data-en="Install the small helper with one command and approve the short code it shows. You sign in to Claude Code and GitHub on your computer once." data-vi="Cài chương trình nhỏ bằng một lệnh và duyệt mã ngắn nó hiển thị. Bạn đăng nhập Claude Code và GitHub trên máy một lần.">Install the small helper with one command and approve the short code it shows. You sign in to Claude Code and GitHub on your computer once.</span></li>
+<li><b data-en="Pick a project" data-vi="Chọn một dự án">Pick a project</b><span data-en="Turn on a GitHub repository, then press Sync. Its open issues appear as Tickets." data-vi="Bật một kho GitHub rồi bấm Sync. Các issue đang mở hiện ra thành Ticket.">Turn on a GitHub repository, then press Sync. Its open issues appear as Tickets.</span></li>
+<li><b data-en="Pick a Flow" data-vi="Chọn một Flow">Pick a Flow</b><span data-en="A Flow is a recipe of steps, for example “plan, get approval, write the code, run the tests”. Copy a sample and change it if you like." data-vi="Flow là công thức gồm các bước, ví dụ “lên kế hoạch, xin duyệt, viết code, chạy test”. Sao chép một mẫu và chỉnh nếu muốn.">A Flow is a recipe of steps, for example “plan, get approval, write the code, run the tests”. Copy a sample and change it if you like.</span></li>
+<li><b data-en="Start" data-vi="Bắt đầu">Start</b><span data-en="Select Tickets and press Start. Each one becomes a Run that goes through the steps one by one on your computer. Try a practice run first if you are unsure." data-vi="Chọn Ticket và bấm Start. Mỗi cái thành một Run đi qua từng bước trên máy bạn. Hãy chạy thử trước nếu chưa chắc.">Select Tickets and press Start. Each one becomes a Run that goes through the steps one by one on your computer. Try a practice run first if you are unsure.</span></li>
+<li><b data-en="Stay in the loop" data-vi="Theo dõi và duyệt">Stay in the loop</b><span data-en="When a step needs a person, the Run waits in your “Needs you” inbox. Approve a plan, answer questions, or retry a step that failed." data-vi="Khi một bước cần người, Run chờ trong hộp “Needs you”. Hãy duyệt kế hoạch, trả lời câu hỏi, hoặc thử lại bước lỗi.">When a step needs a person, the Run waits in your “Needs you” inbox. Approve a plan, answer questions, or retry a step that failed.</span></li>
+<li><b data-en="Review the pull request" data-vi="Xem pull request">Review the pull request</b><span data-en="At the end the Run sends its work to GitHub as a pull request (a proposed change), under your own name. You and your team review it as usual." data-vi="Cuối cùng Run gửi kết quả lên GitHub dưới dạng pull request (đề xuất thay đổi), mang tên của bạn. Bạn và nhóm xem lại như bình thường.">At the end the Run sends its work to GitHub as a pull request (a proposed change), under your own name. You and your team review it as usual.</span></li>
+</ol>
+
+<svg class="diagram" viewBox="0 0 760 210" role="img" aria-label="A Ticket goes into a Flow of steps that runs on your own computer, and a pull request comes out">
+<rect class="own" x="150" y="20" width="460" height="150" rx="14"/>
+<text class="cap" x="165" y="42">on your own computer</text>
+<rect class="box" x="14" y="68" width="110" height="56" rx="10"/><text x="69" y="102" text-anchor="middle">Ticket</text>
+<rect class="box" x="175" y="68" width="110" height="56" rx="10"/><text x="230" y="102" text-anchor="middle">Step 1</text>
+<rect class="box" x="315" y="68" width="110" height="56" rx="10"/><text x="370" y="102" text-anchor="middle">Step 2</text>
+<rect class="box" x="455" y="68" width="130" height="56" rx="10"/><text x="520" y="92" text-anchor="middle">A person</text><text x="520" y="110" text-anchor="middle">approves</text>
+<rect class="box" x="636" y="68" width="110" height="56" rx="10"/><text x="691" y="92" text-anchor="middle">Pull</text><text x="691" y="110" text-anchor="middle">request</text>
+<path class="ln" d="M124 96H175M285 96H315M425 96H455M585 96H636"/>
+<text class="cap" x="380" y="196" text-anchor="middle">The Flow of steps</text>
+</svg>
+</section>
+
+<section id="changes">
+<h2 data-en="What changed in each release" data-vi="Mỗi bản phát hành có gì mới">What changed in each release</h2>
+<p class="lead" data-en="Newest first. Each release has the date, what is new for you, and the fixes." data-vi="Mới nhất ở trên. Mỗi bản có ngày phát hành, điều mới cho bạn và các bản sửa lỗi.">Newest first. Each release has the date, what is new for you, and the fixes.</p>
+<!-- RELEASES:START (refresh one block per release; newest first; see .claude/rules/release.md) -->
+<div class="rel" data-release="v0.3.0">
+<h3>v0.3.0 <span class="date">23 Nov 2026</span></h3>
+<p data-en="You can now ask Claude to draft a Flow for you, and import Nodes and Flows from files. Each Project shows every open pull request, and on a phone a menu button opens the sidebar." data-vi="Bạn có thể nhờ Claude soạn nháp một Flow, và nhập Node và Flow từ file. Mỗi Project hiện mọi pull request đang mở, và trên điện thoại có nút menu để mở thanh bên.">You can now ask Claude to draft a Flow for you, and import Nodes and Flows from files. Each Project shows every open pull request, and on a phone a menu button opens the sidebar.</p>
+<ul>
+<li data-en="Fixed: the “Needs you” badge showed 1 while the page was empty." data-vi="Đã sửa: nhãn “Needs you” hiện 1 trong khi trang trống.">Fixed: the “Needs you” badge showed 1 while the page was empty.</li>
+<li data-en="Fixed: copying a Flow twice made two Flows with the same name." data-vi="Đã sửa: sao chép Flow hai lần tạo hai Flow trùng tên.">Fixed: copying a Flow twice made two Flows with the same name.</li>
+<li data-en="Fixed: Delete was offered for Flows that have Runs but always refused." data-vi="Đã sửa: nút Delete hiện cho Flow đã có Run nhưng luôn bị từ chối.">Fixed: Delete was offered for Flows that have Runs but always refused.</li>
+<li data-en="Fixed: sidebar items on a phone now sit in one scrolling row." data-vi="Đã sửa: các mục thanh bên trên điện thoại nằm trong một hàng cuộn được.">Fixed: sidebar items on a phone now sit in one scrolling row.</li>
+</ul>
+<div class="brk" data-en="No breaking changes. Nothing to do on your computer." data-vi="Không có thay đổi gây lỗi. Bạn không cần làm gì trên máy.">No breaking changes. Nothing to do on your computer.</div>
+</div>
+<div class="rel" data-release="v0.2.0">
+<h3>v0.2.0 <span class="date">20 Nov 2026</span></h3>
+<p data-en="Flows are easier to start: sample Flows can now be edited, and a New Flow button makes one from scratch. The Operator can remove a Project, and shows as Owner on the Members page." data-vi="Flow dễ bắt đầu hơn: Flow mẫu có thể sửa, và nút New Flow tạo Flow mới từ đầu. Operator có thể xóa một Project và hiện là Owner ở trang Members.">Flows are easier to start: sample Flows can now be edited, and a New Flow button makes one from scratch. The Operator can remove a Project, and shows as Owner on the Members page.</p>
+<ul><li data-en="No fixes listed in this release." data-vi="Bản này không có mục sửa lỗi.">No fixes listed in this release.</li></ul>
+<div class="brk" data-en="No breaking changes. Nothing to do on your computer." data-vi="Không có thay đổi gây lỗi. Bạn không cần làm gì trên máy.">No breaking changes. Nothing to do on your computer.</div>
+</div>
+<div class="rel" data-release="v0.1.0">
+<h3>v0.1.0 <span class="date">20 Nov 2026</span></h3>
+<p data-en="The first release. A team can connect their computers, bring in GitHub issues as Tickets, build Flows on a canvas, start Runs, step in when a person is needed, and review the pull requests that come out." data-vi="Bản đầu tiên. Nhóm có thể nối máy tính, lấy issue GitHub thành Ticket, dựng Flow trên canvas, chạy Run, can thiệp khi cần người, và xem lại các pull request tạo ra.">The first release. A team can connect their computers, bring in GitHub issues as Tickets, build Flows on a canvas, start Runs, step in when a person is needed, and review the pull requests that come out.</p>
+<ul><li data-en="Known limits: it is a free demo that sleeps when idle, and Runs have no sandbox." data-vi="Giới hạn đã biết: đây là bản demo miễn phí tự ngủ khi không dùng, và Run không có sandbox.">Known limits: it is a free demo that sleeps when idle, and Runs have no sandbox.</li></ul>
+</div>
+<!-- RELEASES:END -->
+<p class="upd" data-en="This section is refreshed at every release." data-vi="Mục này được cập nhật ở mỗi bản phát hành.">This section is refreshed at every release.</p>
+</section>
+
+<section id="faq">
+<h2 data-en="FAQ" data-vi="Hỏi đáp">FAQ</h2>
+<details><summary data-en="What does Clauderon do?" data-vi="Clauderon làm gì?">What does Clauderon do?</summary><p data-en="It takes GitHub issues your team picks and runs each one through a recipe of steps, using an AI assistant. The result is a pull request for people to review." data-vi="Nó lấy các issue GitHub nhóm chọn và chạy từng cái qua một công thức gồm các bước, dùng trợ lý AI. Kết quả là một pull request để mọi người xem lại.">It takes GitHub issues your team picks and runs each one through a recipe of steps, using an AI assistant. The result is a pull request for people to review.</p></details>
+<details><summary data-en="Whose computer does the work?" data-vi="Máy của ai làm việc?">Whose computer does the work?</summary><p data-en="The computer of the person who pressed Start, using their own Claude Code and GitHub sign-ins. The web app never sees those sign-ins." data-vi="Máy của người đã bấm Start, dùng tài khoản Claude Code và GitHub của chính họ. Web app không bao giờ thấy các tài khoản đó.">The computer of the person who pressed Start, using their own Claude Code and GitHub sign-ins. The web app never sees those sign-ins.</p></details>
+<details><summary data-en="What can it change on GitHub?" data-vi="Nó thay đổi được gì trên GitHub?">What can it change on GitHub?</summary><p data-en="The app itself can only read. Changes are made from your computer, under your name: it sends a branch and opens a pull request. Nothing is merged without a person." data-vi="Bản thân app chỉ đọc. Thay đổi được thực hiện từ máy bạn, dưới tên bạn: gửi một nhánh và mở pull request. Không gì được gộp nếu không có người.">The app itself can only read. Changes are made from your computer, under your name: it sends a branch and opens a pull request. Nothing is merged without a person.</p></details>
+<details><summary data-en="Is it safe to use on real projects?" data-vi="Dùng cho dự án thật có an toàn không?">Is it safe to use on real projects?</summary><p data-en="Be careful. The steps run with your own permissions and there is no sandbox yet, and a bad issue could steer the AI. Each Run works in its own copy of the code, away from your own files." data-vi="Hãy cẩn thận. Các bước chạy với quyền của bạn và chưa có sandbox, và một issue xấu có thể điều khiển AI. Mỗi Run làm việc trên bản sao code riêng, tách khỏi file của bạn.">Be careful. The steps run with your own permissions and there is no sandbox yet, and a bad issue could steer the AI. Each Run works in its own copy of the code, away from your own files.</p></details>
+<details><summary data-en="What is not built yet?" data-vi="Cái gì chưa làm?">What is not built yet?</summary><p data-en="A sandbox for Runs, live CPU and memory use of a computer, a built-in view of code changes, and detail pages for each Ticket or batch. See the Features section for the full list." data-vi="Sandbox cho Run, xem CPU và RAM trực tiếp, xem thay đổi code ngay trong app, và trang chi tiết cho từng Ticket hoặc đợt. Xem mục Tính năng để biết đầy đủ.">A sandbox for Runs, live CPU and memory use of a computer, a built-in view of code changes, and detail pages for each Ticket or batch. See the Features section for the full list.</p></details>
+</section>
+</main>
+
+<footer id="more">
+<p data-en="Read more:" data-vi="Đọc thêm:">Read more:</p>
+<a href="https://github.com/toinguyen-agilityio/clauderon#readme">README</a>
+<a href="https://github.com/toinguyen-agilityio/clauderon/blob/main/CONTEXT.md" data-en="Glossary" data-vi="Từ điển thuật ngữ">Glossary</a>
+<a href="https://github.com/toinguyen-agilityio/clauderon/tree/main/docs/specs" data-en="Specs" data-vi="Đặc tả">Specs</a>
+<a href="https://github.com/toinguyen-agilityio/clauderon/releases" data-en="All releases" data-vi="Mọi bản phát hành">All releases</a>
+</footer>
+
+<script>
+(function(){
+var h=document.documentElement,l=document.getElementById('lang'),t=document.getElementById('theme');
+function setLang(v){h.lang=v;try{localStorage.setItem('lang',v)}catch(e){}}
+var saved;try{saved=localStorage.getItem('lang')}catch(e){}
+if(saved==='vi')h.lang='vi';
+l.addEventListener('click',function(){setLang(h.lang==='vi'?'en':'vi')});
+t.addEventListener('click',function(){var dark=h.dataset.theme?h.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;h.dataset.theme=dark?'light':'dark'});
+})();
+</script>

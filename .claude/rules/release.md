@@ -10,6 +10,8 @@ Before `gh pr create` from a `release/*` branch into `main`:
 
 Do not refresh or commit the graph on any other branch.
 
+Feature guide: the plain-language page `docs/feature-page/clauderon-features.html` (published as a Claude artifact, linked from `README.md` and `docs/README.md`) has one block per release. On the release branch, add a block for the new version at the top of the releases list (version, date, two or three plain lines for a Member, the fixes, and breaking changes with what to do), update the Features badges if they changed, republish the same artifact URL and commit the file as `docs(feature-page): add v<version>`. If the URL ever changes, update both READMEs.
+
 Before cutting the branch, find the last tag (`git describe --tags --abbrev=0 origin/main`), list the commits since it, work out the next version and tell the user which one and why. Title the release PR `chore(release): v<version>`.
 
 After the release PR merges:
