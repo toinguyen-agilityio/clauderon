@@ -3,6 +3,7 @@ import { getMachineOfMember } from "@clauderon/db";
 import { Icon } from "../../../components/icons";
 import { deps, requireMember } from "../../../server/runtime";
 import { viewTickets } from "../../../server/tickets";
+import { FilterLink, FilterResults, TicketFilters, TicketSearch } from "./ticket-filters";
 import { TicketTable } from "./ticket-table";
 import { TicketsSync } from "./tickets-sync";
 
@@ -68,38 +69,36 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
           Enable a repository on the <Link href="/projects">Projects</Link> page, then Sync to pull its issues.
         </div>
       ) : (
-        <>
+        <TicketFilters>
           <div className="row between">
             <nav className="seg" aria-label="Project">
-              <Link href={href({ project: undefined })} className={!search.project ? "on" : ""}>
+              <FilterLink href={href({ project: undefined })} className={!search.project ? "on" : ""}>
                 All <span className="faint num">{all.length}</span>
-              </Link>
+              </FilterLink>
               {projects.map((p) => (
-                <Link key={p.id} href={href({ project: p.id })} className={search.project === p.id ? "on" : ""}>
+                <FilterLink key={p.id} href={href({ project: p.id })} className={search.project === p.id ? "on" : ""}>
                   {p.repo} <span className="faint num">{perProject(p.id)}</span>
-                </Link>
+                </FilterLink>
               ))}
             </nav>
-            <form method="get" role="search" style={{ width: "min(320px, 100%)" }}>
-              {search.project && <input type="hidden" name="project" value={search.project} />}
-              {search.status && <input type="hidden" name="status" value={search.status} />}
-              <input className="input" name="q" defaultValue={search.q ?? ""} placeholder="Search title or key…" aria-label="Search Tickets" />
-            </form>
+            <TicketSearch project={search.project} status={search.status} q={search.q} />
           </div>
 
           <nav className="chips" aria-label="Ticket Status">
-            <Link className={`fchip ${!search.status ? "on" : ""}`} href={href({ status: undefined })}>
+            <FilterLink className={`fchip ${!search.status ? "on" : ""}`} href={href({ status: undefined })}>
               All <span className="n">{total}</span>
-            </Link>
+            </FilterLink>
             {STATUSES.map((s) => (
-              <Link key={s} className={`fchip ${search.status === s ? "on" : ""}`} href={href({ status: s })}>
+              <FilterLink key={s} className={`fchip ${search.status === s ? "on" : ""}`} href={href({ status: s })}>
                 {s} <span className="n">{counts[s] ?? 0}</span>
-              </Link>
+              </FilterLink>
             ))}
           </nav>
 
-          <TicketTable rows={rows} />
-        </>
+          <FilterResults>
+            <TicketTable rows={rows} />
+          </FilterResults>
+        </TicketFilters>
       )}
     </>
   );

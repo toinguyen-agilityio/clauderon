@@ -105,7 +105,7 @@ export type PullRequestQuery = { tab?: PullRequestTab; projectId?: string; membe
 
 /**
  * The Pull requests page: every open pull request of every Project, read from
- * GitHub each time the page opens, with the Run that opened it when one did.
+ * GitHub (cached briefly by the reader), with the Run that opened it when one did.
  * "Needs you" are the ones asking the gh login of the viewer's Machine for a
  * review. For a Project GitHub cannot read, the page
  * falls back to the pull requests its Runs recorded as open, and says so.

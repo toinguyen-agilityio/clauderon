@@ -1,10 +1,10 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { systemClock } from "@clauderon/core";
+import { systemClock, type GitHubReader } from "@clauderon/core";
 import { connect, notifyGatewayCommand, notifyMemberRevoked, parseOperatorEmails, type DbHandle } from "@clauderon/db";
 import { SESSION_COOKIES, memberFromCookies } from "./access";
 import type { AppDeps } from "./deps";
-import { gitHubApi } from "./github";
+import { gitHubApi, withCachedPullRequests } from "./github";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -13,10 +13,11 @@ function required(name: string): string {
 }
 
 // One pool per server instance, kept across hot reloads in development.
-const globalForDb = globalThis as unknown as { clauderonDb?: DbHandle };
+const globalForDb = globalThis as unknown as { clauderonDb?: DbHandle; clauderonGitHub?: GitHubReader };
 
 export function deps(): AppDeps {
   globalForDb.clauderonDb ??= connect(required("DATABASE_URL"));
+  globalForDb.clauderonGitHub ??= withCachedPullRequests(gitHubApi(process.env.GITHUB_TOKEN ?? ""));
   const { db } = globalForDb.clauderonDb;
   return {
     db,
@@ -24,7 +25,7 @@ export function deps(): AppDeps {
     clock: systemClock,
     publish: notifyMemberRevoked(db),
     command: notifyGatewayCommand(db),
-    github: gitHubApi(process.env.GITHUB_TOKEN ?? ""),
+    github: globalForDb.clauderonGitHub,
   };
 }
 
