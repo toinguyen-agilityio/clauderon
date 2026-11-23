@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copyName, deleteBlocker, filterNodes, groupCounts, groupNodes, kindGroupOf, kindLabel, retypePort, saveBlocker, saveOutcome, sameValue, usageLabel, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
+import { copyName, deleteBlocker, emptyText, filterNodes, importSummary, groupCounts, groupNodes, kindGroupOf, kindLabel, retypePort, saveBlocker, saveOutcome, sameValue, usageLabel, type NodeFormValue } from "../src/app/(app)/flows/library/library-view";
 
 const node = (name: string, kind: "agent" | "command" | "approve", over: { instructions?: string; command?: string | null } = {}) => ({
   name,
@@ -143,5 +143,19 @@ describe("copyName (issue #94)", () => {
     const long = "x".repeat(120);
     expect(copyName(long, []).length).toBe(120);
     expect(copyName(long, [copyName(long, [])]).length).toBe(120);
+  });
+});
+
+describe("import messages (issue #116)", () => {
+  it("says how many Nodes were created and skipped", () => {
+    expect(importSummary({ created: [1, 2], skipped: [], tickets: [] })).toBe("Created 2 Nodes.");
+    expect(importSummary({ created: [1], skipped: ["Lint"], tickets: ["Ticket"] })).toBe(
+      "Created 1 Node; skipped 1 already in the library (Lint); skipped 1 Ticket Node (Ticket): a Member cannot create one.",
+    );
+  });
+
+  it("has an empty-list text with no unset label", () => {
+    expect(emptyText("all")).toBe("No Nodes yet.");
+    expect(emptyText("agent")).toBe("No Agent Nodes yet.");
   });
 });

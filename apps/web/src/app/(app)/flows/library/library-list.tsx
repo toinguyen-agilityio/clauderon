@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../../../../components/icons";
-import { cloneNodeAction } from "./actions";
+import { cloneNodeAction, exportNodesAction } from "./actions";
+import { ImportNodes } from "./import-nodes";
 import { EMPTY_NODE, NodeForm } from "./node-form";
-import { KIND_GROUP_LABEL, filterNodes, groupCounts, groupNodes, kindLabel, usageLabel, type KindGroup, type LibraryNodeView } from "./library-view";
+import { KIND_GROUP_LABEL, emptyText, filterNodes, groupCounts, groupNodes, kindLabel, usageLabel, type KindGroup, type LibraryNodeView } from "./library-view";
 import { kindIcon } from "../[id]/flow-icons";
 import { Signature } from "../[id]/node-library";
 import { closeOnBackdrop } from "../../../../components/dialog";
@@ -116,6 +117,8 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
   const [open, setOpen] = useState<string | null>(null); // a Node id, or "new"
   const [cloning, setCloning] = useState<string | null>(null);
   const [cloneError, setCloneError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const search = useRef<HTMLInputElement>(null);
 
   const counts = useMemo(() => groupCounts(nodes), [nodes]);
@@ -130,6 +133,21 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
     setCloning(null);
     if (!result.ok) return setCloneError(result.error);
     setOpen(result.id); // the copy opens for editing; the list refreshes behind it
+  };
+
+  // Export (issue #116): the server builds the file, the browser saves it.
+  const exportNodes = async (ids: string[], key: string) => {
+    setExporting(key);
+    setExportError(null);
+    const result = await exportNodesAction(ids);
+    setExporting(null);
+    if (!result.ok) return setExportError(result.error);
+    const url = URL.createObjectURL(new Blob([result.json], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = result.filename;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // "/" jumps to the search box, as the hint in it says.
@@ -171,14 +189,18 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
             </button>
           ))}
         </div>
+        <button type="button" className="btn" disabled={shown.length === 0 || exporting !== null} onClick={() => void exportNodes(shown.map((n) => n.id), "all")}>
+          {exporting === "all" ? "Exporting…" : "Export Nodes"}
+        </button>
+        <ImportNodes />
         <button type="button" className="btn primary" onClick={() => setOpen("new")}>
           {Icon.plus} New Node
         </button>
       </div>
 
-      {cloneError && (
+      {(cloneError ?? exportError) && (
         <div className="banner error" role="alert">
-          {cloneError}
+          {cloneError ?? exportError}
         </div>
       )}
 
@@ -205,7 +227,7 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
             <b>No Node matches</b>
             {query.trim()
               ? `Nothing matches "${query.trim()}"${group === "all" ? "" : ` in ${KIND_GROUP_LABEL[group]}`}.`
-              : `No ${KIND_GROUP_LABEL[group as KindGroup]} Nodes yet.`}
+              : emptyText(group)}
           </div>
         )}
       </div>

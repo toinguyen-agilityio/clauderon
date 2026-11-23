@@ -1,6 +1,7 @@
 export * from "./clock";
 export * from "./flow";
 export * from "./flow-file";
+export * from "./node-file";
 export * from "./flow-draft";
 export * from "./github";
 export * from "./human";

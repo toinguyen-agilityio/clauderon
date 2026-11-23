@@ -15,7 +15,7 @@ import {
 import type { AppDeps } from "../src/server/deps";
 import { cloneMyFlow, createMyFlow, deleteMyFlow, editorData, exportMyFlow, importMyFlow, saveMyFlow, viewFlows } from "../src/server/flows";
 import { startDialog } from "../src/server/start";
-import { cloneMyNode, createMyNode, deleteMyNode, updateMyNode, viewLibrary } from "../src/server/library";
+import { cloneMyNode, createMyNode, deleteMyNode, exportMyNodes, importMyNodes, updateMyNode, viewLibrary } from "../src/server/library";
 
 let test: TestDatabase;
 let db: Db;
@@ -402,6 +402,69 @@ describe("Node library (spec M2 §4)", () => {
     const ticket = (await viewLibrary(deps)).find((n) => n.kind === "ticket")!;
     expect(await cloneMyNode(deps, ann, ticket.id)).toMatchObject({ ok: false });
     expect(await cloneMyNode(deps, ann, crypto.randomUUID())).toEqual({ ok: false, error: "That Node no longer exists." });
+  });
+
+  describe("import and export Nodes (issue #116)", () => {
+    const file = (...nodes: object[]) => JSON.stringify({ format: "clauderon-nodes", version: 1, nodes });
+    const agent = { name: "Review", kind: "agent", instructions: "Review the branch.", command: null, inputs: [{ name: "branch", type: "branch", required: true }], outputs: [{ name: "summary", type: "summary", optional: false }] };
+    const find = async (name: string) => (await viewLibrary(deps)).find((n) => n.name === name);
+
+    it("imports into an empty library, with one audit entry per Node", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      const result = await importMyNodes(deps, ann, file(agent, lint()));
+      expect(result).toMatchObject({ ok: true, skipped: [], tickets: [] });
+      expect(result.ok && result.created.map((c) => c.name)).toEqual(["Review", "Lint"]);
+      expect(await find("Review")).toMatchObject({ isSample: false, kind: "agent", usedBy: [] });
+      expect(await actions()).toEqual(["node.create", "node.create"]);
+    });
+
+    it("skips a Node the library already has and renames a different one with the same name", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      await importMyNodes(deps, ann, file(agent));
+      const again = await importMyNodes(deps, ann, file(agent, { ...agent, instructions: "Something else." }));
+      expect(again).toMatchObject({ ok: true, skipped: ["Review"] });
+      expect(again.ok && again.created.map((c) => c.name)).toEqual(["Copy of Review"]);
+      expect((await find("Review"))!.instructions).toBe("Review the branch.");
+      expect(await find("Copy of Review")).toBeDefined();
+      // The same Node twice in one file is created once.
+      const twice = await importMyNodes(deps, ann, file(lint(), lint()));
+      expect(twice).toMatchObject({ ok: true, skipped: ["Lint"] });
+    });
+
+    it("creates nothing and names the Node when any entry is invalid, or the file is not a Node file", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      const bad = await importMyNodes(deps, ann, file(agent, lint({ name: "Broken", command: "" })));
+      expect(bad).toEqual({ ok: false, error: 'Node "Broken": A Command Node needs a command.' });
+      expect(await find("Review")).toBeUndefined();
+      expect(await importMyNodes(deps, ann, "not json")).toMatchObject({ ok: false });
+      expect(await importMyNodes(deps, ann, JSON.stringify({ format: "clauderon-flow", version: 1 }))).toMatchObject({ ok: false });
+      expect(await importMyNodes(deps, ann, file())).toMatchObject({ ok: false });
+      expect(await actions()).toEqual([]);
+    });
+
+    it("skips a Ticket entry with a message and still creates the rest", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      const result = await importMyNodes(deps, ann, file({ ...agent, name: "Ticket", kind: "ticket" }, agent));
+      expect(result).toMatchObject({ ok: true, tickets: ["Ticket"] });
+      expect(result.ok && result.created.map((c) => c.name)).toEqual(["Review"]);
+      expect(await find("Ticket")).toBeUndefined();
+    });
+
+    it("exports Nodes to a file that imports back, with no ids or dates and tokens masked", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      await importMyNodes(deps, ann, file({ ...agent, instructions: "Use ghp_abcdefghijklmnopqrstuvwxyz0123456789 to review." }, lint()));
+      const ids = (await viewLibrary(deps)).map((n) => n.id);
+      const exported = await exportMyNodes(deps, ids);
+      if (!exported.ok) throw new Error(exported.error);
+      expect(exported.json).not.toMatch(/ghp_abcdef/);
+      const parsed = JSON.parse(exported.json) as { nodes: object[] };
+      expect(parsed.nodes).toHaveLength(2);
+      for (const n of parsed.nodes) expect(Object.keys(n).sort()).toEqual(["command", "inputs", "instructions", "kind", "name", "outputs"]);
+      expect(await exportMyNodes(deps, [crypto.randomUUID()])).toEqual({ ok: false, error: "That Node no longer exists." });
+      // Back into the same library: both Nodes already exist (the masked one differs, so it is a copy).
+      const back = await importMyNodes(deps, ann, exported.json);
+      expect(back).toMatchObject({ ok: true, skipped: ["Lint"] });
+    });
   });
 
   it("T2-6: editing an unlocked Node re-validates every Flow using it and says how many changed", async () => {
