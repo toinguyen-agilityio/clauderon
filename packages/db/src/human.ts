@@ -196,13 +196,16 @@ export async function openHumanRequests(db: Db) {
   });
 }
 
-/** The count in the navigation (spec M3 §3). */
+/** The count in the navigation (spec M3 §3): same joins and filter as the list, so they always agree. */
 export async function countOpenHumanRequests(db: Db): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(humanRequest)
     .innerJoin(attempt, eq(attempt.id, humanRequest.attemptId))
     .innerJoin(run, eq(run.id, attempt.runId))
+    .innerJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(project, eq(project.id, ticket.projectId))
+    .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(and(openCondition, eq(run.state, "waiting_for_human")));
   return row?.n ?? 0;
 }

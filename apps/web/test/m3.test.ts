@@ -204,9 +204,11 @@ describe("Needs you (RUN-5, spec M3 §3)", () => {
     expect(items[0]!.questions).toHaveLength(2);
     expect(items[1]!.subject).toEqual({ name: "plan", type: "plan", value: "1. Fix totals" });
     expect(await needsYouCount(deps)).toBe(2);
+    expect(await needsYouCount(deps)).toBe(items.length);
 
     await respondAs(deps, f.bo, approve.request.id, { decision: "approve" });
     expect(await needsYouCount(deps)).toBe(1);
+    expect(await needsYouCount(deps)).toBe((await viewNeedsYou(deps)).length);
   });
 
   it("T3-5: two Members respond at once: the first wins, the second is told who answered", async () => {
