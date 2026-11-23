@@ -5,7 +5,7 @@ Branch flow: feature and fix PRs go into `staging`. A release is a branch `relea
 Before `gh pr create` from a `release/*` branch into `main`:
 
 1. Run `pnpm features:build` to refresh `docs/features.json`, and `graphify update .` (code only; no LLM, no API key).
-2. If `docs/features.json` changed, commit it as `chore(features): refresh features.json`. If `graphify-out/graph.json` or `graphify-out/GRAPH_REPORT.md` changed, commit just those two files as `chore(graph): refresh repo graph`.
+2. Run `pnpm features:summary`. If `docs/features.json` changed, commit it as `chore(features): refresh features.json`; if `docs/features-summary.html` changed, commit it as `chore(docs): refresh feature summary page`, then republish it to the same Artifact (https://claude.ai/artifact/1qdVixh6YocMYDmFLxYRT8: read it, then publish `docs/features-summary.html` to that URL). Keep the Vietnamese lines in `docs/features-summary.vi.json` up to date (the generator fails when one is missing). If `graphify-out/graph.json` or `graphify-out/GRAPH_REPORT.md` changed, commit just those two files as `chore(graph): refresh repo graph`.
 3. Then create the PR.
 
 Do not refresh or commit the graph on any other branch. (`docs/features.json` is also refreshed on feature branches when a change adds, removes or moves a feature: edit `packages/features/features.map.json`, then run `pnpm features:build`; CI fails when it is stale.)

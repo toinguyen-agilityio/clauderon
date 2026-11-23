@@ -11,6 +11,7 @@
 | [adr/](adr/) | Architecture decision records, one decision per file |
 | [prototype/clauderon-prototype.html](prototype/clauderon-prototype.html) | Clickable UI prototype built from the v1 requirements, on simulated data; open it in a browser |
 | [Product brief](https://claude.ai/artifact/2tCo9jMTGf5jVfXKqegs3t) | Client-facing product brief (EN/VI): problem, idea, screens, requirements, roadmap, open questions. Hosted as a Claude artifact |
+| [Feature summary](https://claude.ai/artifact/1qdVixh6YocMYDmFLxYRT8) | What Clauderon does today, one line per feature with a status (EN/VI), generated from [features.json](features.json). Hosted as a private Claude artifact; source in [features-summary.html](features-summary.html), Vietnamese text in [features-summary.vi.json](features-summary.vi.json); rebuild with `pnpm features:summary` |
 | [../CONTEXT.md](../CONTEXT.md) | Domain glossary: the words to use in code, UI and conversation |
 
 ## Decision records
