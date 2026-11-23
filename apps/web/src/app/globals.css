@@ -180,7 +180,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .menu-btn svg, .side-close svg { width: 18px; height: 18px; }
   .menu-btn .dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--yellow, var(--accent)); }
   .scrim { display: block; position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.5); }
-  .side { position: fixed; top: 0; bottom: 0; left: 0; z-index: 40; width: min(300px, 86vw); height: 100dvh; overflow-y: auto; overscroll-behavior: contain; padding-top: max(18px, env(safe-area-inset-top, 0px)); transform: translateX(-100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; border-right: 1px solid var(--side-line, var(--line)); }
+  .side { position: fixed; top: 0; bottom: 0; left: 0; z-index: 40; width: min(300px, 86vw); height: 100dvh; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding-top: max(18px, env(safe-area-inset-top, 0px)); transform: translateX(-100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; border-right: 1px solid var(--side-line, var(--line)); }
   .side.open { transform: none; visibility: visible; transition: transform 0.2s ease; }
   .side-close { display: grid; position: absolute; top: 10px; right: 10px; }
   @media (prefers-reduced-motion: reduce) { .side, .side.open { transition: none; } }
@@ -423,11 +423,6 @@ h1 .small, h2 .small { font-family: var(--font-ui); letter-spacing: 0; color: va
 .side-tools .theme-seg svg, .icon-btn svg { width: 15px; height: 15px; }
 .icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--side-fg2); cursor: pointer; transition: background-color 250ms var(--ease), color 250ms var(--ease); }
 .icon-btn:hover { background: var(--side-hover); color: var(--side-fg); }
-@media (max-width: 860px) {
-  .nav { gap: 2px; }
-  .nav-group { flex-direction: row; gap: 2px; }
-  .nav-group-title { display: none; }
-}
 
 /* surfaces: white cards, 8px corners, crisp 1px border, 2px shadow; mint for secondary tiles */
 .card, .banner, .stat { border-radius: var(--r); }
