@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getMachineOfMember } from "@clauderon/db";
 import { Icon } from "../../../components/icons";
+import { syncAllProjects } from "../../../server/projects";
 import { deps, requireMember } from "../../../server/runtime";
 import { viewTickets } from "../../../server/tickets";
 import { TicketTable } from "./ticket-table";
@@ -14,6 +15,8 @@ type Search = { project?: string; q?: string; status?: string };
 export default async function TicketsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const member = await requireMember();
   const search = await searchParams;
+  // GitHub stays the source of truth: pull every Project's issues before reading them.
+  await syncAllProjects(deps());
   const [{ projects, counts, total, rows }, machine, all] = await Promise.all([
     viewTickets(deps(), { projectId: search.project, q: search.q, status: search.status }),
     getMachineOfMember(deps().db, member.id),
@@ -25,13 +28,14 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
     return `/tickets${query.size ? `?${query}` : ""}`;
   };
   const perProject = (id: string) => all.rows.filter((r) => r.projectId === id).length;
+  const failed = projects.filter((p) => p.syncError);
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Tickets</h1>
-          <p className="sub">Open GitHub issues of every Project. Status comes from their Runs and pull requests; GitHub stays the source of truth.</p>
+          <p className="sub">Open GitHub issues of every Project, read from GitHub each time this page opens. Status comes from their Runs and pull requests.</p>
         </div>
         <Link className="btn" href="/projects">
           {Icon.sync}
@@ -48,6 +52,14 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
           <Link className="btn sm primary" href={machine?.tokenHash ? `/machines/${machine.id}` : "/machines"}>
             {machine?.tokenHash ? "Open my Machine" : "Pair my computer"}
           </Link>
+        </div>
+      )}
+
+      {failed.length > 0 && (
+        <div className="banner wait">
+          <div className="grow small">
+            <b>Could not read {failed.map((p) => p.repo).join(", ")} from GitHub.</b> Showing the last synced issues. {failed[0]!.syncError}
+          </div>
         </div>
       )}
 

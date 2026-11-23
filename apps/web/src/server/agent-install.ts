@@ -10,18 +10,35 @@ import type { AgentManifest } from "@clauderon/protocol";
 // Machine is still paired, installs the service and runs the doctor. Running
 // it again updates everything and replaces an old install (a clone run with tsx).
 
-export type InstallInput = { webUrl: string };
+export type InstallInput = {
+  webUrl: string;
+  /** The Agent's directory under the Member's home when CLAUDERON_HOME is unset; `.clauderon` by default. */
+  homeName?: string;
+};
+
+/**
+ * Where an install from this web app puts the Agent: `AGENT_HOME_NAME`, else
+ * `.clauderon-dev` for `next dev` and `.clauderon` otherwise. A local dev web
+ * app and a deployed one then install separate Agents (and services) on one
+ * computer, so trying the dev app never replaces the Agent paired with the team's.
+ */
+export const agentHomeName = (env: Record<string, string | undefined> = process.env) =>
+  env.AGENT_HOME_NAME ?? (env.NODE_ENV === "development" ? ".clauderon-dev" : ".clauderon");
 
 /** The Node line the Agent runs on. */
 export const NODE_MAJOR = 22;
 
 const SAFE_URL = /^https?:\/\/[A-Za-z0-9.:[\]-]+(\/[A-Za-z0-9._~/-]*)?$/;
 
+const SAFE_HOME_NAME = /^\.?[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
 /** Only values that need no quoting go into a script anyone runs with `| sh`. */
-export function checkInstallInput(input: InstallInput): InstallInput {
+export function checkInstallInput(input: InstallInput): Required<InstallInput> {
   const webUrl = input.webUrl.replace(/\/$/, "");
   if (!SAFE_URL.test(webUrl)) throw new Error(`unsafe web URL ${JSON.stringify(input.webUrl)}`);
-  return { webUrl };
+  const homeName = input.homeName ?? ".clauderon";
+  if (!SAFE_HOME_NAME.test(homeName)) throw new Error(`unsafe Agent home ${JSON.stringify(input.homeName)}`);
+  return { webUrl, homeName };
 }
 
 /** What the Machines page shows for macOS and Linux. */
@@ -57,16 +74,17 @@ export async function agentBundle(dir = agentBundleDir()): Promise<Buffer | null
  * the smoke test in CI.
  */
 export function installSh(input: InstallInput): string {
-  const { webUrl } = checkInstallInput(input);
+  const { webUrl, homeName } = checkInstallInput(input);
   return `#!/bin/sh
 # Clauderon Agent installer for ${webUrl}
 # Pairs this computer as your Machine and runs the Agent whenever you are logged in.
-# Installs into ~/.clauderon only: its own Node, the Agent, no sudo.
+# Installs into ~/${homeName} only: its own Node, the Agent, no sudo.
 set -eu
 
 WEB_URL='${webUrl}'
 NODE_MAJOR=${NODE_MAJOR}
-HOME_DIR="\${CLAUDERON_HOME:-$HOME/.clauderon}"
+HOME_DIR="\${CLAUDERON_HOME:-$HOME/${homeName}}"
+export CLAUDERON_HOME="$HOME_DIR"
 NODE_DIR="$HOME_DIR/node"
 NODE="$NODE_DIR/bin/node"
 AGENT="$HOME_DIR/agent/agent.mjs"
@@ -167,17 +185,18 @@ say "Done. Your Machine shows on $WEB_URL/machines"
 
 /** Windows, from PowerShell. The Agent runs its commands in Git Bash, which Git for Windows installs. */
 export function installPs1(input: InstallInput): string {
-  const { webUrl } = checkInstallInput(input);
+  const { webUrl, homeName } = checkInstallInput(input);
   return `# Clauderon Agent installer for ${webUrl}
 # Pairs this computer as your Machine and runs the Agent whenever you are logged in.
-# Installs into ~\\.clauderon only: its own Node, the Agent, no administrator rights.
+# Installs into ~\\${homeName} only: its own Node, the Agent, no administrator rights.
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 $WebUrl = '${webUrl}'
 $NodeMajor = ${NODE_MAJOR}
-$HomeDir = if ($env:CLAUDERON_HOME) { $env:CLAUDERON_HOME } else { Join-Path $HOME ".clauderon" }
+$HomeDir = if ($env:CLAUDERON_HOME) { $env:CLAUDERON_HOME } else { Join-Path $HOME "${homeName}" }
+$env:CLAUDERON_HOME = $HomeDir
 $NodeDir = Join-Path $HomeDir "node"
 $Node = Join-Path $NodeDir "node.exe"
 $AgentDir = Join-Path $HomeDir "agent"

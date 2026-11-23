@@ -81,12 +81,29 @@ export function groupCounts(nodes: readonly Pick<LibraryNodeView, "kind">[]): { 
   return KIND_GROUPS.filter((g) => counts.has(g)).map((group) => ({ group, count: counts.get(group)! }));
 }
 
-/** The footer of a library card, e.g. "Human · Grill · in 2 Flows" or "Agent · in no Flow". */
-export function cardMeta(node: Pick<LibraryNodeView, "kind" | "usedBy">): string {
-  const group = kindGroupOf(node.kind);
-  const kind = group === "human" ? `${KIND_GROUP_LABEL.human} · ${node.kind[0]!.toUpperCase()}${node.kind.slice(1)}` : KIND_GROUP_LABEL[group];
-  const n = node.usedBy.length;
-  return `${kind} · ${n === 0 ? "in no Flow" : `in ${n} Flow${n === 1 ? "" : "s"}`}`;
+/** The Nodes under their Kind group, in the groups' fixed order; only groups that have any. */
+export function groupNodes<T extends Pick<LibraryNodeView, "kind">>(nodes: readonly T[]): { group: KindGroup; nodes: T[] }[] {
+  return KIND_GROUPS.map((group) => ({ group, nodes: nodes.filter((n) => kindGroupOf(n.kind) === group) })).filter((g) => g.nodes.length > 0);
+}
+
+/** How many Flows place a Node, for its card: "Used in 2 Flows", or "Not used in any Flow". */
+export function usageLabel(usedBy: readonly LibraryUse[]): string {
+  const n = usedBy.length;
+  return n === 0 ? "Not used in any Flow" : `Used in ${n} Flow${n === 1 ? "" : "s"}`;
+}
+
+/** A Node's Kind in words, e.g. "Agent" or "Human · Grill". */
+export function kindLabel(kind: NodeKind): string {
+  const group = kindGroupOf(kind);
+  return group === "human" ? `${KIND_GROUP_LABEL.human} · ${kind[0]!.toUpperCase()}${kind.slice(1)}` : KIND_GROUP_LABEL[group];
+}
+
+/**
+ * A port given another Output Type. Its name follows the type while it still is the old
+ * type's name (or empty), so the common case, a port named after its type, needs no typing.
+ */
+export function retypePort<P extends { name: string; type: OutputType }>(port: P, type: OutputType): P {
+  return { ...port, type, name: port.name.trim() === "" || port.name === port.type ? type : port.name };
 }
 
 /** Why Save is not available yet (the same rules the server applies), or null when the form can be saved. */
@@ -116,6 +133,19 @@ export function saveOutcome(
   if (isNew) return { close: true, message: { kind: "ok", text: "Created." } };
   const problems = result.withProblems > 0 ? `; ${result.withProblems} now ${result.withProblems === 1 ? "has" : "have"} problems` : "";
   return { close: false, message: { kind: "ok", text: `Saved. It changed ${plural(result.flows, "Flow")}${problems}.` } };
+}
+
+/** What the Member is told after an import: how many Nodes were created and skipped, and why. */
+export function importSummary(result: { created: readonly unknown[]; skipped: readonly string[]; tickets: readonly string[] }): string {
+  const parts = [`Created ${plural(result.created.length, "Node")}`];
+  if (result.skipped.length > 0) parts.push(`skipped ${result.skipped.length} already in the library (${result.skipped.join(", ")})`);
+  if (result.tickets.length > 0) parts.push(`skipped ${plural(result.tickets.length, "Ticket Node")} (${result.tickets.join(", ")}): a Member cannot create one`);
+  return `${parts.join("; ")}.`;
+}
+
+/** The empty-list text: "No Nodes yet." for the whole library, "No Agent Nodes yet." for one Kind. */
+export function emptyText(group: KindGroup | "all"): string {
+  return group === "all" ? "No Nodes yet." : `No ${KIND_GROUP_LABEL[group]} Nodes yet.`;
 }
 
 /** A name for a copy that does not clash with an existing Node: "Copy of X", then "Copy of X (2)", "(3)"... (names are at most 120 characters). */

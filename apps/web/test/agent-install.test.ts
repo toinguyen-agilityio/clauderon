@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { checkInstallInput, installCommandPs1, installCommandSh, installPs1, installSh } from "../src/server/agent-install";
+import { agentHomeName, checkInstallInput, installCommandPs1, installCommandSh, installPs1, installSh } from "../src/server/agent-install";
 
 const input = { webUrl: "https://clauderon.example.com/" };
 
@@ -34,7 +34,24 @@ describe("Agent installer (ADR 0007)", () => {
   it("refuses values that would need quoting in a piped script", () => {
     expect(() => checkInstallInput({ webUrl: "https://x.test/'; rm -rf ~; '" })).toThrow("unsafe web URL");
     expect(() => checkInstallInput({ webUrl: "file:///etc" })).toThrow("unsafe web URL");
-    expect(checkInstallInput({ webUrl: "http://localhost:3000/" })).toEqual({ webUrl: "http://localhost:3000" });
+    expect(() => checkInstallInput({ webUrl: "http://localhost:3000", homeName: "x; rm -rf ~" })).toThrow("unsafe Agent home");
+    expect(() => checkInstallInput({ webUrl: "http://localhost:3000", homeName: "../.ssh" })).toThrow("unsafe Agent home");
+    expect(checkInstallInput({ webUrl: "http://localhost:3000/" })).toEqual({ webUrl: "http://localhost:3000", homeName: ".clauderon" });
+  });
+
+  it("installs a dev web app's Agent into its own home, apart from the deployed app's", () => {
+    expect(agentHomeName({ NODE_ENV: "production" })).toBe(".clauderon");
+    expect(agentHomeName({ NODE_ENV: "development" })).toBe(".clauderon-dev");
+    expect(agentHomeName({ NODE_ENV: "development", AGENT_HOME_NAME: ".clauderon-local" })).toBe(".clauderon-local");
+    const sh = installSh({ webUrl: "http://localhost:3000", homeName: ".clauderon-dev" });
+    expect(sh).toContain('HOME_DIR="${CLAUDERON_HOME:-$HOME/.clauderon-dev}"');
+    // The Agent's own commands (pair, install-service, doctor) use the same home.
+    expect(sh).toContain('export CLAUDERON_HOME="$HOME_DIR"');
+    expect(() => execFileSync("sh", ["-n"], { input: sh })).not.toThrow();
+    const ps1 = installPs1({ webUrl: "http://localhost:3000", homeName: ".clauderon-dev" });
+    expect(ps1).toContain('Join-Path $HOME ".clauderon-dev"');
+    expect(ps1).toContain("$env:CLAUDERON_HOME = $HomeDir");
+    expect(installSh(input)).toContain('HOME_DIR="${CLAUDERON_HOME:-$HOME/.clauderon}"');
   });
 
   it("gives one line per OS", () => {

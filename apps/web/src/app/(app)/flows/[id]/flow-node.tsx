@@ -9,7 +9,7 @@ import { FIcon, kindIcon } from "./flow-icons";
 import type { PreviewNodeState } from "./test-run";
 
 // One Node on the canvas: a card with its title, its kind and its ports (handles on the
-// edges, names shown on hover), a toolbar above it while it is the only one selected,
+// edges, with their names), a toolbar above it while it is the only one selected,
 // and "+" buttons on its sides to add the step before or after it.
 
 export type Placement = EditorData["graph"]["nodes"][number];
@@ -41,6 +41,8 @@ type Props = {
   /** Briefly highlighted, after picking its problem from the list. */
   flash?: boolean;
   runState?: PreviewNodeState;
+  /** The Output Type traced from the legend: ports of other types fade. */
+  trace?: OutputType | null;
   wire: WireFrom | null;
   renaming: boolean;
   onRename: (label: string | null | undefined) => void;
@@ -48,7 +50,7 @@ type Props = {
   onAdd: (side: "next" | "prev") => void;
 };
 
-export function NodeView({ id, lib, placement, selected, focused, readOnly, problems, missingInputs, flash, runState, wire, renaming, onRename, onAction, onAdd }: Props) {
+export function NodeView({ id, lib, placement, selected, focused, readOnly, problems, missingInputs, flash, runState, trace, wire, renaming, onRename, onAction, onAdd }: Props) {
   const title = placement.label || lib.name;
   const pill = lib.kind === "ticket";
   const dim = wire !== null && wire.nodeId !== id && !acceptsWire(id, lib, placement, wire);
@@ -107,6 +109,7 @@ export function NodeView({ id, lib, placement, selected, focused, readOnly, prob
               <div
                 key={i.name}
                 className={`fport in ${missingInputs?.has(i.name) ? "missing" : ""}`}
+                data-faded={(trace && trace !== i.type) || undefined}
                 title={missingInputs?.has(i.name) ? `${i.name}: ${i.type}, required and not connected. Drag an Output of type ${i.type} here.` : `${i.name}: ${i.type}${i.required ? " (required)" : ""}`}
               >
                 <CanvasHandle nodeId={id} type="target" name={i.name} fit={fitOf("target", i.type)} color={outputColor(i.type)} label={`Input ${i.name} (${i.type})`} />
@@ -121,7 +124,7 @@ export function NodeView({ id, lib, placement, selected, focused, readOnly, prob
             {lib.outputs.map((o) => {
               const off = o.optional && !placement.enabledOptionalOutputs.includes(o.name);
               return (
-                <div key={o.name} className={`fport out ${off ? "off" : ""}`} title={`${o.name}: ${o.type}${o.optional ? (off ? " (optional, off)" : " (optional)") : ""}`}>
+                <div key={o.name} className={`fport out ${off ? "off" : ""}`} data-faded={(trace && trace !== o.type) || undefined} title={`${o.name}: ${o.type}${o.optional ? (off ? " (optional, off)" : " (optional)") : ""}`}>
                   <span className="plabel">{o.name}</span>
                   <CanvasHandle nodeId={id} type="source" name={o.name} fit={fitOf("source", o.type, !off)} color={outputColor(o.type)} label={`Output ${o.name} (${o.type})`} />
                 </div>

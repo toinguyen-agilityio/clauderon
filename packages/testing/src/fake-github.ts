@@ -1,6 +1,7 @@
-import type { GitHubReader, Issue, PullRequest, Repository } from "@clauderon/core";
+import type { GitHubReader, Issue, OpenPullRequest, PullRequest, Repository } from "@clauderon/core";
 
-type RepoData = Repository & { branches: string[]; issues: Issue[]; pullRequests: PullRequest[] };
+type FakePullRequest = PullRequest & Partial<Pick<OpenPullRequest, "title" | "authorLogin" | "createdAt" | "reviewers">>;
+type RepoData = Repository & { branches: string[]; issues: Issue[]; pullRequests: FakePullRequest[] };
 
 /** Repositories, branches, issues and pull requests held in memory. */
 export class FakeGitHub implements GitHubReader {
@@ -29,7 +30,7 @@ export class FakeGitHub implements GitHubReader {
     return this;
   }
 
-  addPullRequest(owner: string, repo: string, pullRequest: PullRequest): this {
+  addPullRequest(owner: string, repo: string, pullRequest: FakePullRequest): this {
     this.get(owner, repo).pullRequests.push(pullRequest);
     return this;
   }
@@ -52,6 +53,12 @@ export class FakeGitHub implements GitHubReader {
 
   async findPullRequest(owner: string, repo: string, branch: string): Promise<PullRequest | null> {
     return this.get(owner, repo).pullRequests.find((p) => p.branch === branch) ?? null;
+  }
+
+  async listOpenPullRequests(owner: string, repo: string): Promise<OpenPullRequest[]> {
+    return this.get(owner, repo)
+      .pullRequests.filter((p) => p.state === "open")
+      .map((p) => ({ title: `Pull request ${p.number}`, authorLogin: "octocat", createdAt: new Date(0), reviewers: [], ...p, state: "open" }));
   }
 
   private get(owner: string, repo: string): RepoData {

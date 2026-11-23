@@ -15,7 +15,7 @@ import {
 import type { AppDeps } from "../src/server/deps";
 import { cloneMyFlow, createMyFlow, deleteMyFlow, editorData, exportMyFlow, importMyFlow, saveMyFlow, viewFlows } from "../src/server/flows";
 import { startDialog } from "../src/server/start";
-import { cloneMyNode, createMyNode, deleteMyNode, updateMyNode, viewLibrary } from "../src/server/library";
+import { cloneMyNode, createMyNode, deleteMyNode, exportMyNodes, importMyNodes, updateMyNode, viewLibrary } from "../src/server/library";
 
 let test: TestDatabase;
 let db: Db;
@@ -61,6 +61,26 @@ describe("Flows page (spec M2 §2)", () => {
     expect(samples.every((f) => f.nodeCount > 0)).toBe(true);
     // each Flow lists its Nodes for the row preview, the entry Ticket first
     expect(samples.every((f) => f.nodes.length === f.nodeCount && f.nodes[0]?.kind === "ticket")).toBe(true);
+    // with its step: the Nodes that run side by side share one
+    const plan = samples.find((f) => f.name === "Plan and deliver")!;
+    const stepOf = (name: string) => plan.nodes.find((n) => n.name === name)?.step;
+    expect(stepOf("Ticket")).toBe(0);
+    expect(stepOf("Run tests")).toBe(stepOf("Capture screenshots"));
+    expect(stepOf("Open a pull request")).toBe(stepOf("Run tests")! + 1);
+    // the editing Member's name when they have one, else null
+    expect(samples.every((f) => f.updatedByName === null)).toBe(true);
+  });
+
+  it("cloning the same Flow again names the copies '(copy 2)', '(copy 3)', so no two cloned Flows share a name", async () => {
+    const flowId = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const names: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const copy = await cloneMyFlow(deps, ann, flowId);
+      if (!copy.ok) throw new Error("clone failed");
+      names.push(copy.name);
+    }
+    expect(names).toEqual(["Basic ticket delivery (copy)", "Basic ticket delivery (copy 2)", "Basic ticket delivery (copy 3)"]);
   });
 
   it("T2-7: clone copies the placements and edges into an editable Flow named '<name> (copy)'; a sample can be deleted too", async () => {
@@ -135,7 +155,12 @@ describe("Flows page (spec M2 §2)", () => {
     const copy = await cloneMyFlow(deps, ann, flowId);
     if (!copy.ok) throw new Error("clone failed");
     // The sample has a Run in its history and is a sample; the clone has none and can go.
-    expect((await viewFlows(deps)).samples.every((f) => f.lock === null)).toBe(true);
+    const view = await viewFlows(deps);
+    expect(view.samples.every((f) => f.lock === null)).toBe(true);
+    // The list gets the Run count from the server; the server rule still refuses.
+    expect(view.samples.find((f) => f.id === flowId)!.runCount).toBe(1);
+    expect(view.flows.find((f) => f.id === copy.flowId)!.runCount).toBe(0);
+    expect(await deleteMyFlow(deps, ann, flowId)).toMatchObject({ ok: false });
     expect(await deleteMyFlow(deps, ann, copy.flowId)).toEqual({ ok: true });
   });
 });
@@ -305,6 +330,38 @@ describe("Export and import a Flow (issue #98)", () => {
     expect(library.find((n) => n.name === original)).toMatchObject({ isSample: true });
   });
 
+  it("imports into an empty library: every Node, the Ticket Node included, is created and the Flow is restored", async () => {
+    const sample = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const { json } = await exported(sample);
+    const original = await loadFlowDetail(db, sample);
+    await db.execute(sql`truncate flow, node cascade`);
+    expect(await viewLibrary(deps)).toHaveLength(0);
+
+    const result = await importMyFlow(deps, ann, json);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.name).toBe("Basic ticket delivery");
+    const library = await viewLibrary(deps);
+    expect(result.createdNodes).toBe(library.length);
+    expect(library.filter((n) => n.kind === "ticket")).toHaveLength(1);
+    expect(library.every((n) => !n.isSample)).toBe(true);
+    const copy = await loadFlowDetail(db, result.flowId);
+    expect(copy!.nodes).toHaveLength(original!.nodes.length);
+    expect(copy!.edges).toHaveLength(original!.edges.length);
+    expect((await viewFlows(deps)).flows.find((f) => f.id === result.flowId)!.problems).toBe(0);
+  });
+
+  it("a Ticket Node that breaks the Ticket contract is refused and nothing is created", async () => {
+    const sample = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const file = JSON.parse((await exported(sample)).json);
+    file.nodes.find((n: { kind: string }) => n.kind === "ticket").outputs = [{ name: "plan", type: "plan", optional: false }];
+    await db.execute(sql`truncate flow, node cascade`);
+    expect(await importMyFlow(deps, ann, JSON.stringify(file))).toMatchObject({ ok: false });
+    expect(await db.select().from(schema.node)).toHaveLength(0);
+    expect(await db.select().from(schema.flow)).toHaveLength(0);
+  });
+
   it("an invalid file creates nothing", async () => {
     await sampleFlowId(db);
     const ann = await memberRow(db, "ann@example.com");
@@ -382,6 +439,69 @@ describe("Node library (spec M2 §4)", () => {
     const ticket = (await viewLibrary(deps)).find((n) => n.kind === "ticket")!;
     expect(await cloneMyNode(deps, ann, ticket.id)).toMatchObject({ ok: false });
     expect(await cloneMyNode(deps, ann, crypto.randomUUID())).toEqual({ ok: false, error: "That Node no longer exists." });
+  });
+
+  describe("import and export Nodes (issue #116)", () => {
+    const file = (...nodes: object[]) => JSON.stringify({ format: "clauderon-nodes", version: 1, nodes });
+    const agent = { name: "Review", kind: "agent", instructions: "Review the branch.", command: null, inputs: [{ name: "branch", type: "branch", required: true }], outputs: [{ name: "summary", type: "summary", optional: false }] };
+    const find = async (name: string) => (await viewLibrary(deps)).find((n) => n.name === name);
+
+    it("imports into an empty library, with one audit entry per Node", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      const result = await importMyNodes(deps, ann, file(agent, lint()));
+      expect(result).toMatchObject({ ok: true, skipped: [], tickets: [] });
+      expect(result.ok && result.created.map((c) => c.name)).toEqual(["Review", "Lint"]);
+      expect(await find("Review")).toMatchObject({ isSample: false, kind: "agent", usedBy: [] });
+      expect(await actions()).toEqual(["node.create", "node.create"]);
+    });
+
+    it("skips a Node the library already has and renames a different one with the same name", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      await importMyNodes(deps, ann, file(agent));
+      const again = await importMyNodes(deps, ann, file(agent, { ...agent, instructions: "Something else." }));
+      expect(again).toMatchObject({ ok: true, skipped: ["Review"] });
+      expect(again.ok && again.created.map((c) => c.name)).toEqual(["Copy of Review"]);
+      expect((await find("Review"))!.instructions).toBe("Review the branch.");
+      expect(await find("Copy of Review")).toBeDefined();
+      // The same Node twice in one file is created once.
+      const twice = await importMyNodes(deps, ann, file(lint(), lint()));
+      expect(twice).toMatchObject({ ok: true, skipped: ["Lint"] });
+    });
+
+    it("creates nothing and names the Node when any entry is invalid, or the file is not a Node file", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      const bad = await importMyNodes(deps, ann, file(agent, lint({ name: "Broken", command: "" })));
+      expect(bad).toEqual({ ok: false, error: 'Node "Broken": A Command Node needs a command.' });
+      expect(await find("Review")).toBeUndefined();
+      expect(await importMyNodes(deps, ann, "not json")).toMatchObject({ ok: false });
+      expect(await importMyNodes(deps, ann, JSON.stringify({ format: "clauderon-flow", version: 1 }))).toMatchObject({ ok: false });
+      expect(await importMyNodes(deps, ann, file())).toMatchObject({ ok: false });
+      expect(await actions()).toEqual([]);
+    });
+
+    it("skips a Ticket entry with a message and still creates the rest", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      const result = await importMyNodes(deps, ann, file({ ...agent, name: "Ticket", kind: "ticket" }, agent));
+      expect(result).toMatchObject({ ok: true, tickets: ["Ticket"] });
+      expect(result.ok && result.created.map((c) => c.name)).toEqual(["Review"]);
+      expect(await find("Ticket")).toBeUndefined();
+    });
+
+    it("exports Nodes to a file that imports back, with no ids or dates and tokens masked", async () => {
+      const ann = await memberRow(db, "ann@example.com");
+      await importMyNodes(deps, ann, file({ ...agent, instructions: "Use ghp_abcdefghijklmnopqrstuvwxyz0123456789 to review." }, lint()));
+      const ids = (await viewLibrary(deps)).map((n) => n.id);
+      const exported = await exportMyNodes(deps, ids);
+      if (!exported.ok) throw new Error(exported.error);
+      expect(exported.json).not.toMatch(/ghp_abcdef/);
+      const parsed = JSON.parse(exported.json) as { nodes: object[] };
+      expect(parsed.nodes).toHaveLength(2);
+      for (const n of parsed.nodes) expect(Object.keys(n).sort()).toEqual(["command", "inputs", "instructions", "kind", "name", "outputs"]);
+      expect(await exportMyNodes(deps, [crypto.randomUUID()])).toEqual({ ok: false, error: "That Node no longer exists." });
+      // Back into the same library: both Nodes already exist (the masked one differs, so it is a copy).
+      const back = await importMyNodes(deps, ann, exported.json);
+      expect(back).toMatchObject({ ok: true, skipped: ["Lint"] });
+    });
   });
 
   it("T2-6: editing an unlocked Node re-validates every Flow using it and says how many changed", async () => {

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FlowRowActions } from "./flow-row-actions";
-import { filterFlows, groupFlows, pipelinePreview, problemsLabel, scopeCounts, type FlowRowView, type FlowScope } from "./flows-view";
+import { kindIcon } from "./[id]/flow-icons";
+import { filterFlows, flowSteps, groupFlows, problemsLabel, scopeCounts, type FlowRowView, type FlowScope } from "./flows-view";
 
 const SCOPES: { scope: FlowScope; label: string }[] = [
   { scope: "all", label: "All" },
@@ -19,64 +20,61 @@ const EMPTY: Record<FlowScope, string> = {
   problems: "No Flow has problems.",
 };
 
-/** The Nodes of a Flow in order, so a row says what the Flow does without opening it. */
-function Pipeline({ nodes }: { nodes: FlowRowView["nodes"] }) {
+/**
+ * The Flow as its steps in run order: Nodes that run side by side share a column, so a
+ * branch reads as one. Long Flows wrap instead of being cut short.
+ */
+function Steps({ nodes }: { nodes: FlowRowView["nodes"] }) {
   if (nodes.length === 0) return <span className="faint small">No Nodes yet.</span>;
-  const { shown, hidden } = pipelinePreview(nodes);
   return (
-    <ol className="flow-pipe" aria-label="Nodes, in order">
-      {shown.map((n, i) => (
-        <li key={i}>
-          {i > 0 && (
-            <span className="flow-arrow" aria-hidden="true">
-              ›
+    <ol className="flow-steps" aria-label="Nodes, step by step">
+      {flowSteps(nodes).map((step, i) => (
+        <li key={i} className={step.length > 1 ? "par" : undefined} aria-label={step.length > 1 ? `Side by side: ${step.map((n) => n.name).join(", ")}` : undefined}>
+          {step.map((n, j) => (
+            <span key={j} className={`flow-step k-${n.kind} ${n.kind === "ticket" ? "ticket" : ""}`}>
+              <span className="flow-step-ic" aria-hidden="true">
+                {kindIcon(n.kind)}
+              </span>
+              {n.name}
             </span>
-          )}
-          <span className={`flow-node k-${n.kind}`}>{n.name}</span>
+          ))}
         </li>
       ))}
-      {hidden.length > 0 && (
-        <li>
-          <span className="flow-arrow" aria-hidden="true">
-            ›
-          </span>
-          <span className="flow-node more" title={hidden.map((n) => n.name).join(", ")}>
-            +{hidden.length} more
-          </span>
-        </li>
-      )}
     </ol>
   );
 }
 
+/** A Flow; the whole row opens it in the editor (its name is the link), the icons act on it. */
 function FlowCard({ flow: f }: { flow: FlowRowView }) {
+  const steps = flowSteps(f.nodes).length;
   return (
-    <article className="card flow-card" data-testid={`flow-${f.name}`}>
-      <div className="flow-main">
-        <div className="flow-title">
-          <Link href={`/flows/${f.id}`} className="flow-name">
-            {f.name}
-          </Link>
-          {f.lock && (
-            <Link className="tag dry" href={`/runs/${f.lock.runId}`} title="The oldest Active Run that uses this Flow">
-              Locked by Run {f.lock.runId.slice(0, 6)} ({f.lock.state.replaceAll("_", " ")})
-            </Link>
-          )}
-        </div>
-        <Pipeline nodes={f.nodes} />
-        <div className="flow-meta small">
-          {f.problems > 0 && <span className="pill fail">{problemsLabel(f.problems)}</span>}
-          <span className="faint">
-            {f.nodeCount} Node{f.nodeCount === 1 ? "" : "s"}
+    <article id={`flow-${f.id}`} className="card flow-card" data-testid={`flow-${f.name}`}>
+      <div className="flow-title">
+        <Link href={`/flows/${f.id}`} className="flow-name">
+          {f.name}
+        </Link>
+        {f.problems > 0 && (
+          <span className="pill fail flow-flag">
+            {problemsLabel(f.problems)}
           </span>
-          {f.updatedBy && (
-            <span className="faint" title={f.updatedTitle}>
-              {f.updatedBy} · {f.updatedLabel}
-            </span>
-          )}
-        </div>
+        )}
+        {f.lock && (
+          <Link className="pill run flow-flag" href={`/runs/${f.lock.runId}`} title="The oldest Active Run that uses this Flow">
+            Locked by Run {f.lock.runId.slice(0, 6)} ({f.lock.state.replaceAll("_", " ")})
+          </Link>
+        )}
+        <span className="faint small">
+          {f.nodeCount} Node{f.nodeCount === 1 ? "" : "s"}
+          {steps > 0 && steps !== f.nodeCount ? ` in ${steps} steps` : ""}
+        </span>
       </div>
-      <FlowRowActions flowId={f.id} name={f.name} locked={f.lock !== null} />
+      <FlowRowActions flowId={f.id} name={f.name} locked={f.lock !== null} runCount={f.runCount} />
+      <Steps nodes={f.nodes} />
+      {f.updatedBy && (
+        <span className="flow-who small faint" title={f.updatedTitle}>
+          {f.updatedBy} · {f.updatedLabel}
+        </span>
+      )}
     </article>
   );
 }

@@ -2,7 +2,7 @@
 // `<AGENT_VERSION>+<build>`, the build being a hash of its code; one run from
 // a checkout with tsx reports `<AGENT_VERSION>-dev` and never updates itself.
 
-export const AGENT_VERSION = "0.4.0";
+export const AGENT_VERSION = "0.5.0";
 
 declare const __AGENT_BUILD__: string | undefined;
 declare const __OPEN_PR_SCRIPT__: string | undefined;

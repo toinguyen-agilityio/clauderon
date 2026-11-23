@@ -1,4 +1,4 @@
-import { buildFlowFile, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
+import { agentSupportsFlowDrafts, buildFlowFile, isMachineReady, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
 import {
   cloneFlow,
   createFlow,
@@ -6,6 +6,7 @@ import {
   importFlow,
   listLibraryRows,
   flowLocks,
+  getMachineOfMember,
   listFlowRows,
   loadFlow,
   loadFlowDetail,
@@ -17,6 +18,7 @@ import {
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
 import { copyName } from "../app/(app)/flows/library/library-view";
+import { layerOf } from "../app/(app)/flows/[id]/flow-layout";
 
 // The Flows page (spec M2 §2, FLW-7 … FLW-9) as plain functions over the
 // database, so tests drive them directly and pages and actions stay thin.
@@ -37,10 +39,15 @@ export type FlowView = {
   name: string;
   isSample: boolean;
   nodeCount: number;
+  runCount: number;
   problems: number;
-  /** The Nodes of the Flow in the order a Run executes them (canvas order if the Flow has a cycle). */
-  nodes: { name: string; kind: NodeKind }[];
+  /**
+   * The Nodes of the Flow in the order a Run executes them (canvas order if the Flow has a
+   * cycle), each with its step: Nodes on the same step can run side by side.
+   */
+  nodes: { name: string; kind: NodeKind; step: number }[];
   updatedByEmail: string;
+  updatedByName: string | null;
   updatedAt: Date;
   lock: FlowLock | null;
 };
@@ -56,17 +63,23 @@ export async function viewFlows(deps: AppDeps) {
   const libraryById = new Map(library.map((n) => [n.id, n]));
   for (const r of rows) {
     const graph = await loadFlow(deps.db, r.id);
+    const steps = layerOf(
+      graph.nodes.map((n) => n.id),
+      graph.edges.map((e) => ({ from: e.fromFlowNodeId, to: e.toFlowNodeId })),
+    );
     flows.push({
       id: r.id,
       name: r.name,
       isSample: r.isSample,
       nodeCount: r.nodeCount,
+      runCount: r.runCount,
       problems: validateFlow(graph, library).length,
       nodes: executionOrder(graph).flatMap((n) => {
         const lib = libraryById.get(n.nodeId);
-        return lib ? [{ name: lib.name, kind: lib.kind }] : [];
+        return lib ? [{ name: lib.name, kind: lib.kind, step: steps.get(n.id) ?? 0 }] : [];
       }),
       updatedByEmail: r.updatedByEmail,
+      updatedByName: r.updatedByName,
       updatedAt: r.updatedAt,
       lock: locks.get(r.id) ?? null,
     });
@@ -243,7 +256,7 @@ export async function importMyFlow(deps: AppDeps, viewer: Viewer, text: string):
 
   const nodeNames = rows.map((n) => n.name);
   const nodes = parsed.flow.nodes.map((n) => {
-    const same = rows.find((r) => (n.isTicket ? r.id === ticket!.id : sameDefinition(r, n.definition)));
+    const same = rows.find((r) => (n.isTicket ? ticket !== null && r.id === ticket.id :sameDefinition(r, n.definition)));
     if (same) return { ref: n.ref, existingId: same.id, definition: n.definition };
     const clash = nodeNames.some((x) => x.toLowerCase() === n.definition.name.toLowerCase());
     const name = clash ? copyName(n.definition.name, nodeNames) : n.definition.name;
@@ -256,4 +269,15 @@ export async function importMyFlow(deps: AppDeps, viewer: Viewer, text: string):
   const created = await importFlow(deps.db, { name, nodes, placements: parsed.flow.placements, edges: parsed.flow.edges }, viewer.email, deps.clock.now());
   await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: created.id, detail: { imported: true, newNodes: created.createdNodes } });
   return { ok: true, flowId: created.id, name: created.name, createdNodes: created.createdNodes };
+}
+
+export type FlowBuildAvailability = { ok: true; machine: string } | { ok: false; reason: string };
+
+/** Whether the viewer's own Machine can draft a Flow now (ADR 0008): Claude runs there, never here. */
+export async function flowBuildAvailability(deps: AppDeps, viewer: Viewer): Promise<FlowBuildAvailability> {
+  const machine = await getMachineOfMember(deps.db, viewer.id);
+  if (!machine?.tokenHash) return { ok: false, reason: "Pair your Machine first: Claude runs on your own computer." };
+  if (!isMachineReady(machine)) return { ok: false, reason: "Your Machine is not ready. Open Machines to see why." };
+  if (!agentSupportsFlowDrafts(machine.agentVersion)) return { ok: false, reason: "Update your Machine's Agent to build Flows with it." };
+  return { ok: true, machine: machine.name ?? machine.hostname ?? "your Machine" };
 }

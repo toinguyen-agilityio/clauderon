@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { closeOnBackdrop } from "../../../components/dialog";
 import { Icon } from "../../../components/icons";
+import { keptReason } from "./flows-view";
 import { exportFlowAction, flowActionAction, type FlowFormState } from "./actions";
 
 /**
- * Edit, Clone, Export and Delete on one Flow, samples included (FLW-8, FLW-9), as icon buttons whose
- * name shows on hover. Delete asks in a dialog first; a Flow that an Active Run locks cannot be deleted,
+ * Clone, Export and Delete on one Flow, samples included (FLW-8, FLW-9), as quiet icon buttons whose
+ * name shows on hover; the row itself opens the Flow. Delete asks in a dialog first; a Flow that an Active Run locks cannot be deleted,
  * and says why.
  */
-export function FlowRowActions({ flowId, name, locked }: { flowId: string; name: string; locked: boolean }) {
+export function FlowRowActions({ flowId, name, locked, runCount }: { flowId: string; name: string; locked: boolean; runCount: number }) {
+  const kept = keptReason(runCount);
   const [state, action, pending] = useActionState<FlowFormState, FormData>(flowActionAction, { error: null, notice: null, openFlowId: null });
   const confirm = useRef<HTMLDialogElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -37,26 +39,42 @@ export function FlowRowActions({ flowId, name, locked }: { flowId: string; name:
     if (state.error || state.notice) confirm.current?.close();
   }, [state]);
 
-  const open = locked ? "View" : "Edit";
+  // After a clone, bring the new card into view and highlight it. The list refreshes after the
+  // action, so the card may arrive a moment later: look for it for a short while.
+  useEffect(() => {
+    const id = state.openFlowId;
+    if (!id) return;
+    let tries = 0;
+    let frame = 0;
+    const find = () => {
+      const card = document.getElementById(`flow-${id}`);
+      if (card) {
+        card.scrollIntoView({ block: "center", behavior: "smooth" });
+        card.classList.add("just-cloned");
+        return;
+      }
+      if (++tries < 60) frame = requestAnimationFrame(find);
+    };
+    find();
+    return () => cancelAnimationFrame(frame);
+  }, [state.openFlowId]);
+
   return (
     <div className="flow-actions">
       <form action={action} className="row" style={{ gap: 6 }}>
         <input type="hidden" name="flowId" value={flowId} />
-        <Link className="btn sm icon primary" href={`/flows/${flowId}`} aria-label={`${open} ${name}`} data-tip={open}>
-          {locked ? Icon.eye : Icon.pencil}
-        </Link>
-        <button type="submit" name="action" value="clone" className="btn sm icon" disabled={pending} aria-label={`Clone ${name}`} data-tip="Clone">
+        <button type="submit" name="action" value="clone" className="btn sm icon ghost" disabled={pending} aria-label={`Clone ${name}`} data-tip="Clone">
           {Icon.copy}
         </button>
-        <button type="button" className="btn sm icon" disabled={exporting} aria-label={`Export ${name}`} data-tip={exporting ? "Exporting…" : "Export"} onClick={() => void exportFlow()}>
+        <button type="button" className="btn sm icon ghost" disabled={exporting} aria-label={`Export ${name}`} data-tip={exporting ? "Exporting…" : "Export"} onClick={() => void exportFlow()}>
           {exporting ? Icon.spin : Icon.download}
         </button>
         <button
           type="button"
-          className="btn sm icon danger"
-          disabled={pending || locked}
+          className="btn sm icon ghost danger-hover"
+          disabled={pending || locked || kept !== null}
           aria-label={`Delete ${name}`}
-          data-tip={locked ? "Locked by an Active Run" : "Delete"}
+          data-tip={locked ? "Locked by an Active Run" : (kept ?? "Delete")}
           onClick={() => confirm.current?.showModal()}
         >
           {Icon.trash}
@@ -72,7 +90,7 @@ export function FlowRowActions({ flowId, name, locked }: { flowId: string; name:
             </div>
             <div className="modal-b">
               <p className="small">
-                <b>{name}</b> will be deleted. This cannot be undone. A Flow with Runs in its history is kept.
+                <b>{name}</b> will be deleted. This cannot be undone.
               </p>
             </div>
             <div className="modal-f">
@@ -86,6 +104,11 @@ export function FlowRowActions({ flowId, name, locked }: { flowId: string; name:
           </div>
         </dialog>
       </form>
+      {kept && !locked && (
+        <span className="faint small" data-testid="delete-kept-reason">
+          {kept}
+        </span>
+      )}
       {exportError && (
         <span className="err-text small" role="alert">
           {exportError}

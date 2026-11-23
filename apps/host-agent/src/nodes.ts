@@ -21,10 +21,10 @@ const SAME_BOOT_MS = 120_000;
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 
 /** What Claude Code prints when `--resume` names a session it does not know. */
-const UNKNOWN_SESSION = /no conversation found|session[^\n]*(not found|does not exist|unknown)|invalid session/i;
+export const UNKNOWN_SESSION = /no conversation found|session[^\n]*(not found|does not exist|unknown)|invalid session/i;
 
 /** Splits streamed text into lines, holding a partial line until it ends. */
-class Lines {
+export class Lines {
   private rest = "";
   constructor(private readonly emit: (line: string) => void) {}
   push(text: string): void {
@@ -60,7 +60,7 @@ type PidFile = { pid: number; bootAt: string };
 const pidFile = (home: string, attemptId: string) => join(home, "nodes", `${attemptId}.json`);
 
 /** SIGTERM now, SIGKILL after the grace period, to a whole process group. */
-function terminate(kill: (signal: "TERM" | "KILL") => void, graceMs: number): void {
+export function terminate(kill: (signal: "TERM" | "KILL") => void, graceMs: number): void {
   kill("TERM");
   setTimeout(() => kill("KILL"), graceMs).unref?.();
 }

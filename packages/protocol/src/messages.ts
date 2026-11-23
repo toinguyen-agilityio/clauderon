@@ -21,7 +21,18 @@ export const messageSchemas = {
   }),
   welcome: z.object({ lastReceivedId: z.number().int().nonnegative() }),
   ack: z.object({ upTo: z.number().int().nonnegative() }),
-  heartbeat: z.object({ at: z.string() }),
+  heartbeat: z.object({
+    at: z.string(),
+    /** What the Machine is using now, shown beside its totals. Optional: older Agents do not send it. */
+    usage: z
+      .object({
+        memoryUsedMb: z.number().nonnegative(),
+        diskFreeGb: z.number().nonnegative(),
+        /** Busy share of all cores since the previous heartbeat, 0-100. */
+        cpuPercent: z.number().min(0).max(100),
+      })
+      .optional(),
+  }),
 
   // Machine logins (POD-5): checked before each Run's first Node.
   "machine.checkLogins": z.object({}),
@@ -81,6 +92,27 @@ export const messageSchemas = {
   }),
   "node.kill": z.object({ attemptId: z.string() }),
   "pr.writeBody": z.object({ runId: z.string(), worktreePath: z.string(), body: z.string() }),
+
+  // Flow Drafts (ADR 0008): one Claude Code call outside any Run, in the draft's own empty
+  // directory, so a later call can resume its session. Agents before 0.5.0 do not know them.
+  "flow.draft": z.object({
+    draftId: z.string().uuid(),
+    /** One call of the draft; the answer names it. */
+    jobId: z.string(),
+    prompt: z.string(),
+    resumeSessionId: z.string().optional(),
+  }),
+  "flow.drafted": z.object({
+    jobId: z.string(),
+    exitCode: z.number().int(),
+    /** Claude's final message, masked. */
+    finalText: z.string().optional(),
+    sessionId: z.string().optional(),
+    error: z.string().optional(),
+    /** `--resume` named a session Claude Code no longer has. */
+    unknownSession: z.boolean().optional(),
+  }),
+  "flow.draftKill": z.object({ jobId: z.string() }),
 
 } as const;
 

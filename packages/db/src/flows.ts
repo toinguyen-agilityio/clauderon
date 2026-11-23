@@ -86,8 +86,12 @@ export type FlowListRow = {
   isSample: boolean;
   clonedFromId: string | null;
   updatedByEmail: string;
+  /** The Member's name, when one signed in with that email has a name. */
+  updatedByName: string | null;
   updatedAt: Date;
   nodeCount: number;
+  /** Runs in the Flow's history; `deleteFlow` refuses a Flow that has any. */
+  runCount: number;
 };
 
 /** Every Flow with its number of placed Nodes, for the Flows page (FLW-9). */
@@ -99,8 +103,10 @@ export async function listFlowRows(db: Db): Promise<FlowListRow[]> {
       isSample: flow.isSample,
       clonedFromId: flow.clonedFromId,
       updatedByEmail: flow.updatedByEmail,
+      updatedByName: sql<string | null>`(select member.name from member where member.email = "flow"."updated_by_email")`,
       updatedAt: flow.updatedAt,
       nodeCount: sql<number>`(select count(*)::int from flow_node where flow_node.flow_id = "flow"."id")`,
+      runCount: sql<number>`(select count(*)::int from run where run.flow_id = "flow"."id")`,
     })
     .from(flow)
     .orderBy(flow.name);
@@ -121,17 +127,25 @@ export async function createFlow(db: Db, name: string, actorEmail: string, now: 
   });
 }
 
+/** `<name> (copy)`, then `(copy 2)`, `(copy 3)`… the first one not in `taken`. */
+export function copyName(name: string, taken: ReadonlySet<string>): string {
+  let candidate = `${name} (copy)`;
+  for (let n = 2; taken.has(candidate); n++) candidate = `${name} (copy ${n})`;
+  return candidate;
+}
+
 /**
  * Copies a Flow, its placements and edges into a new non-sample Flow named
- * `<name> (copy)` (FLW-8). Library Nodes are shared, not copied.
+ * `<name> (copy)`, or `(copy 2)`, `(copy 3)`… when that is taken (FLW-8). Library Nodes are shared, not copied.
  */
 export async function cloneFlow(db: Db, flowId: string, actorEmail: string, now: Date): Promise<{ id: string; name: string } | null> {
   return db.transaction(async (tx) => {
     const [source] = await tx.select().from(flow).where(eq(flow.id, flowId));
     if (!source) return null;
+    const taken = new Set((await tx.select({ name: flow.name }).from(flow)).map((r) => r.name));
     const [copy] = await tx
       .insert(flow)
-      .values({ name: `${source.name} (copy)`, isSample: false, clonedFromId: source.id, updatedByEmail: actorEmail, updatedAt: now })
+      .values({ name: copyName(source.name, taken), isSample: false, clonedFromId: source.id, updatedByEmail: actorEmail, updatedAt: now })
       .returning();
     const placements = await tx.select().from(flowNode).where(eq(flowNode.flowId, flowId));
     const ids = new Map<string, string>();

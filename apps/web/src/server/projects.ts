@@ -83,6 +83,24 @@ export type SyncResult = { ok: true; summary: { added: number; updated: number; 
 export async function syncProject(deps: AppDeps, viewer: Viewer, projectId: string): Promise<SyncResult | "not-found"> {
   const project = await getProject(deps.db, projectId);
   if (!project) return "not-found";
+  const result = await pullFromGitHub(deps, project);
+  if (result.ok) {
+    await recordAudit(deps.db, { actorEmail: viewer.email, action: "project.sync", subjectType: "project", subjectId: project.id, detail: result.summary });
+  }
+  return result;
+}
+
+/**
+ * Sync every Project when the Tickets page opens, so it shows GitHub as it is now.
+ * Not audited (no one asked for it); a failure stays on its Project and the page
+ * still renders with the last synced Tickets.
+ */
+export async function syncAllProjects(deps: AppDeps): Promise<void> {
+  const projects = await listProjects(deps.db);
+  await Promise.all(projects.map((p) => pullFromGitHub(deps, p)));
+}
+
+async function pullFromGitHub(deps: AppDeps, project: { id: string; owner: string; repo: string }): Promise<SyncResult> {
   const now = deps.clock.now();
   try {
     const issues = await deps.github.listOpenIssues(project.owner, project.repo);
@@ -107,7 +125,6 @@ export async function syncProject(deps: AppDeps, viewer: Viewer, projectId: stri
 
     const summary = { added, updated, closed };
     await recordSync(deps.db, project.id, { summary }, now);
-    await recordAudit(deps.db, { actorEmail: viewer.email, action: "project.sync", subjectType: "project", subjectId: project.id, detail: summary });
     return { ok: true, summary };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

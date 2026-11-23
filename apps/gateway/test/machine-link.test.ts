@@ -83,6 +83,19 @@ describe("MachineLinks", () => {
     expect((await getMachine(db, machine.id))?.lastHeartbeatAt).toEqual(new Date("2026-11-16T09:00:10Z"));
   });
 
+  it("keeps the usage a heartbeat carries, and the last one when a heartbeat has none", async () => {
+    const agent = new FakeAgent();
+    const socket = connect(agent);
+    await flush();
+    const usage = { memoryUsedMb: 15360, diskFreeGb: 65, cpuPercent: 13 };
+    socket.send(serialize(controlMessage("heartbeat", { at: "now", usage })));
+    await flush();
+    expect((await getMachine(db, machine.id))?.usage).toEqual(usage);
+    agent.heartbeat();
+    await flush();
+    expect((await getMachine(db, machine.id))?.usage).toEqual(usage);
+  });
+
   it("T0-14: a message dropped before it was acknowledged is delivered exactly once after reconnect", async () => {
     const agent = new FakeAgent();
     let socket = connect(agent);

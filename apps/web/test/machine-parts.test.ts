@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claudeAccountLabel } from "../src/app/(app)/machines/machine-parts";
+import { claudeAccountLabel, resourceLabels, usageLevel } from "../src/app/(app)/machines/machine-parts";
 
 describe("claudeAccountLabel", () => {
   it("names the Claude account Runs use by the email's name, with its plan, in one short label", () => {
@@ -8,5 +8,31 @@ describe("claudeAccountLabel", () => {
     // Logged out, or an older Agent that does not say: nothing to show.
     expect(claudeAccountLabel({ claudeLoggedIn: false, claudeAccount: "ann@example.com", claudePlan: "pro" })).toBeNull();
     expect(claudeAccountLabel({ claudeLoggedIn: true, claudeAccount: null, claudePlan: null })).toBeNull();
+  });
+});
+
+describe("resourceLabels", () => {
+  const machine = { connected: true, cpus: 10, memoryMb: 24576, diskGb: 460, usage: { memoryUsedMb: 15360, diskFreeGb: 65, cpuPercent: 13 } };
+
+  it("shows usage over the total while the Agent is online and reports it", () => {
+    expect(resourceLabels(machine)).toEqual({
+      cpu: { text: "13% of 10 cores", percent: 13 },
+      ram: { text: "15 / 24 GB", percent: 63 },
+      disk: { text: "395 / 460 GB", percent: 86 },
+    });
+  });
+
+  it("shows the totals alone when the Agent is offline or sends no usage", () => {
+    const totals = { cpu: { text: "10 cores", percent: null }, ram: { text: "24 GB", percent: null }, disk: { text: "460 GB", percent: null } };
+    expect(resourceLabels({ ...machine, connected: false })).toEqual(totals);
+    expect(resourceLabels({ ...machine, usage: null })).toEqual(totals);
+    const none = { text: "—", percent: null };
+    expect(resourceLabels({ connected: false, cpus: null, memoryMb: null, diskGb: null, usage: null })).toEqual({ cpu: none, ram: none, disk: none });
+  });
+});
+
+describe("usageLevel", () => {
+  it("is green below 70%, amber from 70% and red from 90%", () => {
+    expect([0, 69, 70, 89, 90, 100].map(usageLevel)).toEqual(["ok", "ok", "wait", "wait", "fail", "fail"]);
   });
 });

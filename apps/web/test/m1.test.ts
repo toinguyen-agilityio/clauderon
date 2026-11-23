@@ -23,7 +23,7 @@ import {
   viewMachine,
   viewMachines,
 } from "../src/server/machines";
-import { enableRepository, enableableRepositories, removeRepository, syncProject } from "../src/server/projects";
+import { enableRepository, enableableRepositories, removeRepository, syncAllProjects, syncProject } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
 import { startDialog, startRuns } from "../src/server/start";
 import { viewTickets } from "../src/server/tickets";
@@ -301,34 +301,123 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
   });
 });
 
-describe("Pull requests page", () => {
-  it("lists Runs that opened a pull request by state, refreshing open ones from GitHub", async () => {
+describe("Tickets page Sync", () => {
+  it("syncs every Project from GitHub without an audit entry, keeping a failure on its Project", async () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    github.addIssue("acme", "web", { number: 1, title: "One" });
+    await projectRow(db, "acme", "web");
+    await projectRow(db, "acme", "gone");
+
+    await syncAllProjects(deps);
+
+    expect((await viewTickets(deps, {})).rows.map((r) => r.number)).toEqual([1]);
+    expect(await actions()).toEqual([]);
+    const [gone] = await db.select().from(schema.project).where(sql`repo = 'gone'`);
+    expect(gone!.syncError).toContain("acme/gone");
+  });
+});
+
+describe("Pull requests page", () => {
+  it("lists every open pull request of every Project from GitHub, with the Run that opened it, filtered by Project", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    github.addRepository({ owner: "acme", repo: "api", defaultBranch: "main" });
     const ann = await memberRow(db, "ann@example.com");
     const machine = await machineRow(db, ann.id);
-    const project = await projectRow(db);
-    const tickets = [await ticketRow(db, project.id, 5), await ticketRow(db, project.id, 6), await ticketRow(db, project.id, 7)];
+    const web = await projectRow(db, "acme", "web");
+    const api = await projectRow(db, "acme", "api");
+    const tickets = [await ticketRow(db, web.id, 5), await ticketRow(db, web.id, 6)];
     await startSampleBatch(db, ann, machine.id, tickets.map((t) => t.id), deps.clock.now());
     const runs = await db.select().from(schema.run);
     const byTicket = new Map(runs.map((r) => [r.ticketId, r.id]));
     await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/5-a", pullRequestNumber: 15, pullRequestState: "open" }).where(sql`id = ${byTicket.get(tickets[0]!.id)}`);
-    await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/6-b", pullRequestNumber: 16, pullRequestState: "closed" }).where(sql`id = ${byTicket.get(tickets[1]!.id)}`);
-    // Ticket 7's Run opened no pull request, so it is not listed.
-    github.addPullRequest("acme", "web", { number: 15, branch: "clauderon/5-a", state: "merged", url: "u15" });
+    // Merged on GitHub: not listed, whatever its Run recorded.
+    await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/6-b", pullRequestNumber: 16, pullRequestState: "open" }).where(sql`id = ${byTicket.get(tickets[1]!.id)}`);
+    github.addPullRequest("acme", "web", { number: 15, branch: "clauderon/5-a", state: "open", url: "u15", title: "Fix five", createdAt: new Date(2) });
+    github.addPullRequest("acme", "web", { number: 16, branch: "clauderon/6-b", state: "merged", url: "u16" });
+    github.addPullRequest("acme", "web", { number: 20, branch: "hand-made", state: "open", url: "u20", title: "By hand", authorLogin: "bob", createdAt: new Date(3) });
+    github.addPullRequest("acme", "api", { number: 3, branch: "x", state: "open", url: "u3", createdAt: new Date(1) });
 
-    const all = await viewPullRequests(deps, undefined, 1);
-    expect(all.rows.map((r) => [r.pullRequestNumber, r.pullRequestState]).sort()).toEqual([
-      [15, "merged"],
-      [16, "closed"],
+    const all = await viewPullRequests(deps, ann, { page: 1 });
+    expect(all.rows.map((r) => [r.repo, r.number, r.run ? r.run.key : r.authorLogin])).toEqual([
+      ["web", 20, "bob"],
+      ["web", 15, expect.stringContaining("5")],
+      ["api", 3, "octocat"],
     ]);
-    expect(all.counts).toEqual({ merged: 1, closed: 1 });
-    expect((await viewPullRequests(deps, "closed", 1)).rows.map((r) => r.pullRequestNumber)).toEqual([16]);
-    expect((await viewPullRequests(deps, "open", 1)).rows).toEqual([]);
+    expect(all.rows[1]!.title).toBe("Fix five");
+    expect(all.perProject).toEqual({ [web.id]: 2, [api.id]: 1 });
+    expect(all.total).toBe(3);
+
+    const ofApi = await viewPullRequests(deps, ann, { projectId: api.id, page: 1 });
+    expect(ofApi.rows.map((r) => r.number)).toEqual([3]);
+    expect(ofApi.counts).toEqual({ open: 1, needsYou: 0 });
   });
 
-  it("keeps only known states from the URL", () => {
-    expect(parsePullRequestTab("merged")).toBe("merged");
-    expect(parsePullRequestTab("draft")).toBeUndefined();
+  it("Needs you: open pull requests asking my Machine's gh login for a review", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    const ann = await memberRow(db, "ann@example.com");
+    const machine = await machineRow(db, ann.id);
+    await projectRow(db, "acme", "web");
+    github.addPullRequest("acme", "web", { number: 1, branch: "a", state: "open", url: "u1", reviewers: ["Ann-GH"] });
+    github.addPullRequest("acme", "web", { number: 2, branch: "b", state: "open", url: "u2", reviewers: ["bob"] });
+    github.addPullRequest("acme", "web", { number: 3, branch: "c", state: "open", url: "u3" });
+
+    // No gh login known yet: nothing needs me.
+    expect((await viewPullRequests(deps, ann, { tab: "needs-you", page: 1 })).rows).toEqual([]);
+
+    await db.update(schema.machine).set({ ghAccount: "ann-gh" }).where(sql`id = ${machine.id}`);
+    const view = await viewPullRequests(deps, ann, { tab: "needs-you", page: 1 });
+    expect(view.rows.map((r) => r.number)).toEqual([1]);
+    expect(view.counts).toEqual({ open: 3, needsYou: 1 });
+  });
+
+  it("filters by the Member who opened them: through their Run, or as their Machine's gh login; \"me\" is the viewer", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    const annMachine = await machineRow(db, ann.id);
+    await db.update(schema.machine).set({ ghAccount: "ann-gh" }).where(sql`id = ${annMachine.id}`);
+    const bobMachine = await machineRow(db, bob.id);
+    await db.update(schema.machine).set({ ghAccount: "bob-gh" }).where(sql`id = ${bobMachine.id}`);
+    const web = await projectRow(db, "acme", "web");
+    const ticket = await ticketRow(db, web.id, 5);
+    // Bob's Run opened #15 (under his gh login); Ann opened #20 by hand; #21 is from someone outside the team.
+    await startSampleBatch(db, bob, bobMachine.id, [ticket.id], deps.clock.now());
+    await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/5-a", pullRequestNumber: 15, pullRequestState: "open" });
+    github.addPullRequest("acme", "web", { number: 15, branch: "clauderon/5-a", state: "open", url: "u15", authorLogin: "bob-gh" });
+    github.addPullRequest("acme", "web", { number: 20, branch: "a", state: "open", url: "u20", authorLogin: "Ann-GH" });
+    github.addPullRequest("acme", "web", { number: 21, branch: "b", state: "open", url: "u21", authorLogin: "stranger" });
+
+    const numbers = async (memberId?: string) => (await viewPullRequests(deps, ann, { memberId, page: 1 })).rows.map((r) => r.number).sort();
+    expect(await numbers()).toEqual([15, 20, 21]);
+    expect(await numbers("me")).toEqual([20]);
+    expect(await numbers(bob.id)).toEqual([15]);
+    const mine = await viewPullRequests(deps, ann, { memberId: "me", page: 1 });
+    expect(mine.total).toBe(1);
+    expect(mine.members.map((m) => m.label)).toEqual(["bob@example.com"]);
+  });
+
+  it("falls back to the pull requests Runs recorded as open when GitHub cannot read a Project, and says which", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    const ann = await memberRow(db, "ann@example.com");
+    const machine = await machineRow(db, ann.id);
+    await projectRow(db, "acme", "web");
+    const gone = await projectRow(db, "acme", "gone");
+    const ticket = await ticketRow(db, gone.id, 5);
+    await startSampleBatch(db, ann, machine.id, [ticket.id], deps.clock.now());
+    await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/5-a", pullRequestNumber: 9, pullRequestState: "open" });
+    github.addPullRequest("acme", "web", { number: 1, branch: "b", state: "open", url: "u1" });
+
+    const view = await viewPullRequests(deps, ann, { page: 1 });
+    expect(view.rows.map((r) => [r.repo, r.number]).sort()).toEqual([
+      ["gone", 9],
+      ["web", 1],
+    ]);
+    expect(view.errors).toEqual([{ repo: "gone", error: expect.stringContaining("acme/gone") }]);
+  });
+
+  it("keeps only known tabs from the URL", () => {
+    expect(parsePullRequestTab("needs-you")).toBe("needs-you");
+    expect(parsePullRequestTab("merged")).toBeUndefined();
     expect(parsePullRequestTab(undefined)).toBeUndefined();
   });
 });

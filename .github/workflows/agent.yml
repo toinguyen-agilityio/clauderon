@@ -1,0 +1,43 @@
+name: Agent
+
+# ADR 0007: the Agent runs on every Member's own computer, so its install
+# and its tests run on macOS, Linux and Windows: the one-line installer
+# (its own Node from nodejs.org, the bundle), bash or Git Bash, and the doctor.
+# macOS and Windows runners are slow, so pull requests run this only when they
+# touch the Agent or what it is built from; pushes to staging and main always
+# run it, which catches anything these paths miss before a release.
+on:
+  pull_request:
+    paths:
+      - apps/host-agent/**
+      - packages/protocol/**
+      - packages/core/**
+      - packages/testing/**
+      - apps/web/src/server/agent-install.ts
+      - apps/web/src/app/agent/**
+      - apps/web/scripts/agent-smoke.ts
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .github/workflows/agent.yml
+  push:
+    branches: [main, staging]
+
+jobs:
+  agent:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @clauderon/host-agent test
+      - run: pnpm --filter @clauderon/host-agent build
+      - run: pnpm --filter @clauderon/web exec tsx scripts/agent-smoke.ts

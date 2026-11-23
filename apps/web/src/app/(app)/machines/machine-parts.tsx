@@ -9,7 +9,57 @@ export { MAX_SLOTS } from "@clauderon/core";
 export const defaultMachineName = (owner: { name: string | null; email: string }) => `${owner.name ?? owner.email}'s Machine`;
 
 /** RAM as stored (MB) in GB, with one decimal when needed: 2560 → "2.5 GB". */
-export const formatGb = (memoryMb: number) => `${Math.round((memoryMb / 1024) * 10) / 10} GB`;
+const toGb = (memoryMb: number) => Math.round((memoryMb / 1024) * 10) / 10;
+export const formatGb = (memoryMb: number) => `${toGb(memoryMb)} GB`;
+
+type ResourceMachine = {
+  connected: boolean;
+  cpus: number | null;
+  memoryMb: number | null;
+  diskGb: number | null;
+  usage: { memoryUsedMb: number; diskFreeGb: number; cpuPercent: number } | null;
+};
+
+/** One resource: its label, and the share in use (0-100) when the Agent reports it. */
+export type Resource = { text: string; percent: number | null };
+
+const share = (used: number, total: number) => Math.min(100, Math.max(0, Math.round((used / total) * 100)));
+
+/**
+ * CPU, RAM and disk as "used / total" while the Agent is online and reports
+ * usage; otherwise (offline, or an older Agent) the totals alone, with no share.
+ */
+export function resourceLabels(machine: ResourceMachine): { cpu: Resource; ram: Resource; disk: Resource } {
+  const usage = machine.connected ? machine.usage : null;
+  const { cpus, memoryMb, diskGb } = machine;
+  const none = { text: "—", percent: null };
+  const diskUsed = usage && diskGb ? Math.max(0, diskGb - usage.diskFreeGb) : 0;
+  return {
+    cpu: !cpus ? none : usage ? { text: `${usage.cpuPercent}% of ${cpus} cores`, percent: share(usage.cpuPercent, 100) } : { text: `${cpus} cores`, percent: null },
+    ram: !memoryMb
+      ? none
+      : usage
+        ? { text: `${toGb(usage.memoryUsedMb)} / ${formatGb(memoryMb)}`, percent: share(usage.memoryUsedMb, memoryMb) }
+        : { text: formatGb(memoryMb), percent: null },
+    disk: !diskGb ? none : usage ? { text: `${diskUsed} / ${diskGb} GB`, percent: share(diskUsed, diskGb) } : { text: `${diskGb} GB`, percent: null },
+  };
+}
+
+/** Green below 70% in use, amber from 70%, red from 90%. */
+export const usageLevel = (percent: number): "ok" | "wait" | "fail" => (percent >= 90 ? "fail" : percent >= 70 ? "wait" : "ok");
+
+/** A resource's label with a bar of its share in use, coloured by how full it is. */
+export function ResourceMeter({ label, resource }: { label: string; resource: Resource }) {
+  if (resource.percent === null) return <>{resource.text}</>;
+  return (
+    <span className="meter-row">
+      <span>{resource.text}</span>
+      <span className="meter" role="meter" aria-label={`${label} in use`} aria-valuenow={resource.percent} aria-valuemin={0} aria-valuemax={100}>
+        <span className={`meter-fill ${usageLevel(resource.percent)}`} style={{ width: `${resource.percent}%` }} />
+      </span>
+    </span>
+  );
+}
 
 /** The Machine's own name, or "<owner>'s Machine" when it has none. */
 export const machineName = (machine: { name: string | null; owner: { name: string | null; email: string } }) =>

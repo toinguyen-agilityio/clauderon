@@ -1,4 +1,4 @@
-import { checkNodeDefinition, validateFlow } from "@clauderon/core";
+import { buildNodeFile, checkNodeDefinition, parseNodeFile, validateFlow } from "@clauderon/core";
 import { createNode, deleteNode, listLibraryRows, loadFlow, loadLibrary, recordAudit, updateNode, type ChangeNodeResult } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
 import { copyName } from "../app/(app)/flows/library/library-view";
@@ -69,6 +69,56 @@ export async function deleteMyNode(deps: AppDeps, viewer: Viewer, nodeId: string
   if (!result.ok) return { ok: false, error: refusal(result) };
   await recordAudit(deps.db, { actorEmail: viewer.email, action: "node.delete", subjectType: "node", subjectId: nodeId, detail: { name } });
   return { ok: true, flows: 0, withProblems: 0 };
+}
+
+export type ExportNodesResult = { ok: true; filename: string; json: string } | { ok: false; error: string };
+
+/** Export (issue #116): one or several library Nodes, samples included, to a file with no ids, emails or dates. */
+export async function exportMyNodes(deps: AppDeps, nodeIds: readonly string[]): Promise<ExportNodesResult> {
+  const rows = await listLibraryRows(deps.db);
+  const chosen = nodeIds.map((id) => rows.find((n) => n.id === id));
+  if (chosen.length === 0 || chosen.some((n) => !n)) return { ok: false, error: "That Node no longer exists." };
+  const nodes = chosen.map((n) => n!);
+  const file = buildNodeFile(nodes);
+  const slug = (nodes.length === 1 ? nodes[0]!.name : "nodes").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "nodes";
+  return { ok: true, filename: `${slug}.nodes.json`, json: JSON.stringify(file, null, 2) };
+}
+
+export type ImportNodesResult =
+  | { ok: true; created: { id: string; name: string }[]; skipped: string[]; tickets: string[] }
+  | { ok: false; error: string };
+
+type Definition = { name: string; kind: string; instructions: string; command: string | null; inputs: unknown; outputs: unknown };
+const sameDefinition = (a: Definition, b: Definition) =>
+  a.name === b.name && a.kind === b.kind && a.instructions === b.instructions && a.command === b.command && JSON.stringify(a.inputs) === JSON.stringify(b.inputs) && JSON.stringify(a.outputs) === JSON.stringify(b.outputs);
+
+/**
+ * Import (issue #116): the whole file is checked first and nothing is created if any Node fails.
+ * A Node the library already has (same definition) is skipped, a different Node that only shares a
+ * name becomes "Copy of <name>", a Ticket entry is skipped; nothing is overwritten. Audit `node.create` per Node.
+ */
+export async function importMyNodes(deps: AppDeps, viewer: Viewer, text: string): Promise<ImportNodesResult> {
+  const parsed = parseNodeFile(text);
+  if (!parsed.ok) return parsed;
+  const known: Definition[] = (await listLibraryRows(deps.db)).map((n) => ({ ...n }));
+  const names = known.map((n) => n.name);
+  const created: { id: string; name: string }[] = [];
+  const skipped: string[] = [];
+  for (const definition of parsed.parsed.definitions) {
+    if (known.some((k) => sameDefinition(k, definition))) {
+      skipped.push(definition.name);
+      continue;
+    }
+    const clash = names.some((x) => x.toLowerCase() === definition.name.toLowerCase());
+    const name = clash ? copyName(definition.name, names) : definition.name;
+    names.push(name);
+    const final = { ...definition, name };
+    const { id } = await createNode(deps.db, final, viewer.email, deps.clock.now());
+    known.push(final);
+    created.push({ id, name });
+    await recordAudit(deps.db, { actorEmail: viewer.email, action: "node.create", subjectType: "node", subjectId: id, detail: { name, imported: true } });
+  }
+  return { ok: true, created, skipped, tickets: parsed.parsed.tickets };
 }
 
 export type CloneNodeOutcome = { ok: true; id: string; name: string } | { ok: false; error: string };

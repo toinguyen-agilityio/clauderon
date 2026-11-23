@@ -485,35 +485,20 @@ export async function listRuns(db: Db, filters: RunFilters, page = 1) {
   return { rows: rows.slice(0, RUNS_PAGE_SIZE), hasMore: rows.length > RUNS_PAGE_SIZE, total };
 }
 
-export type PullRequestFilter = "open" | "merged" | "closed";
-
-/** The Pull requests list: every Run that opened one, newest first, optionally of one PR state; paginated. */
-export async function listPullRequests(db: Db, state?: PullRequestFilter, page = 1) {
-  const conditions: SQL[] = [isNotNull(run.pullRequestNumber)];
-  if (state) conditions.push(eq(run.pullRequestState, state));
-  const where = and(...conditions);
-  const rows = await db
-    .select({ ...runListColumns, branch: run.branch, pullRequestUrl: run.pullRequestUrl })
+/**
+ * Every Run that opened a pull request, newest first. Not paginated: the Pull
+ * requests page matches them to GitHub's open pull requests.
+ */
+export async function listPullRequests(db: Db) {
+  return db
+    .select({ ...runListColumns, branch: run.branch, pullRequestUrl: run.pullRequestUrl, starterMemberId: run.starterMemberId })
     .from(run)
     .innerJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, ticket.projectId))
     .innerJoin(flow, eq(flow.id, run.flowId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
-    .where(where)
-    .orderBy(desc(run.queuedAt), desc(run.id))
-    .limit(RUNS_PAGE_SIZE + 1)
-    .offset((Math.max(1, page) - 1) * RUNS_PAGE_SIZE);
-  return { rows: rows.slice(0, RUNS_PAGE_SIZE), hasMore: rows.length > RUNS_PAGE_SIZE };
-}
-
-/** How many pull requests are in each state, for the Pull requests tabs. */
-export async function pullRequestCounts(db: Db): Promise<Partial<Record<PullRequestFilter, number>>> {
-  const rows = await db
-    .select({ state: run.pullRequestState, n: sql<number>`count(*)::int` })
-    .from(run)
     .where(isNotNull(run.pullRequestNumber))
-    .groupBy(run.pullRequestState);
-  return Object.fromEntries(rows.filter((r) => r.state !== null).map((r) => [r.state, r.n]));
+    .orderBy(desc(run.queuedAt), desc(run.id));
 }
 
 /** How many Runs are in each state, for the Runs page's summary. */

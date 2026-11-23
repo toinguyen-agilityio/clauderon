@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { filterFlows, groupFlows, pipelinePreview, problemsLabel, scopeCounts, type FlowRowView } from "../src/app/(app)/flows/flows-view";
+import { filterFlows, flowSteps, groupFlows, keptReason, problemsLabel, scopeCounts, type FlowRowView } from "../src/app/(app)/flows/flows-view";
 
 const flow = (name: string, over: Partial<FlowRowView> = {}): FlowRowView => ({
   id: name,
   name,
   isSample: false,
   nodeCount: 2,
+  runCount: 0,
   problems: 0,
   nodes: [
-    { name: "Ticket", kind: "ticket" },
-    { name: "Code a change", kind: "agent" },
+    { name: "Ticket", kind: "ticket", step: 0 },
+    { name: "Code a change", kind: "agent", step: 1 },
   ],
   updatedBy: "ann@example.com",
   updatedLabel: "1 h ago",
@@ -19,11 +20,19 @@ const flow = (name: string, over: Partial<FlowRowView> = {}): FlowRowView => ({
 });
 
 const flows = [
-  flow("Brainstorm and deliver PR", { nodes: [{ name: "Grill a plan", kind: "grill" }] }),
+  flow("Brainstorm and deliver PR", { nodes: [{ name: "Grill a plan", kind: "grill", step: 0 }] }),
   flow("Basic ticket delivery with Artifact", { problems: 2 }),
   flow("Plan and deliver", { isSample: true }),
   flow("Basic ticket delivery", { isSample: true }),
 ];
+
+describe("Delete availability (issue #78)", () => {
+  it("explains why a Flow with Runs is kept, and says nothing for one without", () => {
+    expect(keptReason(0)).toBeNull();
+    expect(keptReason(1)).toBe("Has 1 Run in its history, so it is kept");
+    expect(keptReason(3)).toBe("Has 3 Runs in its history, so it is kept");
+  });
+});
 
 describe("Flows list (ticket: Flows UI)", () => {
   it("searches by Flow name and by the name of a Node in it, ignoring case", () => {
@@ -51,10 +60,12 @@ describe("Flows list (ticket: Flows UI)", () => {
     expect(groupFlows([])).toEqual({ samples: [], mine: [] });
   });
 
-  it("previews the first Nodes and says how many are left out", () => {
-    const nodes = [1, 2, 3, 4, 5, 6, 7, 8];
-    expect(pipelinePreview(nodes)).toEqual({ shown: [1, 2, 3, 4, 5, 6], hidden: [7, 8] });
-    expect(pipelinePreview(nodes.slice(0, 3))).toEqual({ shown: [1, 2, 3], hidden: [] });
+  it("groups the Nodes by step, so Nodes that run side by side share one", () => {
+    const n = (name: string, step: number) => ({ name, step });
+    expect(flowSteps([n("Ticket", 0), n("Code", 1), n("Tests", 2), n("Shots", 2), n("PR", 3)]).map((s) => s.map((x) => x.name))).toEqual([["Ticket"], ["Code"], ["Tests", "Shots"], ["PR"]]);
+    // a gap in the steps (a Node of a cycle) leaves no empty group
+    expect(flowSteps([n("A", 0), n("B", 2)]).map((s) => s.map((x) => x.name))).toEqual([["A"], ["B"]]);
+    expect(flowSteps([])).toEqual([]);
   });
 
   it("words the problem count", () => {

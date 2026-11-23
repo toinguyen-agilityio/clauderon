@@ -1,6 +1,7 @@
 import type { Clock } from "@clauderon/core";
 import { loadSessionById, normalizeEmail, type Db, type Member } from "@clauderon/db";
 import { CloseCode, verifyGatewayTicket, type LinkSocket } from "@clauderon/protocol";
+import type { FlowDrafts } from "./flow-drafts";
 import type { LiveHub } from "./live-hub";
 
 export type BrowserHubOptions = {
@@ -8,8 +9,11 @@ export type BrowserHubOptions = {
   operators: readonly string[];
   sessionSecret: string;
   clock: Clock;
+  log?: (message: string) => void;
   /** Live logs and Run changes for `/browser` sockets (M1). */
   live?: LiveHub;
+  /** Flow Drafts on the Member's own Machine (ADR 0008). */
+  drafts?: FlowDrafts;
 };
 
 /**
@@ -25,17 +29,22 @@ export class BrowserHub {
 
   /** A `/browser` socket: live logs and Run changes once authenticated. */
   async attach(socket: LinkSocket, ticket: string | null | undefined): Promise<Member | null> {
-    const live = this.opts.live;
+    const { live, drafts } = this.opts;
     // The browser subscribes as soon as the socket opens: hold its messages
     // until the session is checked.
     const pending: string[] = [];
-    let ready = false;
-    const handle = (text: string) => void live?.handle(socket, text).catch(() => {});
-    socket.onMessage((text) => (ready ? handle(text) : pending.push(text)));
-    const member = await this.authenticate(socket, ticket);
-    if (member && live) {
-      ready = true;
-      socket.onClose(() => live.drop(socket));
+    let member: Member | null = null;
+    const handle = (text: string) => {
+      void live?.handle(socket, text).catch(() => {});
+      if (member) void drafts?.handle(socket, member, text).catch((error: unknown) => this.opts.log?.(`flow draft: ${String(error)}`));
+    };
+    socket.onMessage((text) => (member ? handle(text) : pending.push(text)));
+    member = await this.authenticate(socket, ticket);
+    if (member) {
+      socket.onClose(() => {
+        live?.drop(socket);
+        drafts?.drop(socket);
+      });
       pending.splice(0).forEach(handle);
     }
     return member;
