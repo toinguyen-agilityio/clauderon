@@ -7,7 +7,7 @@ export type Requirement = {
   priority: string;
 };
 
-const ROW = /^\|\s*([A-Z]{3}-\d+)\s*\|(.*)\|\s*(Must|Should|Could)\s*\|\s*$/;
+const ROW = /^\|\s*([A-Z]{3}-\d+)\s*\|(.*)\|\s*(Must|Should|Could|Dropped)\s*\|\s*$/;
 
 /** Strip Markdown links, emphasis and code ticks, and collapse spaces. */
 export function plain(text: string): string {
