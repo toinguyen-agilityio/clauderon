@@ -5,7 +5,7 @@ import { installCommandPs1, installCommandSh } from "../../../server/agent-insta
 import { lookUpPairing, viewMachines, type MachineView } from "../../../server/machines";
 import { deps, pageWebUrl, requireMember } from "../../../server/runtime";
 import { CmdBox } from "./cmd-box";
-import { claudeAccountLabel, DiskStatus, LoginChip, MachineStatusChip, ReadyChip, SlotBar, SlotChips, machineName, osLabel } from "./machine-parts";
+import { claudeAccountLabel, DiskStatus, LoginChip, MachineResources, MachineStatusChip, ReadyChip, SlotBar, SlotChips, machineName, osLabel } from "./machine-parts";
 import { PairMachine } from "./pair-machine";
 
 export const dynamic = "force-dynamic";
@@ -130,6 +130,8 @@ function MachineTile({ machine, now }: { machine: MachineView; now: Date }) {
         </div>
       </div>
 
+      <MachineResources machine={machine} />
+
       <div className="stack" style={{ gap: 6 }}>
         <div className="chips-row">
           <SlotChips inUse={machine.inUse} slots={machine.slots} queued={machine.queued} />
@@ -156,6 +158,7 @@ function TeamMachineTile({ machine }: { machine: MachineView }) {
         <ReadyChip ready={machine.ready} />
         <SlotChips inUse={machine.inUse} slots={machine.slots} queued={machine.queued} />
       </div>
+      <MachineResources machine={machine} />
       <div className="small">
         <DiskStatus machine={machine} advice={false} />
       </div>
