@@ -54,7 +54,8 @@ The title is a Conventional Commit line. The body follows [the template](.github
 2. Refresh the repo graph on that branch (see [.claude/rules/release.md](.claude/rules/release.md)): `graphify update .`, then commit `graphify-out/graph.json` and `GRAPH_REPORT.md` as `chore(graph): refresh repo graph` if they changed.
 3. Open a pull request from the release branch into `main`, titled `chore(release): v<version>`, and merge it. The branch is deleted by the merge; `staging` is not.
 4. Tag the merge commit on `main` and publish the release: `gh release create v<version> --target <merge commit sha> --title v<version> --generate-notes --notes "<summary>"`. This creates the tag and the GitHub Release (see Release notes).
-5. Merge `main` back into `staging` (`chore: sync main into staging`) so the next release does not diverge.
+5. Update the plain-language landing page (the Artifact linked at the top of the README; source [docs/landing-page.html](docs/landing-page.html)): add the release to "What's new" in everyday words (English and Vietnamese), update the feature statuses and the "Next" block, and republish it to the same Artifact URL. Details in [.claude/rules/release.md](.claude/rules/release.md). The release is not finished until this is done.
+6. Merge `main` back into `staging` (`chore: sync main into staging`) so the next release does not diverge.
 
 ## Release notes
 

@@ -1,3 +1,5 @@
+> **Not a developer?** Read the [plain-language guide](https://claude.ai/artifact/Uoah9d66hwGAi5feUGg1sK) (English and Vietnamese): what Clauderon does, how it works, and what is new in each release. This README is the technical one.
+
 <div align="center">
 
 # Clauderon
@@ -286,6 +288,7 @@ CI runs lint, typecheck and tests against Postgres, plus the Agent's tests, its 
 | [docs/specs/](docs/specs/README.md) | One spec per milestone (M0–M4): contracts, behaviour, acceptance tests, slices |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [deploy/README.md](deploy/README.md) | Production deployment and operations |
+| [Plain-language guide](https://claude.ai/artifact/Uoah9d66hwGAi5feUGg1sK) | Landing page for non-technical readers: features, how it works, safety, what changed in each release (EN/VI). Source: [docs/landing-page.html](docs/landing-page.html) |
 | [docs/README.md](docs/README.md) · [docs/overview.md](docs/overview.md) | Docs index and one-page product brief |
 | [docs/roadmap/v1-seven-day-plan.md](docs/roadmap/v1-seven-day-plan.md) | The v1 delivery plan by milestone |
 | [docs/agents/](docs/agents/) | How coding agents use this repo: issue tracker, triage labels, domain docs |
