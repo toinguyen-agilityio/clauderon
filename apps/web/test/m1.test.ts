@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPairing, hashToken, schema, sql, type Db, type GatewayCommand } from "@clauderon/db";
 import {
   FakeClock,
@@ -308,12 +308,51 @@ describe("Tickets page Sync", () => {
     await projectRow(db, "acme", "web");
     await projectRow(db, "acme", "gone");
 
-    await syncAllProjects(deps);
+    expect(await syncAllProjects(deps)).toBe(true);
 
     expect((await viewTickets(deps, {})).rows.map((r) => r.number)).toEqual([1]);
     expect(await actions()).toEqual([]);
     const [gone] = await db.select().from(schema.project).where(sql`repo = 'gone'`);
     expect(gone!.syncError).toContain("acme/gone");
+  });
+
+  it("syncs a Project at most once a minute, however often it is asked", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    github.addIssue("acme", "web", { number: 1, title: "One" });
+    await projectRow(db, "acme", "web");
+    const listed = vi.spyOn(github, "listOpenIssues");
+    const clock = new FakeClock(new Date("2026-11-23T10:00:00Z"));
+    deps.clock = clock;
+
+    expect(await syncAllProjects(deps)).toBe(true);
+    await clock.advance(30_000);
+    expect(await syncAllProjects(deps)).toBe(false);
+    expect(listed).toHaveBeenCalledTimes(1);
+
+    await clock.advance(31_000);
+    expect(await syncAllProjects(deps)).toBe(true);
+    expect(listed).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not look up pull requests that are already merged or closed", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    const ann = await memberRow(db, "ann@example.com");
+    const machine = await machineRow(db, ann.id);
+    const project = await projectRow(db);
+    const tickets = [await ticketRow(db, project.id, 1), await ticketRow(db, project.id, 2), await ticketRow(db, project.id, 3)];
+    await startSampleBatch(db, ann, machine.id, tickets.map((t) => t.id), deps.clock.now());
+    const runs = await db.select().from(schema.run).orderBy(schema.run.id);
+    const states = ["merged", "closed", "open"];
+    for (const [i, r] of runs.entries()) {
+      await db.update(schema.run).set({ branch: `b${i}`, pullRequestNumber: i + 1, pullRequestState: states[i] }).where(sql`id = ${r.id}`);
+    }
+    const lookups: string[] = [];
+    const find = github.findPullRequest.bind(github);
+    vi.spyOn(github, "findPullRequest").mockImplementation(async (o, r, branch) => (lookups.push(branch), find(o, r, branch)));
+
+    await syncProject(deps, ann, project.id);
+
+    expect(lookups).toEqual(["b2"]);
   });
 });
 

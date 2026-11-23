@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { getMachineOfMember } from "@clauderon/db";
 import { Icon } from "../../../components/icons";
-import { syncAllProjects } from "../../../server/projects";
 import { deps, requireMember } from "../../../server/runtime";
 import { viewTickets } from "../../../server/tickets";
 import { TicketTable } from "./ticket-table";
+import { TicketsSync } from "./tickets-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -15,27 +15,26 @@ type Search = { project?: string; q?: string; status?: string };
 export default async function TicketsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const member = await requireMember();
   const search = await searchParams;
-  // GitHub stays the source of truth: pull every Project's issues before reading them.
-  await syncAllProjects(deps());
-  const [{ projects, counts, total, rows }, machine, all] = await Promise.all([
+  // Render from the database; TicketsSync pulls GitHub afterwards (at most once a minute per Project).
+  const [{ projects, all, counts, total, rows }, machine] = await Promise.all([
     viewTickets(deps(), { projectId: search.project, q: search.q, status: search.status }),
     getMachineOfMember(deps().db, member.id),
-    viewTickets(deps(), {}),
   ]);
   const href = (change: Search) => {
     const next = { ...search, ...change };
     const query = new URLSearchParams(Object.entries(next).filter(([, v]) => v) as [string, string][]);
     return `/tickets${query.size ? `?${query}` : ""}`;
   };
-  const perProject = (id: string) => all.rows.filter((r) => r.projectId === id).length;
+  const perProject = (id: string) => all.filter((r) => r.projectId === id).length;
   const failed = projects.filter((p) => p.syncError);
 
   return (
     <>
+      <TicketsSync />
       <div className="page-head">
         <div>
           <h1>Tickets</h1>
-          <p className="sub">Open GitHub issues of every Project, read from GitHub each time this page opens. Status comes from their Runs and pull requests.</p>
+          <p className="sub">Open GitHub issues of every Project, synced from GitHub in the background, at most once a minute. Status comes from their Runs and pull requests.</p>
         </div>
         <Link className="btn" href="/projects">
           {Icon.sync}
@@ -73,7 +72,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
           <div className="row between">
             <nav className="seg" aria-label="Project">
               <Link href={href({ project: undefined })} className={!search.project ? "on" : ""}>
-                All <span className="faint num">{all.rows.length}</span>
+                All <span className="faint num">{all.length}</span>
               </Link>
               {projects.map((p) => (
                 <Link key={p.id} href={href({ project: p.id })} className={search.project === p.id ? "on" : ""}>
