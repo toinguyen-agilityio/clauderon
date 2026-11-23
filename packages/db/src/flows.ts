@@ -124,17 +124,25 @@ export async function createFlow(db: Db, name: string, actorEmail: string, now: 
   });
 }
 
+/** `<name> (copy)`, then `(copy 2)`, `(copy 3)`… the first one not in `taken`. */
+export function copyName(name: string, taken: ReadonlySet<string>): string {
+  let candidate = `${name} (copy)`;
+  for (let n = 2; taken.has(candidate); n++) candidate = `${name} (copy ${n})`;
+  return candidate;
+}
+
 /**
  * Copies a Flow, its placements and edges into a new non-sample Flow named
- * `<name> (copy)` (FLW-8). Library Nodes are shared, not copied.
+ * `<name> (copy)`, or `(copy 2)`, `(copy 3)`… when that is taken (FLW-8). Library Nodes are shared, not copied.
  */
 export async function cloneFlow(db: Db, flowId: string, actorEmail: string, now: Date): Promise<{ id: string; name: string } | null> {
   return db.transaction(async (tx) => {
     const [source] = await tx.select().from(flow).where(eq(flow.id, flowId));
     if (!source) return null;
+    const taken = new Set((await tx.select({ name: flow.name }).from(flow)).map((r) => r.name));
     const [copy] = await tx
       .insert(flow)
-      .values({ name: `${source.name} (copy)`, isSample: false, clonedFromId: source.id, updatedByEmail: actorEmail, updatedAt: now })
+      .values({ name: copyName(source.name, taken), isSample: false, clonedFromId: source.id, updatedByEmail: actorEmail, updatedAt: now })
       .returning();
     const placements = await tx.select().from(flowNode).where(eq(flowNode.flowId, flowId));
     const ids = new Map<string, string>();

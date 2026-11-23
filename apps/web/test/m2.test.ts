@@ -71,6 +71,18 @@ describe("Flows page (spec M2 §2)", () => {
     expect(samples.every((f) => f.updatedByName === null)).toBe(true);
   });
 
+  it("cloning the same Flow again names the copies '(copy 2)', '(copy 3)', so no two cloned Flows share a name", async () => {
+    const flowId = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const names: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const copy = await cloneMyFlow(deps, ann, flowId);
+      if (!copy.ok) throw new Error("clone failed");
+      names.push(copy.name);
+    }
+    expect(names).toEqual(["Basic ticket delivery (copy)", "Basic ticket delivery (copy 2)", "Basic ticket delivery (copy 3)"]);
+  });
+
   it("T2-7: clone copies the placements and edges into an editable Flow named '<name> (copy)'; a sample can be deleted too", async () => {
     const flowId = await sampleFlowId(db);
     const ann = await memberRow(db, "ann@example.com");
