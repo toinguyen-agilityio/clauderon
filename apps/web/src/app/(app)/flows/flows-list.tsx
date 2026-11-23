@@ -48,7 +48,7 @@ function Steps({ nodes }: { nodes: FlowRowView["nodes"] }) {
 function FlowCard({ flow: f }: { flow: FlowRowView }) {
   const steps = flowSteps(f.nodes).length;
   return (
-    <article className="card flow-card" data-testid={`flow-${f.name}`}>
+    <article id={`flow-${f.id}`} className="card flow-card" data-testid={`flow-${f.name}`}>
       <div className="flow-title">
         <Link href={`/flows/${f.id}`} className="flow-name">
           {f.name}

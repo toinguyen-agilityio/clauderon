@@ -37,6 +37,26 @@ export function FlowRowActions({ flowId, name, locked }: { flowId: string; name:
     if (state.error || state.notice) confirm.current?.close();
   }, [state]);
 
+  // After a clone, bring the new card into view and highlight it. The list refreshes after the
+  // action, so the card may arrive a moment later: look for it for a short while.
+  useEffect(() => {
+    const id = state.openFlowId;
+    if (!id) return;
+    let tries = 0;
+    let frame = 0;
+    const find = () => {
+      const card = document.getElementById(`flow-${id}`);
+      if (card) {
+        card.scrollIntoView({ block: "center", behavior: "smooth" });
+        card.classList.add("just-cloned");
+        return;
+      }
+      if (++tries < 60) frame = requestAnimationFrame(find);
+    };
+    find();
+    return () => cancelAnimationFrame(frame);
+  }, [state.openFlowId]);
+
   return (
     <div className="flow-actions">
       <form action={action} className="row" style={{ gap: 6 }}>

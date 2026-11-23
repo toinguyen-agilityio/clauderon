@@ -649,6 +649,7 @@ dialog.modal.lib-dialog { width: min(980px, calc(100vw - 32px)); }
 .flow-none { padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--r); text-align: center; }
 .flow-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; padding: 14px 16px 14px 18px; transition: border-color 150ms var(--ease); }
 .flow-card:hover { border-color: var(--line-strong); }
+.flow-card.just-cloned { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .flow-title { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; min-width: 0; }
 .flow-name { color: var(--heading); font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
 .flow-name:hover { text-decoration: none; }
