@@ -97,8 +97,7 @@ export function machineUsageReader(home: string): MachineUsageReader {
     const cpuPercent = cpuBusyPercent(previous, now);
     previous = now;
     const [used, space] = await Promise.all([memoryUsedBytes(), disk(home)]);
-    if (!space) return null;
-    return { memoryUsedMb: Math.round(used / 1024 ** 2), diskFreeGb: space.freeGb, cpuPercent };
+    return { memoryUsedMb: Math.round(used / 1024 ** 2), ...(space ? { diskFreeGb: space.freeGb } : {}), cpuPercent };
   };
 }
 

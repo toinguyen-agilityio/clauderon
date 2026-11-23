@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { claudeAccountLabel, MachineResources, resourceLabels, usageLevel } from "../src/app/(app)/machines/machine-parts";
+import { claudeAccountLabel, diskFree, MachineResources, resourceLabels, usageLevel } from "../src/app/(app)/machines/machine-parts";
 
 describe("claudeAccountLabel", () => {
   it("names the Claude account Runs use by the email's name, with its plan, in one short label", () => {
@@ -68,5 +68,23 @@ describe("MachineResources (Machines list)", () => {
 describe("usageLevel", () => {
   it("is green below 70%, amber from 70% and red from 90%", () => {
     expect([0, 69, 70, 89, 90, 100].map(usageLevel)).toEqual(["ok", "ok", "wait", "wait", "fail", "fail"]);
+  });
+});
+
+describe("diskFree", () => {
+  const base = { connected: true, diskGb: 460 };
+  it("shows free over total, with advice only when low or critical", () => {
+    expect(diskFree({ ...base, usage: { diskFreeGb: 65 } })).toEqual({ state: "ok", text: "65 GB free of 460 GB", advice: null });
+    expect(diskFree({ ...base, usage: { diskFreeGb: 3 } })).toMatchObject({ state: "low", advice: expect.stringContaining("~/.clauderon") });
+    expect(diskFree({ ...base, usage: { diskFreeGb: 0.5 } })).toMatchObject({ state: "critical", advice: expect.stringContaining("stop the Run") });
+  });
+  it("is critical at 0 GB free, not unknown", () => {
+    expect(diskFree({ ...base, usage: { diskFreeGb: 0 } }).state).toBe("critical");
+  });
+  it("is unknown, not 0, when offline, not reported yet, or the disk could not be read", () => {
+    const unknown = { state: "unknown", text: "unknown", advice: null };
+    expect(diskFree({ ...base, connected: false, usage: { diskFreeGb: 3 } })).toEqual(unknown);
+    expect(diskFree({ ...base, usage: null })).toEqual(unknown);
+    expect(diskFree({ ...base, usage: {} })).toEqual(unknown);
   });
 });

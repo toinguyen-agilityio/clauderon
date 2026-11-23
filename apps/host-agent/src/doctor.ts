@@ -1,4 +1,5 @@
 import { statfs } from "node:fs/promises";
+import { LOW_DISK_GB } from "@clauderon/core";
 import type { DoctorCheck, DoctorReport } from "@clauderon/protocol";
 import type { GatewayCheck } from "./gateway-check";
 import type { ClaudeLogin } from "./logins";
@@ -10,8 +11,8 @@ import { runScript, runText, type System } from "./system";
 
 export type Platform = "darwin" | "linux" | "win32" | string;
 
-/** Below this much free disk, worktrees may not fit. */
-export const LOW_DISK_GB = 5;
+/** Below this much free disk, worktrees may not fit (shared with the web app). */
+export { LOW_DISK_GB };
 /** More clock skew than this breaks signed requests and confuses timestamps. */
 export const CLOCK_SKEW_MS = 120_000;
 

@@ -104,7 +104,7 @@ export type MachineDoctor = {
 };
 
 /** What the Machine was using at its latest heartbeat, as `machine.usage` carries it. */
-export type MachineUsage = { memoryUsedMb: number; diskFreeGb: number; cpuPercent: number };
+export type MachineUsage = { memoryUsedMb: number; diskFreeGb?: number; cpuPercent: number };
 
 /**
  * One Member's Machine (ADR 0006): their own computer, paired with a token

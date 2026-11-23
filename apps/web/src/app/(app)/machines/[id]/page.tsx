@@ -12,7 +12,7 @@ import { AutoRefresh } from "../auto-refresh";
 import { CmdBox } from "../cmd-box";
 import { DoctorCard } from "../doctor-card";
 import { CheckLogins, RemoveMachine, UnpairMachine } from "../machine-actions";
-import { claudeAccountLabel, defaultMachineName, machineName, MachineStatusChip, osLabel, ReadyChip, ResourceMeter, resourceLabels, SlotBar, SlotChips } from "../machine-parts";
+import { claudeAccountLabel, defaultMachineName, machineName, MachineStatusChip, osLabel, DiskStatus, ReadyChip, ResourceMeter, resourceLabels, SlotBar, SlotChips } from "../machine-parts";
 import { MachineSettings } from "../machine-settings";
 import { PairingProgress } from "../pairing-progress";
 
@@ -81,7 +81,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     ["System", osLabel(machine.os, machine.arch) || "—"],
     ["CPU", <ResourceMeter key="cpu" label="CPU" resource={resources.cpu} />],
     ["RAM", <ResourceMeter key="ram" label="RAM" resource={resources.ram} />],
-    ["Disk", <ResourceMeter key="disk" label="Disk" resource={resources.disk} />],
+    ["Disk", <span key="disk" className="stack" style={{ gap: 4 }}>{resources.disk.percent !== null && <ResourceMeter label="Disk" resource={resources.disk} />}<DiskStatus machine={machine} /></span>],
     [
       "Agent",
       <span key="a" className="mono small">
