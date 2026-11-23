@@ -70,6 +70,16 @@ export const Icon = {
       <path d="M13.5 9.5A5.5 5.5 0 016.5 2.5a5.5 5.5 0 107 7z" />
     </svg>
   ),
+  menu: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" aria-hidden="true">
+      <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
+    </svg>
+  ),
+  close: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" aria-hidden="true">
+      <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
+    </svg>
+  ),
   signOut: (
     <svg viewBox="0 0 16 16" {...stroke}>
       <path d="M6.5 2.5h-3a1 1 0 00-1 1v9a1 1 0 001 1h3M10.5 11l3-3-3-3M13.5 8H6" />
