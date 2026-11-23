@@ -325,6 +325,38 @@ describe("Export and import a Flow (issue #98)", () => {
     expect(library.find((n) => n.name === original)).toMatchObject({ isSample: true });
   });
 
+  it("imports into an empty library: every Node, the Ticket Node included, is created and the Flow is restored", async () => {
+    const sample = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const { json } = await exported(sample);
+    const original = await loadFlowDetail(db, sample);
+    await db.execute(sql`truncate flow, node cascade`);
+    expect(await viewLibrary(deps)).toHaveLength(0);
+
+    const result = await importMyFlow(deps, ann, json);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.name).toBe("Basic ticket delivery");
+    const library = await viewLibrary(deps);
+    expect(result.createdNodes).toBe(library.length);
+    expect(library.filter((n) => n.kind === "ticket")).toHaveLength(1);
+    expect(library.every((n) => !n.isSample)).toBe(true);
+    const copy = await loadFlowDetail(db, result.flowId);
+    expect(copy!.nodes).toHaveLength(original!.nodes.length);
+    expect(copy!.edges).toHaveLength(original!.edges.length);
+    expect((await viewFlows(deps)).flows.find((f) => f.id === result.flowId)!.problems).toBe(0);
+  });
+
+  it("a Ticket Node that breaks the Ticket contract is refused and nothing is created", async () => {
+    const sample = await sampleFlowId(db);
+    const ann = await memberRow(db, "ann@example.com");
+    const file = JSON.parse((await exported(sample)).json);
+    file.nodes.find((n: { kind: string }) => n.kind === "ticket").outputs = [{ name: "plan", type: "plan", optional: false }];
+    await db.execute(sql`truncate flow, node cascade`);
+    expect(await importMyFlow(deps, ann, JSON.stringify(file))).toMatchObject({ ok: false });
+    expect(await db.select().from(schema.node)).toHaveLength(0);
+    expect(await db.select().from(schema.flow)).toHaveLength(0);
+  });
+
   it("an invalid file creates nothing", async () => {
     await sampleFlowId(db);
     const ann = await memberRow(db, "ann@example.com");

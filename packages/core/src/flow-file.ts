@@ -73,8 +73,8 @@ const fail = (error: string): ParseResult => ({ ok: false, error });
 /**
  * Reads a Flow file, checking it with the rules the editor applies (typed edges, one edge per
  * input, no cycles). Nothing is created from a file that fails. `ticket` is the Ticket sample
- * Node of this install: a Flow's Ticket Node cannot be made by a Member, so a Ticket entry in
- * the file always means that one.
+ * Node of this install: when there is one, a Ticket entry in the file means that one. When there
+ * is none (an empty library), the file's own Ticket Node is read, if it fits the Ticket contract.
  */
 export function parseFlowFile(text: string, ticket: { inputs: NodeInput[]; outputs: NodeOutput[] } | null): ParseResult {
   if (text.length > FLOW_FILE_MAX_BYTES) return fail("That file is too large to be a Flow file.");
@@ -100,8 +100,20 @@ export function parseFlowFile(text: string, ticket: { inputs: NodeInput[]; outpu
     if (refs.has(n.ref)) return fail(`Node ref "${n.ref}" appears twice.`);
     refs.add(n.ref);
     if (n.kind === "ticket") {
-      if (!ticket) return fail("This install has no Ticket Node, so it cannot import a Flow.");
-      nodes.push({ ref: n.ref, isTicket: true, definition: { name: String(n.name ?? "Ticket"), kind: "ticket", instructions: "", command: null, inputs: ticket.inputs, outputs: ticket.outputs } });
+      if (ticket) {
+        nodes.push({ ref: n.ref, isTicket: true, definition: { name: String(n.name ?? "Ticket"), kind: "ticket", instructions: "", command: null, inputs: ticket.inputs, outputs: ticket.outputs } });
+        continue;
+      }
+      // No Ticket Node here yet: it comes from the file, once its ports fit the Ticket contract.
+      const checked = checkNodeDefinition({ ...n, kind: "agent", instructions: "Ticket", command: null });
+      if (!checked.ok) return fail(`Node "${String(n.name ?? n.ref)}": ${checked.error}`);
+      const d = checked.definition;
+      const issue = d.outputs.find((o) => o.name === "issue");
+      if (d.inputs.length > 0 || !issue || issue.type !== "issue" || issue.optional) {
+        return fail(`Node "${d.name}": a Ticket Node has no inputs and a required "issue" Output of type issue.`);
+      }
+      const instructions = typeof n.instructions === "string" ? n.instructions.trim().slice(0, 20_000) : "";
+      nodes.push({ ref: n.ref, isTicket: true, definition: { name: d.name, kind: "ticket", instructions, command: null, inputs: [], outputs: d.outputs } });
       continue;
     }
     const checked = checkNodeDefinition(n);

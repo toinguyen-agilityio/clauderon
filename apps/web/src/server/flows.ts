@@ -254,7 +254,7 @@ export async function importMyFlow(deps: AppDeps, viewer: Viewer, text: string):
 
   const nodeNames = rows.map((n) => n.name);
   const nodes = parsed.flow.nodes.map((n) => {
-    const same = rows.find((r) => (n.isTicket ? r.id === ticket!.id : sameDefinition(r, n.definition)));
+    const same = rows.find((r) => (n.isTicket ? ticket !== null && r.id === ticket.id :sameDefinition(r, n.definition)));
     if (same) return { ref: n.ref, existingId: same.id, definition: n.definition };
     const clash = nodeNames.some((x) => x.toLowerCase() === n.definition.name.toLowerCase());
     const name = clash ? copyName(n.definition.name, nodeNames) : n.definition.name;

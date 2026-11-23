@@ -71,6 +71,16 @@ describe("Flow file (issue #98)", () => {
     if (!parsed.ok) expect(parsed.error).toContain(message);
   });
 
+  it("reads the file's own Ticket Node when the install has none, if it fits the Ticket contract", () => {
+    const parsed = parseFlowFile(JSON.stringify(buildFlowFile(flow)), null);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.flow.nodes[0]).toMatchObject({ isTicket: true, definition: { kind: "ticket", name: "Ticket", inputs: [], outputs: ticket.outputs } });
+    const bad = (over: Record<string, unknown>) => parseFlowFile(file({ nodes: [{ ...buildFlowFile(flow).nodes[0]!, ...over }, ...buildFlowFile(flow).nodes.slice(1)] }), null);
+    expect(bad({ outputs: [{ name: "plan", type: "plan", optional: false }] }).ok).toBe(false);
+    expect(bad({ outputs: [{ name: "issue", type: "issue", optional: true }] }).ok).toBe(false);
+    expect(bad({ inputs: [{ name: "issue", type: "issue", required: true }] }).ok).toBe(false);
+  });
+
   it("refuses a type mismatch and a cycle, with the editor's rules", () => {
     const built = buildFlowFile(flow);
     // issue -> an input of another type
