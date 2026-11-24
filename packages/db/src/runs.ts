@@ -29,8 +29,8 @@ export type StartBatchInput = {
   machineId: string;
   extraInstructions: string;
   ticketIds: readonly string[];
-  /** One Run without a Ticket, from a Flow's non-issue Input; `ticketIds` is then empty. */
-  direct?: { projectId: string; title: string; input: RunInput };
+  /** Runs without a Ticket, one per value of a Flow's non-issue Input; `ticketIds` is then empty. */
+  direct?: readonly { projectId: string; title: string; input: RunInput }[];
 };
 
 export type StartBatchResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; reason: "active-run"; ticketId: string; runId: string | null };
@@ -91,24 +91,24 @@ export async function startBatch(db: Db, input: StartBatchInput, now: Date): Pro
         runIds.push(r!.id);
         await recordAudit(tx, { actorEmail: input.starter.email, action: "run.start", subjectType: "run", subjectId: r!.id, detail: { ticketId, batchId: b!.id } });
       }
-      if (input.direct) {
+      for (const [i, direct] of (input.direct ?? []).entries()) {
         const [r] = await tx
           .insert(run)
           .values({
             batchId: b!.id,
-            projectId: input.direct.projectId,
-            title: input.direct.title,
-            inputValue: input.direct.input,
+            projectId: direct.projectId,
+            title: direct.title,
+            inputValue: direct.input,
             flowId: input.flowId,
             flowSnapshot: input.flowSnapshot,
             machineId: input.machineId,
             starterMemberId: input.starter.id,
             state: "queued",
-            queuedAt: now,
+            queuedAt: new Date(now.getTime() + i),
           })
           .returning({ id: run.id });
         runIds.push(r!.id);
-        await recordAudit(tx, { actorEmail: input.starter.email, action: "run.start", subjectType: "run", subjectId: r!.id, detail: { projectId: input.direct.projectId, inputType: input.direct.input.type, batchId: b!.id } });
+        await recordAudit(tx, { actorEmail: input.starter.email, action: "run.start", subjectType: "run", subjectId: r!.id, detail: { projectId: direct.projectId, inputType: direct.input.type, batchId: b!.id } });
       }
       return { ok: true, batchId: b!.id, runIds } as const;
     });
