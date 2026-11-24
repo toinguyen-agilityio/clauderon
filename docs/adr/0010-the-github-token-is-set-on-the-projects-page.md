@@ -12,6 +12,7 @@ The Tickets page also reads GitHub in the background after it renders, at most o
 - **Reads**: every GitHub request reads and decrypts the current row, so a new token applies at once on every web instance, with no restart. With no token, or one sealed under a previous `SESSION_SECRET`, reads fail with a message that sends an Operator to the Projects page; the Tickets page shows it as it shows any GitHub error.
 - **Gateway**: it no longer gets the token. Log lines are still masked: GitHub tokens match the `gh*_` and `github_pat_` patterns in `mask`.
 - **Sync**: the Projects page has no Sync button and no Sync status. The background Sync on the Tickets page is unchanged, and its errors still show there.
+- **Any owner**: Projects no longer have to share one GitHub owner. The Enable list shows every repository the token reads that is not yet a Project, and the Projects page groups Projects by owner. A fine-grained token reads one owner's repositories, so Projects of several owners need a token that reads them all, such as a classic token, which usually also carries write scopes: prefer one owner with a fine-grained token when that is enough.
 - **Still read-only**: GitHub cannot say whether a fine-grained token is read-only, so the page asks for read-only access to Contents, Issues and Pull requests. ADR 0001 is unchanged: writes happen on the Starter's Machine.
 
 ## Considered Options
@@ -19,4 +20,4 @@ The Tickets page also reads GitHub in the background after it renders, at most o
 - **Keep `GITHUB_TOKEN` as a fallback** when no token is saved: easier upgrade, but two places to look for the token in use. Removed instead; after deploying, an Operator saves the token once.
 - **A separate encryption key** (`GITHUB_TOKEN_KEY`): keeps rotating sessions apart from the token, at the cost of one more variable on every deploy. `SESSION_SECRET` is already required by web and Gateway and rarely rotated.
 - **Plain text in the database**: simplest, but anyone with a backup reads the token.
-- **A token per Project**: every Project shares one owner (PRJ-2), and a token is needed before any Project exists to list the repositories to enable.
+- **A token per Project or per owner**: reads several owners with fine-grained tokens, but a token is needed before any Project exists to list the repositories to enable, and each Project would need its own token setting.

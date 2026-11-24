@@ -36,16 +36,15 @@ export async function viewProjects(deps: AppDeps) {
 }
 
 /**
- * Repositories the app token reads, minus enabled ones, of the Projects' owner once one exists (PRJ-2).
+ * Repositories the app token reads, of any owner, minus enabled ones (PRJ-2).
  * Deliberately not per Member or Machine: the app cannot see a `gh` login's access before a repository
  * is a Project (spec M1 §3.1, issue #89).
  */
 export async function enableableRepositories(deps: AppDeps): Promise<Repository[]> {
   const [repos, projects] = await Promise.all([deps.github.listRepositories(), listProjects(deps.db)]);
   const enabled = new Set(projects.map((p) => `${p.owner}/${p.repo}`.toLowerCase()));
-  const owner = projects[0]?.owner.toLowerCase();
   return repos
-    .filter((r) => !enabled.has(`${r.owner}/${r.repo}`.toLowerCase()) && (!owner || r.owner.toLowerCase() === owner))
+    .filter((r) => !enabled.has(`${r.owner}/${r.repo}`.toLowerCase()))
     .sort((a, b) => `${a.owner}/${a.repo}`.localeCompare(`${b.owner}/${b.repo}`));
 }
 

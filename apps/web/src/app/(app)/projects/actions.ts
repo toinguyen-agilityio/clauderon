@@ -11,7 +11,6 @@ export type EnableState = { error: string | null };
 export type TokenState = { error: string | null; saved: string | null };
 
 const ENABLE_ERRORS = {
-  "other-owner": "All Projects must share one owner.",
   exists: "That repository is already enabled.",
   "not-readable": "The app's token cannot read that repository.",
   "no-branch": "Pick one of the repository's branches.",

@@ -59,7 +59,7 @@ When the check right before a Run fails, the Run fails with `failure_reason = "C
 
 ### 3.1 Enable a Project (PRJ-1, PRJ-2)
 
-Projects page: **Enable a repository** lists the repositories the app's GitHub token can read (an Operator saves it on the same page, ADR 0010) (`GET /user/repos`), minus enabled ones. Pick one, then its base branch from its branches (default branch preselected). All Projects must share one owner: once one is enabled, the list shows only that owner's repositories. Audit: `project.enable`.
+Projects page: **Enable a repository** lists the repositories the app's GitHub token can read (an Operator saves it on the same page, ADR 0010) (`GET /user/repos`), minus enabled ones. Pick one, then its base branch from its branches (default branch preselected). Projects may belong to different owners (the one-owner rule was dropped, ADR 0010); the Projects page groups them by owner. Audit: `project.enable`.
 
 **Decision (issue #89): whose repositories the list shows.** Always the app token's, whoever is signed in and however many Members have Machines. The app cannot read a Member's `gh` access to a repository that is not yet a Project (ADR 0001; the Agent reports only `tokenRepos`, the Projects' repositories its `gh` login reaches, POD-4), so an intersection or union across Machines is not computable, and the signed-in Member's Machines say nothing about the Project every Member shares. The list is therefore not per Member and does not change with Machines. Whether a Member's Machine can push to an enabled Project is shown after enabling, per Machine, from `tokenRepos` on the Machines page.
 

@@ -189,7 +189,7 @@ describe("Machines (ADR 0006)", () => {
 });
 
 describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
-  it("lists readable repositories minus enabled ones, then only the first owner's", async () => {
+  it("lists readable repositories of any owner, minus enabled ones", async () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main", branches: ["main", "dev"] });
     github.addRepository({ owner: "acme", repo: "api", defaultBranch: "trunk" });
     github.addRepository({ owner: "other", repo: "web", defaultBranch: "main" });
@@ -199,9 +199,12 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(["acme/api", "acme/web", "other/web"]);
     expect(await enableRepository(deps, ann, { owner: "acme", repo: "web", baseBranch: "nope" })).toEqual({ ok: false, reason: "no-branch" });
     expect(await enableRepository(deps, ann, { owner: "acme", repo: "web", baseBranch: "dev" })).toMatchObject({ ok: true });
+    expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(["acme/api", "other/web"]);
+    // Projects may belong to different owners.
+    expect(await enableRepository(deps, ann, { owner: "other", repo: "web", baseBranch: "main" })).toMatchObject({ ok: true });
+    expect(await enableRepository(deps, ann, { owner: "other", repo: "web", baseBranch: "main" })).toEqual({ ok: false, reason: "exists" });
     expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(["acme/api"]);
-    expect(await enableRepository(deps, ann, { owner: "other", repo: "web", baseBranch: "main" })).toEqual({ ok: false, reason: "other-owner" });
-    expect(await actions()).toEqual(["project.enable"]);
+    expect(await actions()).toEqual(["project.enable", "project.enable"]);
   });
 
   it("the list is the app token's, the same whichever Members have Machines and whatever their gh logins reach", async () => {

@@ -55,8 +55,9 @@ export default async function ProjectsPage() {
   const [projects, access] = await Promise.all([viewProjects(deps()), viewGitHubAccess(deps())]);
   const canManage = canManageProjects(deps(), viewer);
   const now = new Date();
-  // Every Project shares one owner (PRJ-2), so it is named once.
-  const owner = projects[0]?.owner;
+  // Projects come sorted by owner, then repository; each owner gets a header.
+  const owners = new Map<string, typeof projects>();
+  for (const p of projects) owners.set(p.owner, [...(owners.get(p.owner) ?? []), p]);
 
   return (
     <>
@@ -70,16 +71,6 @@ export default async function ProjectsPage() {
       <GitHubAccess access={access} canManage={canManage} now={now} />
 
       <section className="card proj-list" aria-label="Projects">
-        {owner && (
-          <header className="proj-owner">
-            <span className="avatar">{owner.slice(0, 1)}</span>
-            <span className="mono">{owner}</span>
-            <span className="faint small">
-              {projects.length} {projects.length === 1 ? "repository" : "repositories"}
-            </span>
-          </header>
-        )}
-
         {projects.length === 0 && (
           <div className="empty">
             <b>No Project yet</b>
@@ -91,39 +82,50 @@ export default async function ProjectsPage() {
           </div>
         )}
 
-        <ul className="proj-rows">
-          {projects.map((p) => (
-            <li key={p.id} className="proj">
-              <div className="proj-id">
-                <a className="proj-name" href={`https://github.com/${p.owner}/${p.repo}`} target="_blank" rel="noreferrer" title={`Open ${p.owner}/${p.repo} on GitHub`}>
-                  {p.repo}
-                  {Icon.external}
-                </a>
-                <span className="otype" style={{ "--c": "var(--t-branch)" } as React.CSSProperties}>
-                  <i />
-                  {p.baseBranch}
-                </span>
-              </div>
+        {[...owners].map(([owner, owned]) => (
+          <div key={owner} className="proj-group">
+            <header className="proj-owner">
+              <span className="avatar">{owner.slice(0, 1)}</span>
+              <span className="mono">{owner}</span>
+              <span className="faint small">
+                {owned.length} {owned.length === 1 ? "repository" : "repositories"}
+              </span>
+            </header>
+            <ul className="proj-rows">
+              {owned.map((p) => (
+                <li key={p.id} className="proj">
+                  <div className="proj-id">
+                    <a className="proj-name" href={`https://github.com/${p.owner}/${p.repo}`} target="_blank" rel="noreferrer" title={`Open ${p.owner}/${p.repo} on GitHub`}>
+                      {p.repo}
+                      {Icon.external}
+                    </a>
+                    <span className="otype" style={{ "--c": "var(--t-branch)" } as React.CSSProperties}>
+                      <i />
+                      {p.baseBranch}
+                    </span>
+                  </div>
 
-              <div className="proj-counts">
-                <Link className="proj-count" href={`/tickets?project=${p.id}`}>
-                  <b>{p.openTickets}</b>
-                  <span>Open {p.openTickets === 1 ? "Ticket" : "Tickets"}</span>
-                </Link>
-                <span className={`proj-count${p.activeRuns ? " live" : ""}`}>
-                  <b>{p.activeRuns}</b>
-                  <span>Active {p.activeRuns === 1 ? "Run" : "Runs"}</span>
-                </span>
-              </div>
+                  <div className="proj-counts">
+                    <Link className="proj-count" href={`/tickets?project=${p.id}`}>
+                      <b>{p.openTickets}</b>
+                      <span>Open {p.openTickets === 1 ? "Ticket" : "Tickets"}</span>
+                    </Link>
+                    <span className={`proj-count${p.activeRuns ? " live" : ""}`}>
+                      <b>{p.activeRuns}</b>
+                      <span>Active {p.activeRuns === 1 ? "Run" : "Runs"}</span>
+                    </span>
+                  </div>
 
-              {canManage && (
-                <div className="proj-actions">
-                  <RemoveProjectForm projectId={p.id} name={`${p.owner}/${p.repo}`} />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+                  {canManage && (
+                    <div className="proj-actions">
+                      <RemoveProjectForm projectId={p.id} name={`${p.owner}/${p.repo}`} />
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
 
         {canManage && access && <EnableForm />}
       </section>
