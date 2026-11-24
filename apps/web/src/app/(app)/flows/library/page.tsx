@@ -34,8 +34,7 @@ export default async function LibraryPage() {
         </div>
       </div>
 
-      <FlowsTabs active="library" flows={samples.length + flows.length} nodes={nodes.length} />
-      <LibraryList nodes={nodes} />
+      <LibraryList nodes={nodes} tabs={<FlowsTabs active="library" flows={samples.length + flows.length} nodes={nodes.length} />} />
     </>
   );
 }

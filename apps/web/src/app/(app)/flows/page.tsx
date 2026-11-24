@@ -41,16 +41,19 @@ export default async function FlowsPage() {
             while an Active Run uses it.
           </p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <ImportFlow />
-          <BuildFlow gatewayUrl={gatewayUrl()} availability={buildable} />
-          <NewFlow />
-        </div>
       </div>
 
-      <FlowsTabs active="flows" flows={samples.length + flows.length} nodes={nodes.length} />
-
-      <FlowsList flows={[...flows, ...samples].map(row)} />
+      <FlowsList
+        flows={[...flows, ...samples].map(row)}
+        tabs={<FlowsTabs active="flows" flows={samples.length + flows.length} nodes={nodes.length} />}
+        actions={
+          <>
+            <ImportFlow />
+            <BuildFlow gatewayUrl={gatewayUrl()} availability={buildable} />
+            <NewFlow />
+          </>
+        }
+      />
     </>
   );
 }

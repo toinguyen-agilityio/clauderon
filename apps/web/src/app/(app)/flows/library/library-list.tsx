@@ -2,7 +2,7 @@
 
 import { isEntryKind } from "@clauderon/core";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../../../../components/icons";
 import { cloneNodeAction, exportNodesAction } from "./actions";
 import { ImportNodes } from "./import-nodes";
@@ -112,7 +112,8 @@ function NodeDialog({ node, onClose }: { node: LibraryNodeView | null; onClose: 
   );
 }
 
-export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
+/** `tabs` is the Flows area's tab bar: the search box sits at its right end. */
+export function LibraryList({ nodes, tabs }: { nodes: LibraryNodeView[]; tabs: ReactNode }) {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<KindGroup | "all">("all");
   const [open, setOpen] = useState<string | null>(null); // a Node id, or "new"
@@ -166,7 +167,8 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
 
   return (
     <>
-      <div className="lib-toolbar">
+      <div className="tabs-bar">
+        {tabs}
         <label className="lib-search">
           {Icon.search}
           <input
@@ -180,6 +182,9 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
           />
           <kbd aria-hidden="true">/</kbd>
         </label>
+      </div>
+
+      <div className="lib-toolbar">
         <div className="seg lib-groups" role="group" aria-label="Filter by Kind">
           <button type="button" className={group === "all" ? "on" : ""} aria-pressed={group === "all"} onClick={() => setGroup("all")}>
             All <span className="n">{nodes.length}</span>
@@ -190,6 +195,7 @@ export function LibraryList({ nodes }: { nodes: LibraryNodeView[] }) {
             </button>
           ))}
         </div>
+        <span className="lib-toolbar-gap" aria-hidden="true" />
         <button type="button" className="btn" disabled={shown.length === 0 || exporting !== null} onClick={() => void exportNodes(shown.map((n) => n.id), "all")}>
           {exporting === "all" ? "Exporting…" : "Export Nodes"}
         </button>
