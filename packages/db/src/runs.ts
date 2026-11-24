@@ -33,7 +33,10 @@ export type StartBatchInput = {
   direct?: { projectId: string; title: string; input: RunInput };
 };
 
-export type StartBatchResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; reason: "active-run"; ticketId: string; runId: string | null };
+export type StartBatchResult =
+  | { ok: true; batchId: string; runIds: string[] }
+  | { ok: false; reason: "active-run"; ticketId: string; runId: string | null }
+  | { ok: false; reason: "flow-deleted" };
 
 /** Postgres' unique violation, wrapped or not by the driver layer. */
 function isUniqueViolation(error: unknown): boolean {
@@ -61,13 +64,16 @@ async function activeRun(db: Db, ticketIds: readonly string[]) {
 /**
  * One Batch and one queued Run per Ticket, in one transaction (RUN-1). A
  * Ticket with an Active Run fails the whole Start (TIC-7); the partial
- * unique index catches one gained meanwhile.
+ * unique index catches one gained meanwhile. A Flow deleted meanwhile fails it too.
  */
 export async function startBatch(db: Db, input: StartBatchInput, now: Date): Promise<StartBatchResult> {
   const active = await activeRun(db, input.ticketIds);
   if (active) return { ok: false, reason: "active-run", ticketId: active.ticketId!, runId: active.id };
   try {
     return await db.transaction(async (tx) => {
+      // Waits for a delete of this Flow in progress (`deleteFlow` locks the row), and holds it off until these Runs exist.
+      const [kept] = await tx.select({ id: flow.id }).from(flow).where(eq(flow.id, input.flowId)).for("key share");
+      if (!kept) return { ok: false, reason: "flow-deleted" } as const;
       const [b] = await tx
         .insert(batch)
         .values({ flowId: input.flowId, starterMemberId: input.starter.id, extraInstructions: input.extraInstructions })

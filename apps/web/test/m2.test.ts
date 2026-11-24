@@ -148,6 +148,75 @@ describe("Flows page (spec M2 §2)", () => {
     expect(await actions()).toEqual(["flow.create", "flow.create"]);
   });
 
+  it("a failed or interrupted Run still locks its Flow against delete", async () => {
+    const flowId = await sampleFlowId(db);
+    const { ann } = await withRun(flowId);
+    for (const state of ["failed", "interrupted"] as const) {
+      await db.update(schema.run).set({ state });
+      expect(await deleteMyFlow(deps, ann, flowId)).toMatchObject({ ok: false, error: expect.stringContaining("Locked by Run") });
+    }
+    expect(await db.select().from(schema.flow).where(sql`${schema.flow.id} = ${flowId}`)).toHaveLength(1);
+  });
+
+  describe("a Start and a Delete of one Flow never interleave", () => {
+    const settled = async (p: Promise<unknown>) => {
+      let done = false;
+      void p.then(() => (done = true));
+      await new Promise((r) => setTimeout(r, 150));
+      return done;
+    };
+    async function setUp() {
+      const flowId = await sampleFlowId(db);
+      const { ann } = await withRun(flowId);
+      await db.update(schema.run).set({ state: "succeeded" });
+      const [machine] = await db.select().from(schema.machine);
+      const [project] = await db.select().from(schema.project);
+      const ticket = await ticketRow(db, project!.id, 2);
+      const { buildFlowSnapshot, startBatch } = await import("@clauderon/db");
+      const flowSnapshot = (await buildFlowSnapshot(db, flowId))!;
+      const run = { flowId, flowSnapshot, machineId: machine!.id, starterMemberId: ann.id };
+      const start = () => startBatch(db, { flowId, flowSnapshot, starter: ann, machineId: machine!.id, extraInstructions: "", ticketIds: [ticket.id] }, new Date());
+      return { flowId, ann, ticket, run, start };
+    }
+
+    it("a Start waits for a Delete that holds the Flow, then finds it gone", async () => {
+      const { flowId, start } = await setUp();
+      let release!: () => void;
+      const held = new Promise<void>((r) => (release = r));
+      const deleting = db.transaction(async (tx) => {
+        await tx.execute(sql`select id from flow where id = ${flowId} for update`);
+        await held;
+        await tx.execute(sql`delete from flow where id = ${flowId}`);
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      const starting = start();
+      expect(await settled(starting)).toBe(false);
+      release();
+      await deleting;
+      expect(await starting).toEqual({ ok: false, reason: "flow-deleted" });
+      expect(await db.select().from(schema.run)).toHaveLength(1);
+    });
+
+    it("a Delete waits for a Start that holds the Flow, then is refused by its Run", async () => {
+      const { flowId, ann, ticket, run } = await setUp();
+      let release!: () => void;
+      const held = new Promise<void>((r) => (release = r));
+      const starting = db.transaction(async (tx) => {
+        await tx.execute(sql`select id from flow where id = ${flowId} for key share`);
+        const [b] = await tx.insert(schema.batch).values({ flowId, starterMemberId: ann.id, extraInstructions: "" }).returning();
+        await tx.insert(schema.run).values({ ...run, batchId: b!.id, ticketId: ticket.id, state: "queued", queuedAt: new Date() });
+        await held;
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      const deleting = deleteMyFlow(deps, ann, flowId);
+      expect(await settled(deleting)).toBe(false);
+      release();
+      await starting;
+      expect(await deleting).toMatchObject({ ok: false, error: expect.stringContaining("Locked by Run") });
+      expect(await db.select().from(schema.flow).where(sql`${schema.flow.id} = ${flowId}`)).toHaveLength(1);
+    });
+  });
+
   it("a Flow whose Runs have all ended can be deleted, and its Runs stay in the history under its old name", async () => {
     const flowId = await sampleFlowId(db);
     const { ann } = await withRun(flowId);

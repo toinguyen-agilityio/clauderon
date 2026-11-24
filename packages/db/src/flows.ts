@@ -90,7 +90,7 @@ export type FlowListRow = {
   updatedByName: string | null;
   updatedAt: Date;
   nodeCount: number;
-  /** Runs in the Flow's history; `deleteFlow` refuses a Flow that has any. */
+  /** Runs in the Flow's history; they stay when the Flow is deleted. */
   runCount: number;
 };
 
@@ -189,12 +189,16 @@ export type DeleteFlowResult =
  * history: their `flow_id` becomes null and they keep their Flow snapshot.
  */
 export async function deleteFlow(db: Db, flowId: string): Promise<DeleteFlowResult> {
-  const [row] = await db.select().from(flow).where(eq(flow.id, flowId));
-  if (!row) return { ok: false, reason: "not-found" };
-  const lock = (await flowLocks(db, [flowId])).get(flowId);
-  if (lock) return { ok: false, reason: "locked", lock };
-  await db.delete(flow).where(eq(flow.id, flowId));
-  return { ok: true, name: row.name };
+  // The row lock makes a Start of this Flow (`startBatch` locks it too) wait for the delete, or
+  // the delete wait for the Start and then see its Run: never a Run whose Flow vanishes under it.
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select().from(flow).where(eq(flow.id, flowId)).for("update");
+    if (!row) return { ok: false, reason: "not-found" } as const;
+    const lock = (await flowLocks(tx, [flowId])).get(flowId);
+    if (lock) return { ok: false, reason: "locked", lock } as const;
+    await tx.delete(flow).where(eq(flow.id, flowId));
+    return { ok: true, name: row.name } as const;
+  });
 }
 
 export type PlacementInput = {

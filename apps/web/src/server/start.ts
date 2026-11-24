@@ -15,6 +15,8 @@ import type { AppDeps, Viewer } from "./deps";
 
 // The Start dialog and Batch creation (spec M1 §4.1).
 
+const FLOW_DELETED = "That Flow was deleted just now. Pick another.";
+
 const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 /** Flows without problems (RUN-1): only those can start Runs. */
@@ -106,6 +108,7 @@ export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput
     { flowId: input.flowId, flowSnapshot, starter: viewer, machineId: machine.id, extraInstructions: input.extraInstructions.trim(), ticketIds },
     deps.clock.now(),
   );
+  if (!result.ok && result.reason === "flow-deleted") return { ok: false, error: FLOW_DELETED };
   if (!result.ok) {
     const keyOf = await keysFor(deps);
     const ticket = tickets.find((t) => t.id === result.ticketId);
@@ -189,7 +192,7 @@ export async function startFromInput(deps: AppDeps, viewer: Viewer, input: Start
     },
     deps.clock.now(),
   );
-  if (!result.ok) return { ok: false, error: "The Run could not start." };
+  if (!result.ok) return { ok: false, error: result.reason === "flow-deleted" ? FLOW_DELETED : "The Run could not start." };
   await deps.command({ type: "schedule", machineId: ready.machine.id });
   return result;
 }
