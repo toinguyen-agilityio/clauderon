@@ -116,7 +116,7 @@ p { margin: 0; }
 .btn.link { height: auto; padding: 0; border: 0; background: transparent; color: var(--fg2); font-weight: 600; font-size: 12.5px; }
 .btn.link:hover { color: var(--fg); background: transparent; }
 .input { width: 100%; height: 34px; border: 1px solid var(--line-strong); background: var(--panel); border-radius: var(--r-sm); padding: 0 10px; }
-.input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent-text); }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field > label { font-weight: 600; font-size: 12.5px; }
 .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-sm); overflow: hidden; background: var(--panel); }
@@ -200,7 +200,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* Filter bars: one width for every select, so a long option (a Flow name) does not stretch one of them. */
 .select.filter { width: 200px; max-width: 100%; min-width: 0; text-overflow: ellipsis; }
 .textarea { height: auto; min-height: 76px; padding: 8px 10px; resize: vertical; line-height: 1.45; }
-.select:focus, .textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent-text); }
+.select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .field .hint, .hint { font-size: 12px; color: var(--fg3); }
 .crumbs { font-size: 12.5px; color: var(--fg3); display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
 .crumbs a { color: var(--fg2); }
@@ -502,7 +502,7 @@ dialog.modal { background: var(--panel-solid); border-radius: var(--r-md); box-s
 .tbl tbody tr:hover td { background: color-mix(in srgb, var(--mint) 35%, transparent); }
 :root[data-theme="dark"] .tbl tbody tr:hover td { background: var(--hover); }
 
-/* controls: teal primary, 1.5px muted outline for secondary, teal focus ring */
+/* controls: teal primary, 1.5px muted outline for secondary; text fields focus with a teal border and a soft halo */
 .btn { border-width: 1.5px; font-weight: 600; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 .btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
@@ -511,7 +511,7 @@ dialog.modal { background: var(--panel-solid); border-radius: var(--r-md); box-s
 :root[data-theme="dark"] .btn.danger.solid { color: #12222b; }
 .ndot.succeeded, .ndot.failed { color: var(--panel-solid); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.input:focus, .select:focus, .textarea:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); box-shadow: none; }
+.input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .selbar { background: var(--term-bg); color: var(--term-fg); }
 .selbar .btn.ghost { color: var(--term-fg); }
 .kind.agent { background: color-mix(in srgb, var(--violet) 14%, transparent); color: var(--t-plan); }
@@ -597,7 +597,7 @@ details[open] > summary.small { margin-bottom: 12px; }
 .tag.k-ticket, .tag.k-input { background: var(--run-bg); color: var(--run); }
 .lib-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .lib-search { flex: 1 1 160px; min-width: 0; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 8px 0 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--panel); color: var(--fg3); cursor: text; }
-.lib-search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+.lib-search:focus-within { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .lib-search svg { width: 15px; height: 15px; flex: none; }
 .lib-search input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; outline: 0; color: var(--fg); }
 .lib-search kbd { font-family: var(--font-mono); font-size: 11px; line-height: 18px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--fg3); }
@@ -1138,7 +1138,7 @@ a.proj-count:hover span { color: var(--accent-text); text-decoration: underline;
 .gh-access-head p { max-width: 72ch; }
 .gh-access-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
 .gh-token-form { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
-.gh-token-form .input { flex: 1 1 320px; width: auto; }
+.gh-token-form .input { flex: 0 1 380px; width: auto; min-width: 0; }
 .gh-token-form [role] { flex-basis: 100%; }
 @media (max-width: 860px) {
   .proj { grid-template-columns: minmax(0, 1fr) auto; padding: 16px; }
@@ -1180,7 +1180,7 @@ a.proj-count:hover span { color: var(--accent-text); text-decoration: underline;
 .draft-canvas { position: relative; height: 360px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 /* Build with Agent: the description composer. */
 .composer { display: flex; flex-direction: column; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--panel); transition: border-color 0.12s; }
-.composer:focus-within { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 1px; }
+.composer:focus-within { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .composer.disabled { background: var(--sunk); }
 .composer textarea { border: 0; background: transparent; padding: 10px 12px; resize: vertical; min-height: 72px; line-height: 1.5; outline: none; }
 .composer textarea:disabled { cursor: progress; color: var(--fg2); }
