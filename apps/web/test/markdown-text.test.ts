@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { isLongText, LONG_TEXT_CHARS, MarkdownBody, MarkdownText } from "../src/components/markdown-text";
+import { isLongText, LONG_TEXT_CHARS, MarkdownBody, MarkdownText, readableText } from "../src/components/markdown-text";
 
 const render = (text: string) => renderToStaticMarkup(createElement(MarkdownBody, { text }));
 
@@ -58,5 +58,13 @@ describe("Markdown text (issue #85)", () => {
     const html = renderToStaticMarkup(createElement(MarkdownText, { text: short }));
     expect(html).not.toContain("Expand");
     expect(html).not.toContain("collapsed");
+  });
+
+  it("gives JSON-escaped text its line breaks back, and leaves real text alone", () => {
+    expect(readableText('1. one\\n- File: a.ts\\n\\tok \\"x\\"')).toBe('1. one\n- File: a.ts\n\tok "x"');
+    expect(readableText("a\nliteral \\n kept")).toBe("a\nliteral \\n kept");
+    const html = render("## Plan\\n\\n- one\\n- two");
+    expect(html).toContain("<h2>Plan</h2>");
+    expect(html).toContain("<li>two</li>");
   });
 });

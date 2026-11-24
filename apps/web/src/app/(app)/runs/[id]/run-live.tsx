@@ -246,7 +246,7 @@ export function RunLive({
                 {node.inputs.map((i) => (
                   <div key={i.name} className="stack" style={{ gap: 4 }}>
                     <OType type={i.type} label={i.name} />
-                    <OutputValue type={i.type} value={i.value} />
+                    <OutputValue type={i.type} value={i.value} name={i.name} />
                   </div>
                 ))}
               </div>
@@ -256,7 +256,7 @@ export function RunLive({
                 {attempt.outputs.map((o) => (
                   <div key={o.name} className="stack" style={{ gap: 4 }}>
                     <OType type={o.type} label={o.name} />
-                    <OutputValue type={o.type} value={o.value} />
+                    <OutputValue type={o.type} value={o.value} name={o.name} />
                   </div>
                 ))}
               </div>
