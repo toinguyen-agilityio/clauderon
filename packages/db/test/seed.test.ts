@@ -14,11 +14,11 @@ beforeAll(async () => {
 afterAll(() => test.drop());
 
 describe("seedSamples", () => {
-  it("inserts the nine sample Nodes and two sample Flows, flagged as samples", async () => {
+  it("inserts the thirteen sample Nodes and two sample Flows, flagged as samples", async () => {
     await seedSamples(db);
     const nodes = await db.select().from(schema.node);
     const flows = await listFlows(db);
-    expect(nodes).toHaveLength(9);
+    expect(nodes).toHaveLength(13);
     expect(flows.map((f) => f.name)).toEqual(["Basic ticket delivery", "Plan and deliver"]);
     expect([...nodes, ...flows].every((row) => row.isSample)).toBe(true);
   });
@@ -34,7 +34,7 @@ describe("seedSamples", () => {
   it("is idempotent: seeding again adds nothing", async () => {
     await seedSamples(db);
     await seedSamples(db);
-    expect(await db.select().from(schema.node)).toHaveLength(9);
+    expect(await db.select().from(schema.node)).toHaveLength(13);
     expect(await db.select().from(schema.flow)).toHaveLength(2);
     expect(await db.select().from(schema.flowNode)).toHaveLength(12);
     expect(await db.select().from(schema.flowEdge)).toHaveLength(15);

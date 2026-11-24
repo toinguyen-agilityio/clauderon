@@ -1,4 +1,4 @@
-import type { NodeKind } from "@clauderon/core";
+import type { NodeKind, OutputType } from "@clauderon/core";
 
 // What the Flows page shows and decides, apart from React: one row per Flow,
 // the search and scope filters, and the short preview of a Flow's Nodes. Pure,
@@ -15,6 +15,8 @@ export type FlowRowView = {
   problems: number;
   /** In run order; `step` groups the Nodes that can run side by side. */
   nodes: { name: string; kind: NodeKind; step: number }[];
+  /** What the Flow starts from; an `issue` Flow starts from the Tickets page. */
+  inputType?: OutputType | null;
   /** The Member's name, or their email when they have none. Null for a sample nobody has changed since the seed. */
   updatedBy: string | null;
   /** "5 h ago", worked out on the server. */

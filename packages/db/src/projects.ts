@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, notExists, notInArray, 
 import type { Issue } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
+import { runProjectId } from "./runs";
 import { batch, project, run, ticket } from "./schema";
 
 // Projects and Tickets (spec M1 §3). GitHub stays the source of truth: Sync
@@ -66,13 +67,14 @@ export async function removeProject(db: Db, actorEmail: string, projectId: strin
     if (!row) return { ok: false, reason: "not-found" } as const;
     const tickets = await tx.select({ id: ticket.id }).from(ticket).where(eq(ticket.projectId, projectId)).for("update");
     const ticketIds = tickets.map((t) => t.id);
-    const runs =
-      ticketIds.length === 0 ? [] : await tx.select({ id: run.id, state: run.state, batchId: run.batchId }).from(run).where(inArray(run.ticketId, ticketIds));
+    // A Run without a Ticket belongs to the Project directly.
+    const ofProject = or(eq(run.projectId, projectId), ticketIds.length === 0 ? undefined : inArray(run.ticketId, ticketIds));
+    const runs = await tx.select({ id: run.id, state: run.state, batchId: run.batchId }).from(run).where(ofProject);
     const activeRuns = runs.filter((r) => r.state !== "succeeded" && r.state !== "cancelled").length;
     if (activeRuns > 0) return { ok: false, reason: "active-runs", activeRuns } as const;
 
     if (runs.length > 0) {
-      await tx.delete(run).where(inArray(run.ticketId, ticketIds));
+      await tx.delete(run).where(ofProject);
       // A Batch may hold other Projects' Tickets; only the ones left empty go.
       const batchIds = [...new Set(runs.map((r) => r.batchId))];
       await tx.delete(batch).where(and(inArray(batch.id, batchIds), notExists(tx.select({ id: run.id }).from(run).where(eq(run.batchId, batch.id)))));
@@ -166,10 +168,10 @@ export async function runsWithPullRequests(db: Db, projectId: string): Promise<R
   const rows = await db
     .select({ id: run.id, branch: run.branch, pullRequestNumber: run.pullRequestNumber, pullRequestCheckedAt: run.pullRequestCheckedAt })
     .from(run)
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
     .where(
       and(
-        eq(ticket.projectId, projectId),
+        eq(runProjectId, projectId),
         isNotNull(run.pullRequestNumber),
         isNotNull(run.branch),
         or(isNull(run.pullRequestState), notInArray(run.pullRequestState, FINAL_PR_STATES)),
@@ -203,7 +205,7 @@ export async function listTicketsWithRuns(db: Db, projectId?: string): Promise<T
       ),
     );
   const byTicket = new Map<string, TicketRunView[]>();
-  for (const { ticketId, ...r } of runs) byTicket.set(ticketId, [...(byTicket.get(ticketId) ?? []), r]);
+  for (const { ticketId, ...r } of runs) byTicket.set(ticketId!, [...(byTicket.get(ticketId!) ?? []), r]);
   return tickets.map((t) => ({ ...t, runs: byTicket.get(t.id) ?? [] }));
 }
 

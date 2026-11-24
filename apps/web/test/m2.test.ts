@@ -60,7 +60,7 @@ describe("Flows page (spec M2 §2)", () => {
     expect(samples.map((f) => [f.name, f.isSample, f.problems, f.nodeCount, f.lock])).toEqual([[expect.any(String), true, 0, expect.any(Number), null], [expect.any(String), true, 0, expect.any(Number), null]]);
     expect(samples.every((f) => f.nodeCount > 0)).toBe(true);
     // each Flow lists its Nodes for the row preview, the entry Ticket first
-    expect(samples.every((f) => f.nodes.length === f.nodeCount && f.nodes[0]?.kind === "ticket")).toBe(true);
+    expect(samples.every((f) => f.nodes.length === f.nodeCount && f.nodes[0]?.kind === "input")).toBe(true);
     // with its step: the Nodes that run side by side share one
     const plan = samples.find((f) => f.name === "Plan and deliver")!;
     const stepOf = (name: string) => plan.nodes.find((n) => n.name === name)?.step;
@@ -142,7 +142,7 @@ describe("Flows page (spec M2 §2)", () => {
     expect(data.readOnly).toBe(false);
     expect(data.flow.isSample).toBe(false);
     const library = await loadLibrary(db);
-    expect(data.graph.nodes.map((n) => library.find((l) => l.id === n.nodeId)!.kind)).toEqual(["ticket"]);
+    expect(data.graph.nodes.map((n) => library.find((l) => l.id === n.nodeId)!.kind)).toEqual(["input"]);
     expect(data.graph.edges).toEqual([]);
     expect(await createMyFlow(deps, ann, "basic TICKET delivery")).toMatchObject({ ok: true, name: "Copy of basic TICKET delivery" });
     expect(await actions()).toEqual(["flow.create", "flow.create"]);
@@ -343,7 +343,7 @@ describe("Export and import a Flow (issue #98)", () => {
     expect(result.name).toBe("Basic ticket delivery");
     const library = await viewLibrary(deps);
     expect(result.createdNodes).toBe(library.length);
-    expect(library.filter((n) => n.kind === "ticket")).toHaveLength(1);
+    expect(library.filter((n) => n.kind === "input")).toHaveLength(1);
     expect(library.every((n) => !n.isSample)).toBe(true);
     const copy = await loadFlowDetail(db, result.flowId);
     expect(copy!.nodes).toHaveLength(original!.nodes.length);
@@ -355,7 +355,7 @@ describe("Export and import a Flow (issue #98)", () => {
     const sample = await sampleFlowId(db);
     const ann = await memberRow(db, "ann@example.com");
     const file = JSON.parse((await exported(sample)).json);
-    file.nodes.find((n: { kind: string }) => n.kind === "ticket").outputs = [{ name: "plan", type: "plan", optional: false }];
+    file.nodes.find((n: { kind: string }) => n.kind === "input").outputs = [{ name: "shot", type: "screenshot", optional: false }];
     await db.execute(sql`truncate flow, node cascade`);
     expect(await importMyFlow(deps, ann, JSON.stringify(file))).toMatchObject({ ok: false });
     expect(await db.select().from(schema.node)).toHaveLength(0);
@@ -436,7 +436,7 @@ describe("Node library (spec M2 §4)", () => {
 
     // Only samples are cloned; the Ticket sample is refused.
     expect(await cloneMyNode(deps, ann, copy.id)).toEqual({ ok: false, error: "Only sample Nodes can be cloned." });
-    const ticket = (await viewLibrary(deps)).find((n) => n.kind === "ticket")!;
+    const ticket = (await viewLibrary(deps)).find((n) => n.kind === "input")!;
     expect(await cloneMyNode(deps, ann, ticket.id)).toMatchObject({ ok: false });
     expect(await cloneMyNode(deps, ann, crypto.randomUUID())).toEqual({ ok: false, error: "That Node no longer exists." });
   });

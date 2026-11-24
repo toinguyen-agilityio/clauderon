@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { isEntryKind } from "@clauderon/core";
 import { duration, formatTime, tokens } from "../../../../components/format";
 import { useGatewaySocket } from "../../../../components/gateway-socket";
 import { Icon } from "../../../../components/icons";
@@ -214,7 +215,7 @@ export function RunLive({
               </div>
             )}
 
-            {node.kind !== "ticket" && (
+            {!isEntryKind(node.kind) && (
               <div className="stack" style={{ gap: 8 }}>
                 <div className="log-head">
                   <span className="eyebrow">

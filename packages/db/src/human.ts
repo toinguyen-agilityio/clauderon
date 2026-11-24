@@ -9,6 +9,7 @@ import {
 } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
+import { runProjectId, runTitle } from "./runs";
 import { attempt, humanRequest, member, output, project, run, ticket } from "./schema";
 
 // Human Nodes (spec M3 §2, §3): the Gateway asks, any Member responds. A
@@ -173,7 +174,7 @@ export async function openHumanRequests(db: Db) {
       runId: run.id,
       flowSnapshot: run.flowSnapshot,
       ticketNumber: ticket.number,
-      ticketTitle: ticket.title,
+      ticketTitle: runTitle,
       ticketUrl: ticket.url,
       projectId: project.id,
       starterEmail: member.email,
@@ -183,8 +184,8 @@ export async function openHumanRequests(db: Db) {
     .from(humanRequest)
     .innerJoin(attempt, eq(attempt.id, humanRequest.attemptId))
     .innerJoin(run, eq(run.id, attempt.runId))
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
-    .innerJoin(project, eq(project.id, ticket.projectId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(project, eq(project.id, runProjectId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(and(openCondition, eq(run.state, "waiting_for_human")))
     .orderBy(asc(humanRequest.createdAt), asc(humanRequest.id));
@@ -202,8 +203,8 @@ export async function countOpenHumanRequests(db: Db): Promise<number> {
     .from(humanRequest)
     .innerJoin(attempt, eq(attempt.id, humanRequest.attemptId))
     .innerJoin(run, eq(run.id, attempt.runId))
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
-    .innerJoin(project, eq(project.id, ticket.projectId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(project, eq(project.id, runProjectId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(and(openCondition, eq(run.state, "waiting_for_human")));
   return row?.n ?? 0;

@@ -1,4 +1,4 @@
-import { OUTPUT_TYPES, type NodeInput, type NodeOutput } from "./flow";
+import { OUTPUT_TYPES, isEntryKind, type NodeInput, type NodeOutput } from "./flow";
 import { FLOW_FILE_FORMAT, FLOW_FILE_MAX_BYTES, FLOW_FILE_VERSION, parseFlowFile, type FlowFile, type ParsedFlow } from "./flow-file";
 import type { NodeDefinition } from "./library";
 import { extractResultBlock } from "./runner";
@@ -63,7 +63,7 @@ const FORMAT_RULES = `Answer with one fenced \`\`\`json block holding the Flow f
 }
 
 Rules:
-- Exactly one placement of the "Ticket" library Node: it is the entry and emits the Ticket's \`issue\`.
+- Exactly one placement of a library Node of kind "input": it is the entry and emits what the Member supplies when starting a Run. Use "Ticket" when the work starts from a GitHub issue.
 - Prefer library Nodes ("use" with the exact name). Define a new Node only when no library Node fits.
 - Output Types: ${OUTPUT_TYPES.join(", ")}. An edge joins an output to an input of the same type; each input takes at most one edge; every required input needs one.
 - No cycles: a Flow is a directed acyclic graph. A failed Node fails the Run; nothing loops back.
@@ -74,7 +74,7 @@ Rules:
 /** The first prompt of a Flow Draft, or a fresh one that carries an earlier draft and a note. */
 export function flowDraftPrompt(input: { description: string; library: readonly DraftLibraryNode[]; previous?: string; note?: string }): string {
   const parts = [
-    "You design a Flow for Clauderon: a directed acyclic graph of Nodes that a GitHub issue (a Ticket) is taken through, each Node running on the Member's computer.",
+    "You design a Flow for Clauderon: a directed acyclic graph of Nodes that a Run takes its input (usually a GitHub issue, a Ticket) through, each Node running on the Member's computer.",
     "Do not use tools or touch files: answer from this message alone.",
     `What the Member wants:\n<description>\n${input.description.trim()}\n</description>`,
     `The Node library:\n${describeLibrary(input.library)}`,
@@ -126,14 +126,13 @@ export function readFlowDraft(finalText: string, library: readonly DraftLibraryN
   const text = JSON.stringify({ ...value, nodes });
   if (text.length > FLOW_FILE_MAX_BYTES) return { ok: false, error: "the Flow file is too large." };
 
-  const ticket = library.find((n) => n.kind === "ticket") ?? null;
-  const parsed = parseFlowFile(text, ticket);
+  const parsed = parseFlowFile(text, library.filter((n) => isEntryKind(n.kind)));
   if (!parsed.ok) return { ok: false, error: parsed.error };
-  if (parsed.flow.nodes.filter((n) => n.isTicket).length !== 1 || parsed.flow.placements.filter((p) => parsed.flow.nodes.find((n) => n.ref === p.node)?.isTicket).length !== 1) {
-    return { ok: false, error: "the Flow needs exactly one placement of the Ticket Node." };
+  if (parsed.flow.placements.filter((p) => parsed.flow.nodes.find((n) => n.ref === p.node)?.isEntry).length !== 1) {
+    return { ok: false, error: "the Flow needs exactly one placement of an Input Node." };
   }
 
-  const newNodes = parsed.flow.nodes.filter((n) => !n.isTicket && !library.some((l) => sameDefinition(l, n.definition))).map((n) => n.definition.name);
+  const newNodes = parsed.flow.nodes.filter((n) => !n.isEntry && !library.some((l) => sameDefinition(l, n.definition))).map((n) => n.definition.name);
   return { ok: true, file: flowFileOf(parsed.flow), newNodes };
 }
 

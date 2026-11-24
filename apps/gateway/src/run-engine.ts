@@ -1,5 +1,6 @@
 import {
   activeOutputs,
+  isEntryKind,
   branchName,
   buildAgentPrompt,
   buildGrillAnswerPrompt,
@@ -15,6 +16,7 @@ import {
   type FlowSnapshot,
   type GrillAnswers,
   type GrillQuestion,
+  type OutputType,
   type OutputValue,
   type RetryContext,
   type SnapshotNode,
@@ -148,13 +150,14 @@ export class RunEngine {
     const ctx = await getRunContext(this.opts.db, runId);
     // Only an ended Run can have lost its Machine; nothing drives it any more.
     if (!ctx?.run.machineId) return;
-    const branch = branchName(ctx.ticket.number, ctx.ticket.title, runId);
+    const branch = branchName(ctx.ticket?.number ?? null, ctx.title, runId);
     await updateRun(this.opts.db, runId, { branch });
     this.opts.links.send(ctx.run.machineId, "workspace.prepare", {
       runId,
       owner: ctx.project.owner,
       repo: ctx.project.repo,
-      baseBranch: ctx.project.baseBranch,
+      // A branch Input is where the Run starts from; it still gets a branch of its own.
+      baseBranch: ctx.run.inputValue?.type === "branch" ? ctx.run.inputValue.value.branch : ctx.project.baseBranch,
       branch,
     });
   }
@@ -209,13 +212,17 @@ export class RunEngine {
     });
     this.opts.live.runChanged(runId);
 
-    if (node.kind === "ticket") {
-      // Not executed: it emits the issue at once (spec M1 §4.2 step 4).
-      const { number, title, body, labels, url } = ctx.ticket;
+    if (isEntryKind(node.kind)) {
+      // Not executed: it emits the Run's input at once (spec M1 §4.2 step 4).
+      const output = node.outputs[0];
+      const value = output && this.entryValue(ctx, output.type);
+      if (!output || value === undefined) {
+        return this.failAttempt(ctx, attempt.id, "The Run has no value for its Input Node", { endedAt: this.now(), exitCode: -1, claudeSessionId: null });
+      }
       await finishAttempt(this.opts.db, attempt.id, {
         state: "succeeded",
         endedAt: this.now(),
-        outputs: [{ name: "issue", type: "issue", value: { number, title, body, labels, url } }],
+        outputs: [{ name: output.name, type: output.type, value }],
       });
       return this.advance(runId);
     }
@@ -249,6 +256,18 @@ export class RunEngine {
       if (retryContext) env.CLAUDERON_RETRY_CONTEXT = renderRetryContext(retryContext);
       this.opts.links.send(machineId, "node.run", { ...base, kind: "command", command: node.command ?? "true", env });
     }
+  }
+
+  /** What an Input Node emits: the Ticket's issue, the Run's own branch, or the value given at Start. */
+  private entryValue(ctx: RunContext, type: OutputType): unknown {
+    if (type === "issue") {
+      if (!ctx.ticket) return undefined;
+      const { number, title, body, labels, url } = ctx.ticket;
+      return { number, title, body, labels, url };
+    }
+    const given = ctx.run.inputValue;
+    if (given?.type !== type) return undefined;
+    return type === "branch" ? { branch: ctx.run.branch ?? "", headCommit: null } : given.value;
   }
 
   private agentEnv(node: SnapshotNode): Record<string, string> {
@@ -308,8 +327,8 @@ export class RunEngine {
   /** Environment of a Command Node; `clauderon-open-pr` reads it (spec M1 §4.5). */
   private commandEnv(ctx: RunContext, inputs: readonly { name: string; value: unknown }[]): Record<string, string> {
     const env: Record<string, string> = {
-      CLAUDERON_ISSUE_NUMBER: String(ctx.ticket.number),
-      CLAUDERON_TITLE: ctx.ticket.title,
+      ...(ctx.ticket ? { CLAUDERON_ISSUE_NUMBER: String(ctx.ticket.number) } : {}),
+      CLAUDERON_TITLE: ctx.title,
       CLAUDERON_BASE: ctx.project.baseBranch,
       CLAUDERON_BRANCH: ctx.run.branch ?? "",
     };

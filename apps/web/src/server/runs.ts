@@ -384,7 +384,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
   const durationMs = run.run.startedAt ? (run.run.endedAt ?? deps.clock.now()).getTime() - run.run.startedAt.getTime() : null;
   return {
     ...run,
-    key: keyOf(run.project.id, run.ticket.number),
+    key: keyOf(run.project.id, run.ticket?.number ?? null),
     timeline,
     tokens,
     durationMs,

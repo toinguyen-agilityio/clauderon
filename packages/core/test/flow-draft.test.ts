@@ -49,7 +49,7 @@ describe("Flow Draft (ADR 0008)", () => {
     expect(read.file.name).toBe("Plan then review");
     // A `use` becomes the library Node's exact definition, so the import reuses that Node.
     expect(read.file.nodes[1]).toEqual({ ref: "n2", ...library[1] });
-    expect(read.file.nodes[0]!.kind).toBe("ticket");
+    expect(read.file.nodes[0]!.kind).toBe("input");
     expect(read.newNodes).toEqual(["Review the plan"]);
     expect(read.file.placements[1]!.extraInstructions).toBe("Keep it short.");
   });
@@ -66,7 +66,7 @@ describe("Flow Draft (ADR 0008)", () => {
 
   it("needs exactly one Ticket placement", () => {
     const noTicket = { ...base, placements: base.placements.slice(1), edges: base.edges.slice(1) };
-    expect(readFlowDraft(answer(noTicket), library)).toEqual({ ok: false, error: "the Flow needs exactly one placement of the Ticket Node." });
+    expect(readFlowDraft(answer(noTicket), library)).toEqual({ ok: false, error: "the Flow needs exactly one placement of an Input Node." });
   });
 
   it("puts the description, the library and an earlier draft with a note in the prompt", () => {

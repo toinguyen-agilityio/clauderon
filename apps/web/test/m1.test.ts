@@ -25,7 +25,7 @@ import {
 } from "../src/server/machines";
 import { enableRepository, enableableRepositories, removeRepository, syncAllProjects, syncProject } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
-import { startDialog, startRuns } from "../src/server/start";
+import { startDialog, startFromInput, startRuns } from "../src/server/start";
 import { viewTickets } from "../src/server/tickets";
 
 let test: TestDatabase;
@@ -521,6 +521,27 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     expect(dialog.machine).toMatchObject({ slots: 2, inUse: 0, queued: 0, ready: true, connected: true, paired: true });
     expect(dialog.warnings).toEqual([{ ticketId: outside.id, key: "web#2", authorAssociation: "NONE" }]);
     expect(dialog.flows.map((f) => f.name).sort()).toEqual(["Basic ticket delivery", "Plan and deliver"]);
+  });
+
+  it("starts a Flow from a branch Input: one Run with no Ticket, and only on a branch that exists", async () => {
+    const { ann } = await ready();
+    const [project] = await db.select().from(schema.project);
+    const nodes = await db.select().from(schema.node);
+    const [flow] = await db.insert(schema.flow).values({ name: "From a branch", updatedByEmail: ann.email }).returning();
+    const [from] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "input-branch")!.id }).returning();
+    const [to] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "run-tests")!.id, x: 200 }).returning();
+    await db.insert(schema.flowEdge).values({ flowId: flow!.id, fromFlowNodeId: from!.id, fromOutput: "branch", toFlowNodeId: to!.id, toInput: "branch" });
+    github.addRepository({ owner: project!.owner, repo: project!.repo, defaultBranch: "main", branches: ["main", "feat/x"] });
+    const branch = "feat/x";
+    const input = { flowId: flow!.id, projectId: project!.id, extraInstructions: "" };
+
+    expect((await startDialog(deps, ann, [])).flows.map((f) => f.name)).not.toContain("From a branch");
+    expect(await startFromInput(deps, ann, { ...input, value: "no-such-branch" })).toEqual({ ok: false, error: "That branch no longer exists." });
+
+    const started = await startFromInput(deps, ann, { ...input, value: branch });
+    if (!started.ok) throw new Error(started.error);
+    const [run] = await db.select().from(schema.run).where(sql`${schema.run.id} = ${started.runIds[0]!}`);
+    expect(run).toMatchObject({ ticketId: null, projectId: project!.id, title: `From a branch on ${branch}`, inputValue: { type: "branch", value: { branch } } });
   });
 
   it("T1-5: Start in Real mode is refused when gh is not logged in, with a link to the Machine", async () => {

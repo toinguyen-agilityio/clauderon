@@ -1,10 +1,19 @@
 export const OUTPUT_TYPES = ["issue", "plan", "branch", "test-result", "pull-request", "summary", "screenshot"] as const;
 export type OutputType = (typeof OUTPUT_TYPES)[number];
 
-export const NODE_KINDS = ["ticket", "agent", "command", "approve", "grill"] as const;
+// `ticket` is the entry kind of Flows and Run snapshots from before Input Nodes.
+export const NODE_KINDS = ["ticket", "input", "agent", "command", "approve", "grill"] as const;
 export type NodeKind = (typeof NODE_KINDS)[number];
 
-export type NodeInput = { name: string; type: OutputType; required: boolean };
+/** The Output Types a Member can supply when starting a Run; the others only come from a Node. */
+export const INPUT_TYPES = ["issue", "branch", "pull-request", "plan", "summary"] as const satisfies readonly OutputType[];
+export type InputType = (typeof INPUT_TYPES)[number];
+
+/** Whether a Node of this kind is a Flow's entry. */
+export const isEntryKind = (kind: NodeKind): boolean => kind === "input" || kind === "ticket";
+
+/** `group`: optional inputs of which at least one must be connected. */
+export type NodeInput = { name: string; type: OutputType; required: boolean; group?: string };
 export type NodeOutput = { name: string; type: OutputType; optional: boolean };
 
 /** A Node in the library (FLW-1): its signature is what Flows connect to. */
@@ -36,12 +45,13 @@ export type FlowEdge = {
 export type Flow = { nodes: FlowNode[]; edges: FlowEdge[] };
 
 export type ProblemCode =
-  | "ticket-count"
+  | "entry-count"
   | "no-end-node"
   | "cycle"
   | "type-mismatch"
   | "input-taken"
   | "required-input-unconnected"
+  | "input-group-unconnected"
   | "optional-output-off"
   | "unknown-node"
   | "unknown-port";
@@ -76,13 +86,17 @@ export function validateFlow(flow: Flow, library: readonly LibraryNode[]): Probl
     else problems.push({ code: "unknown-node", flowNodeId: node.id, message: `Node ${node.nodeId} is not in the library` });
   }
 
-  const ticketNodes = flow.nodes.filter((n) => signature.get(n.id)?.kind === "ticket");
-  if (ticketNodes.length !== 1) {
-    problems.push({ code: "ticket-count", message: `A Flow needs exactly one Ticket Node, found ${ticketNodes.length}` });
+  const isEntry = (id: string) => {
+    const kind = signature.get(id)?.kind;
+    return kind !== undefined && isEntryKind(kind);
+  };
+  const entryNodes = flow.nodes.filter((n) => isEntry(n.id));
+  if (entryNodes.length !== 1) {
+    problems.push({ code: "entry-count", message: `A Flow needs exactly one Input Node, found ${entryNodes.length}` });
   }
 
   const hasOutgoing = new Set(flow.edges.map((e) => e.fromFlowNodeId));
-  const endNodes = flow.nodes.filter((n) => signature.get(n.id)?.kind !== "ticket" && !hasOutgoing.has(n.id));
+  const endNodes = flow.nodes.filter((n) => !isEntry(n.id) && !hasOutgoing.has(n.id));
   if (endNodes.length === 0) {
     problems.push({ code: "no-end-node", message: "A Flow needs at least one end Node" });
   }
@@ -126,6 +140,17 @@ export function validateFlow(flow: Flow, library: readonly LibraryNode[]): Probl
           flowNodeId: node.id,
           input: input.name,
           message: `Required input ${input.name} of ${lib?.name} has no edge`,
+        });
+      }
+    }
+    for (const group of new Set(lib?.inputs.flatMap((i) => (i.group ? [i.group] : [])))) {
+      const members = lib!.inputs.filter((i) => i.group === group);
+      if (!members.some((i) => connectedInputs.has(`${node.id}.${i.name}`))) {
+        problems.push({
+          code: "input-group-unconnected",
+          flowNodeId: node.id,
+          input: members[0]!.name,
+          message: `${lib!.name} needs at least one of: ${members.map((i) => i.name).join(", ")}`,
         });
       }
     }

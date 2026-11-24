@@ -62,7 +62,7 @@ export function parseNodeFile(text: string): ParseNodesResult {
   for (const [i, n] of raw.nodes.entries()) {
     if (!isObject(n)) return fail(`Node ${i + 1} is not a Node definition.`);
     const label = String(n.name ?? "").trim() || `#${i + 1}`;
-    if (n.kind === "ticket") {
+    if (n.kind === "ticket" || n.kind === "input") {
       tickets.push(label);
       continue;
     }
