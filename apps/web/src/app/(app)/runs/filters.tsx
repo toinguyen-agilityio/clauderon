@@ -11,8 +11,9 @@ export function FilterSelect({ name, label, options }: { name: string; label: st
   const params = useSearchParams();
   return (
     <select
-      className="select"
+      className="select filter"
       aria-label={label}
+      title={options.find((o) => o.value === (params.get(name) ?? ""))?.label ?? label}
       value={params.get(name) ?? ""}
       onChange={(e) => {
         const next = new URLSearchParams(params);
