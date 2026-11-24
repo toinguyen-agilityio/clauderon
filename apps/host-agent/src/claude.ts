@@ -34,7 +34,25 @@ export type ClaudeEvent = {
 type Usage = { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
 type Content = { type: string; text?: string; name?: string; input?: unknown; content?: unknown };
 
+type ModelUsage = { inputTokens?: number; outputTokens?: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number };
+
 const inputTokens = (u: Usage) => (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+
+/**
+ * The tokens of the whole session. `modelUsage` counts subagents and stays cumulative across
+ * `--resume`, so a Grill Attempt's latest report is its total; `usage` covers neither and is only
+ * the fallback for a Claude Code that does not send `modelUsage`.
+ */
+function sessionUsage(usage: Usage | undefined, byModel: Record<string, ModelUsage> | undefined): ClaudeEvent["usage"] {
+  const models = Object.values(byModel ?? {});
+  if (models.length > 0) {
+    return {
+      inputTokens: models.reduce((sum, m) => sum + (m.inputTokens ?? 0) + (m.cacheCreationInputTokens ?? 0) + (m.cacheReadInputTokens ?? 0), 0),
+      outputTokens: models.reduce((sum, m) => sum + (m.outputTokens ?? 0), 0),
+    };
+  }
+  return usage ? { inputTokens: inputTokens(usage), outputTokens: usage.output_tokens ?? 0 } : undefined;
+}
 
 function short(value: unknown, max = 200): string {
   const text = typeof value === "string" ? value : JSON.stringify(value);
@@ -58,6 +76,7 @@ export function parseClaudeLine(line: string): ClaudeEvent {
     result?: string;
     errors?: unknown;
     usage?: Usage;
+    modelUsage?: Record<string, ModelUsage>;
   };
   try {
     event = JSON.parse(line);
@@ -79,7 +98,8 @@ export function parseClaudeLine(line: string): ClaudeEvent {
       return { ...sessionId, log: results.join("\n") || undefined };
     }
     case "result": {
-      const usage = event.usage ? { usage: { inputTokens: inputTokens(event.usage), outputTokens: event.usage.output_tokens ?? 0 } } : {};
+      const total = sessionUsage(event.usage, event.modelUsage);
+      const usage = total ? { usage: total } : {};
       const failed = event.is_error === true || event.subtype?.startsWith("error") === true;
       const message = failed ? firstLine(event.result) || firstLine(Array.isArray(event.errors) ? event.errors.filter((e) => typeof e === "string").join("\n") : undefined) : "";
       return {
