@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
+import { runProjectId, runTitle } from "./runs";
 import { flow, machine, member, run, ticket, type MachineDoctor, type MachineUsage } from "./schema";
 
 export type { MachineDoctor, MachineUsage } from "./schema";
@@ -175,7 +176,7 @@ export type MachineRun = {
   state: (typeof run.$inferSelect)["state"];
   queuedAt: Date;
   startedAt: Date | null;
-  ticketNumber: number;
+  ticketNumber: number | null;
   ticketTitle: string;
   projectId: string;
   flowName: string;
@@ -194,12 +195,12 @@ async function machineRunsIn(db: Db, machineIds: readonly string[], states: Mach
       queuedAt: run.queuedAt,
       startedAt: run.startedAt,
       ticketNumber: ticket.number,
-      ticketTitle: ticket.title,
-      projectId: ticket.projectId,
+      ticketTitle: runTitle,
+      projectId: runProjectId,
       flowName: flow.name,
     })
     .from(run)
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(flow, eq(flow.id, run.flowId))
     .where(and(inArray(run.machineId, [...machineIds]), inArray(run.state, states)))
     .orderBy(asc(run.queuedAt), asc(run.id));

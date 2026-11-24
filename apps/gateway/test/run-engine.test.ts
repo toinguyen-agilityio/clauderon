@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { ticketStatus } from "@clauderon/core";
-import { attemptsOfRun, cancelRun, getRun, listTicketsWithRuns, logChunksOf, schema, sql, type Db } from "@clauderon/db";
+import { ticketStatus, type OutputType, type RunInput } from "@clauderon/core";
+import { attemptsOfRun, buildFlowSnapshot, cancelRun, getRun, listTicketsWithRuns, logChunksOf, schema, sql, startBatch, type Db } from "@clauderon/db";
 import type { FakeAgent } from "@clauderon/testing";
 import {
   createTestDatabase,
@@ -8,6 +8,7 @@ import {
   memorySocketPair,
   machineRow,
   projectRow,
+  sampleFlowId,
   startSampleBatch,
   ticketRow,
   type TestDatabase,
@@ -105,6 +106,57 @@ describe("Run engine", () => {
     // Only the Projects' repositories are kept from the login check.
     const [stored] = await db.select().from(schema.machine);
     expect(stored!.ghTokenScope).toEqual({ tokenRepos: ["acme/web"] });
+  });
+
+  describe("a Run without a Ticket", () => {
+    const startWithInput = async (ctx: Awaited<ReturnType<typeof setup>>, input: RunInput, output: { name: string; type: OutputType; optional: boolean }, toInput: string | null) => {
+      const flowId = await sampleFlowId(db);
+      const base = (await buildFlowSnapshot(db, flowId))!;
+      const entry = base.nodes.find((n) => n.kind === "input")!;
+      const flowSnapshot = {
+        ...base,
+        nodes: base.nodes.map((n) => (n.id === entry.id ? { ...n, outputs: [output] } : n)),
+        edges: base.edges.flatMap((e) => (e.fromFlowNodeId !== entry.id ? [e] : toInput ? [{ ...e, fromOutput: output.name, toInput }] : [])),
+      };
+      const start = await startBatch(
+        db,
+        { flowId, flowSnapshot, starter: ctx.member, machineId: ctx.machine.id, extraInstructions: "", ticketIds: [], direct: { projectId: ctx.project.id, title: "Do the plan", input } },
+        ctx.clock.now(),
+      );
+      if (!start.ok) throw new Error("start failed");
+      await ctx.gateway.engine.schedule(ctx.machine.id);
+      await ctx.flush();
+      return (await getRun(db, start.runIds[0]!))!;
+    };
+
+    it("feeds a plan Input to the next Node and opens the pull request without an issue", async () => {
+      const ctx = await setup();
+      succeedEverything(ctx.agent);
+      const run = await startWithInput(ctx, { type: "plan", value: "Add a retry" }, { name: "plan", type: "plan", optional: false }, "plan");
+      expect(run.state).toBe("succeeded");
+      expect(run.branch).toBe(`clauderon/run-do-the-plan-${run.id.slice(0, 6)}`);
+      const [code, , pr] = ctx.agent.of("node.run");
+      expect(code!.prompt).toContain("## plan\n\nAdd a retry");
+      expect(pr!.env).toMatchObject({ CLAUDERON_TITLE: "Do the plan", CLAUDERON_BASE: "main" });
+      expect(pr!.env).not.toHaveProperty("CLAUDERON_ISSUE_NUMBER");
+    });
+
+    it("makes the Run's own branch from a branch Input", async () => {
+      const ctx = await setup();
+      succeedEverything(ctx.agent);
+      const run = await startWithInput(ctx, { type: "branch", value: { branch: "feat/x" } }, { name: "branch", type: "branch", optional: false }, null);
+      const [prepare] = ctx.agent.of("workspace.prepare");
+      expect(prepare).toMatchObject({ baseBranch: "feat/x", branch: run.branch });
+      expect(run.branch).not.toBe("feat/x");
+    });
+
+    it("fails the Run when an issue Input has no Ticket", async () => {
+      const ctx = await setup();
+      succeedEverything(ctx.agent);
+      const run = await startWithInput(ctx, { type: "plan", value: "x" }, { name: "issue", type: "issue", optional: false }, "issue");
+      expect(run.state).toBe("failed");
+      expect(ctx.agent.of("node.run")).toHaveLength(0);
+    });
   });
 
   it("T1-13: no pull request printed: the Run succeeds and the Ticket stays Open", async () => {

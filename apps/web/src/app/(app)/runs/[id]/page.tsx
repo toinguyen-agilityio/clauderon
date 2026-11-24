@@ -42,12 +42,16 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
         </nav>
         <div className="page-head">
           <div className="grow">
-            <h1>{run.ticket.title}</h1>
+            <h1>{run.title}</h1>
             <div className="row" style={{ marginTop: 8 }}>
               <StatePill state={r.state} />
-              <a className="mono small row" style={{ gap: 4 }} href={run.ticket.url} target="_blank" rel="noreferrer">
-                {run.key} {Icon.external}
-              </a>
+              {run.ticket ? (
+                <a className="mono small row" style={{ gap: 4 }} href={run.ticket.url} target="_blank" rel="noreferrer">
+                  {run.key} {Icon.external}
+                </a>
+              ) : (
+                <span className="mono small">{run.key}</span>
+              )}
               <span className="faint">·</span>
               <span className="small">{run.snapshot.name}</span>
               <span className="faint">·</span>

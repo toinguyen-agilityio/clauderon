@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
+import type { RunInput } from "@clauderon/core";
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -22,7 +24,7 @@ const id = () => uuid("id").primaryKey().defaultRandom();
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const ts = (name: string) => timestamp(name, { withTimezone: true });
 
-export const nodeKind = pgEnum("node_kind", ["ticket", "agent", "command", "approve", "grill"]);
+export const nodeKind = pgEnum("node_kind", ["ticket", "input", "agent", "command", "approve", "grill"]);
 export const runState = pgEnum("run_state", [
   "queued",
   "running",
@@ -288,9 +290,12 @@ export const run = pgTable(
     batchId: uuid("batch_id")
       .notNull()
       .references(() => batch.id),
-    ticketId: uuid("ticket_id")
-      .notNull()
-      .references(() => ticket.id),
+    /** Null for a Run started from a Flow's non-issue Input. */
+    ticketId: uuid("ticket_id").references(() => ticket.id),
+    /** Set only on a Run without a Ticket; otherwise the Ticket says which Project. */
+    projectId: uuid("project_id").references(() => project.id),
+    title: text("title"),
+    inputValue: jsonb("input_value").$type<RunInput>(),
     flowId: uuid("flow_id")
       .notNull()
       .references(() => flow.id),
@@ -321,6 +326,7 @@ export const run = pgTable(
     uniqueIndex("run_one_active_per_ticket_idx")
       .on(t.ticketId)
       .where(sql`${t.state} not in ('succeeded', 'cancelled')`),
+    check("run_ticket_or_project", sql`${t.ticketId} is not null or ${t.projectId} is not null`),
   ],
 );
 

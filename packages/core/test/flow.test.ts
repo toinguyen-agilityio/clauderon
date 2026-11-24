@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canConnect, topologicalOrder, validateFlow, type Flow } from "../src/index";
+import { canConnect, topologicalOrder, validateFlow, type Flow, type LibraryNode } from "../src/index";
 import { basicDelivery, edge, fn, library, planAndDeliver } from "./fixtures";
 
 const codes = (flow: Flow) => validateFlow(flow, library).map((p) => p.code);
@@ -42,10 +42,10 @@ describe("validateFlow", () => {
       nodes: [fn("t", "ticket", 0), fn("t2", "ticket", 0, 1), fn("draft", "draft-a-plan", 1)],
       edges: [edge("t", "issue", "draft", "issue")],
     };
-    expect(codes(two)).toContain("ticket-count");
+    expect(codes(two)).toContain("entry-count");
 
     const none: Flow = { nodes: [fn("draft", "draft-a-plan", 1)], edges: [] };
-    expect(codes(none)).toEqual(expect.arrayContaining(["ticket-count", "required-input-unconnected"]));
+    expect(codes(none)).toEqual(expect.arrayContaining(["entry-count", "required-input-unconnected"]));
 
     const unconnected: Flow = {
       nodes: [fn("t", "ticket", 0), fn("draft", "draft-a-plan", 1), fn("test", "run-tests", 2)],
@@ -118,5 +118,42 @@ describe("topologicalOrder", () => {
     expect(() =>
       topologicalOrder({ nodes: [fn("a", "approve-a-plan", 0), fn("b", "approve-a-plan", 1)], edges: [edge("a", "plan", "b", "plan"), edge("b", "plan", "a", "plan")] }),
     ).toThrow(/cycle/);
+  });
+});
+
+describe("validateFlow with Input Nodes", () => {
+  const library: LibraryNode[] = [
+    { id: "branch", name: "Branch", kind: "input", inputs: [], outputs: [{ name: "branch", type: "branch", optional: false }] },
+    { id: "plan", name: "Plan", kind: "input", inputs: [], outputs: [{ name: "plan", type: "plan", optional: false }] },
+    { id: "tests", name: "Run tests", kind: "command", inputs: [{ name: "branch", type: "branch", required: true }], outputs: [] },
+    {
+      id: "code",
+      name: "Code a change",
+      kind: "agent",
+      inputs: [
+        { name: "issue", type: "issue", required: false, group: "context" },
+        { name: "plan", type: "plan", required: false, group: "context" },
+      ],
+      outputs: [],
+    },
+  ];
+  const place = (id: string, nodeId: string) => ({ id, nodeId, x: 0, y: 0, enabledOptionalOutputs: [] });
+  const edge = (from: string, fromOutput: string, to: string, toInput: string) => ({ id: `${from}-${to}`, fromFlowNodeId: from, fromOutput, toFlowNodeId: to, toInput });
+
+  it("accepts a Flow that starts from a non-issue Input", () => {
+    const flow = { nodes: [place("b", "branch"), place("t", "tests")], edges: [edge("b", "branch", "t", "branch")] };
+    expect(validateFlow(flow, library)).toEqual([]);
+  });
+
+  it("refuses two Input Nodes", () => {
+    const flow = { nodes: [place("b", "branch"), place("p", "plan"), place("t", "tests")], edges: [edge("b", "branch", "t", "branch")] };
+    expect(validateFlow(flow, library).map((p) => p.code)).toContain("entry-count");
+  });
+
+  it("needs one input of a group connected", () => {
+    const without = { nodes: [place("p", "plan"), place("c", "code")], edges: [] };
+    expect(validateFlow(without, library).map((p) => p.code)).toContain("input-group-unconnected");
+    const withPlan = { ...without, edges: [edge("p", "plan", "c", "plan")] };
+    expect(validateFlow(withPlan, library)).toEqual([]);
   });
 });

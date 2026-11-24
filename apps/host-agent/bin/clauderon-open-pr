@@ -5,7 +5,7 @@
 # environment the Host Agent sets; prints one JSON line with the pull request.
 set -euo pipefail
 
-: "${CLAUDERON_ISSUE_NUMBER:?not set}" "${CLAUDERON_BASE:?not set}" "${CLAUDERON_BRANCH:?not set}" "${CLAUDERON_TITLE:?not set}"
+: "${CLAUDERON_BASE:?not set}" "${CLAUDERON_BRANCH:?not set}" "${CLAUDERON_TITLE:?not set}"
 
 git fetch --quiet origin "$CLAUDERON_BASE"
 ahead=$(git rev-list --count "origin/$CLAUDERON_BASE..HEAD")
@@ -42,9 +42,12 @@ else
       echo '```'
       echo
     fi
-    echo "Refs #$CLAUDERON_ISSUE_NUMBER"
+    # A Run started without a Ticket has no issue to refer to.
+    if [ -n "${CLAUDERON_ISSUE_NUMBER:-}" ]; then
+      echo "Refs #$CLAUDERON_ISSUE_NUMBER"
+    fi
   } >"$body"
-  url=$(gh pr create --base "$CLAUDERON_BASE" --head "$CLAUDERON_BRANCH" --title "$CLAUDERON_TITLE (#$CLAUDERON_ISSUE_NUMBER)" --body-file "$body")
+  url=$(gh pr create --base "$CLAUDERON_BASE" --head "$CLAUDERON_BRANCH" --title "$CLAUDERON_TITLE${CLAUDERON_ISSUE_NUMBER:+ (#$CLAUDERON_ISSUE_NUMBER)}" --body-file "$body")
   number=$(gh pr view "$url" --json number --jq .number)
 fi
 

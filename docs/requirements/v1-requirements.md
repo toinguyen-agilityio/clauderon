@@ -186,15 +186,15 @@ Priority: **Must** / **Should** / **Could**.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FLW-1 | **Node library:** each Node has a name, a kind (Agent, Command, Human, or the Ticket entry Node), instructions or a command, typed inputs (each required or optional) and typed Outputs (each always produced or optional). | Must |
+| FLW-1 | **Node library:** each Node has a name, a kind (Agent, Command, Human, or an Input entry Node), instructions or a command, typed inputs (each required or optional) and typed Outputs (each always produced or optional). | Must |
 | FLW-2 | Human Nodes come in two kinds. **Approve**: Approve, or Reject with feedback; an Approve Node passes its input through as an Output of the same Output Type. **Grill**: in each round Claude asks a batch of questions, one Member answers them all in one form, and Claude resumes the same Claude Code session; it may ask another round until it produces its Outputs. There is no limit on rounds; any Member can Cancel the Run. | Must |
 | FLW-3 | Canvas editor: drag Nodes from the library onto the Flow, connect an Output to an input. | Must |
 | FLW-4 | An edge is allowed only when the Output Type matches the input; a mismatch shows an error on the edge. | Must |
-| FLW-5 | Validate before saving: exactly one Ticket Node (the entry, which emits the `issue` for any Node that needs it), at least one end Node, no cycles, no required input left unconnected. A Flow with problems shows an "N problems" badge and cannot start Runs. | Must |
+| FLW-5 | Validate before saving: exactly one Input Node (the entry, typed `issue`, `branch`, `pull-request`, `plan` or `summary`; an `issue` Input emits the Ticket, the others what the Starter gives at Start, in a Run with no Ticket), at least one end Node, no cycles, no required input left unconnected. A Flow with problems shows an "N problems" badge and cannot start Runs. | Must |
 | FLW-6 | Node panel, for a Node placed in a Flow: its name, extra instructions for this Flow, optional Outputs on or off. | Must |
 | FLW-7 | A Flow cannot be edited or deleted while any Active Run uses it; it can still be viewed and cloned, and the editor shows which Run holds the lock. There are no Flow versions. | Must |
 | FLW-8 | Seed the sample Nodes and Flows below. Samples are edited and deleted like any Flow or Node (still subject to FLW-7 and FLW-10) and can be cloned. Seeding again only adds the samples that are missing; it never overwrites a Member's changes. | Must |
-| FLW-9 | Any Member can create a new Flow (it starts with the Ticket Node placed) and edit or delete any Flow or library Node, samples included; every change is recorded in the audit log. | Must |
+| FLW-9 | Any Member can create a new Flow (it starts with the Ticket Input Node placed) and edit or delete any Flow or library Node, samples included; every change is recorded in the audit log. | Must |
 | FLW-10 | A library Node cannot be edited while a Flow that uses it is locked. Editing a library Node changes every Flow that uses it. | Must |
 
 Output Types for v1: `issue`, `plan`, `branch`, `test-result`, `pull-request`, `summary`, `screenshot`.
@@ -203,11 +203,15 @@ Sample Nodes (FLW-8); optional inputs and Outputs are marked *opt*:
 
 | Node | Kind | Inputs | Outputs |
 | --- | --- | --- | --- |
-| Ticket | Entry | — | `issue` |
+| Ticket | Input | — | `issue` |
+| Branch | Input | — | `branch` |
+| Pull request | Input | — | `pull-request` |
+| Plan | Input | — | `plan` |
+| Summary | Input | — | `summary` |
 | Grill a plan | Human (Grill) | `issue` | `plan` |
 | Draft a plan | Agent | `issue` | `plan` |
 | Approve a plan | Human (Approve) | `plan` | `plan` |
-| Code a change | Agent | `issue`, `plan` *opt* | `branch`, `summary` *opt* |
+| Code a change | Agent | `issue` *opt*, `plan` *opt* (at least one) | `branch`, `summary` *opt* |
 | Run tests | Command | `branch` | `test-result` |
 | Capture screenshots | Command | `branch` | `screenshot` |
 | Open a pull request | Command | `branch`, `test-result` *opt*, `summary` *opt* | `pull-request` |

@@ -44,7 +44,7 @@ esac
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-function run(env: Record<string, string> = {}) {
+function run(env: Record<string, string | undefined> = {}) {
   writeFileSync(join(dir, "summary"), "Fixed the totals.");
   writeFileSync(join(dir, "tests"), "Exit code 0\n\n3 passing");
   return spawnSync("bash", [SCRIPT], {
@@ -91,6 +91,15 @@ describe("clauderon-open-pr (RUN-11, TIC-8)", () => {
     expect(body).toContain("Fixed the totals.");
     expect(body).toContain("3 passing");
     expect(body.trim().endsWith("Refs #412")).toBe(true);
+  });
+
+  it("opens a pull request without a Refs line when the Run has no Ticket", () => {
+    git(work, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "fix");
+    const result = run({ CLAUDERON_ISSUE_NUMBER: undefined, CLAUDERON_BRANCH: "clauderon/run-add-a-retry-abc123", CLAUDERON_TITLE: "Add a retry" });
+    expect(result.status).toBe(0);
+    expect(calls()).toContain("--title Add a retry");
+    expect(calls()).not.toContain("(#");
+    expect(readFileSync(join(dir, "body"), "utf8")).not.toContain("Refs #");
   });
 
   it("reuses the open pull request for the branch: pushing is enough", () => {

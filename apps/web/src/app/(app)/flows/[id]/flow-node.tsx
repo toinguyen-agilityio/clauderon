@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type CSSProperties } from "react";
-import type { LibraryNode, OutputType } from "@clauderon/core";
+import { isEntryKind, type LibraryNode, type OutputType } from "@clauderon/core";
 import { outputColor } from "../../../../components/state-pill";
 import type { EditorData } from "../../../../server/flows";
 import { CanvasHandle, type HandleType } from "./flow-canvas";
@@ -52,7 +52,7 @@ type Props = {
 
 export function NodeView({ id, lib, placement, selected, focused, readOnly, problems, missingInputs, flash, runState, trace, wire, renaming, onRename, onAction, onAdd }: Props) {
   const title = placement.label || lib.name;
-  const pill = lib.kind === "ticket";
+  const pill = isEntryKind(lib.kind);
   const dim = wire !== null && wire.nodeId !== id && !acceptsWire(id, lib, placement, wire);
   const rows = Math.max(lib.inputs.length, lib.outputs.length);
 

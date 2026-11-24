@@ -1,6 +1,6 @@
 import { mask } from "./mask";
 import { checkNodeDefinition, type NodeDefinition } from "./library";
-import { validateFlow, type NodeInput, type NodeOutput, type ProblemCode } from "./flow";
+import { INPUT_TYPES, validateFlow, type NodeInput, type NodeOutput, type ProblemCode } from "./flow";
 
 // Exporting a Flow to a file and importing it (issue #98). The file holds the Flow's name, the
 // definitions of the Nodes it uses, where they sit and how they connect: no ids, emails, dates
@@ -57,7 +57,7 @@ export function buildFlowFile(flow: FlowToExport): FlowFile {
 
 export type ParsedFlow = {
   name: string;
-  nodes: { ref: string; definition: NodeDefinition; isTicket: boolean }[];
+  nodes: { ref: string; definition: NodeDefinition; isEntry: boolean }[];
   placements: FlowFile["placements"];
   edges: FlowFile["edges"];
 };
@@ -67,16 +67,18 @@ export type ParseResult = { ok: true; flow: ParsedFlow } | { ok: false; error: s
 // no edge): the editor saves unfinished Flows too, so they can be exported and imported.
 const FATAL: ReadonlySet<ProblemCode> = new Set(["cycle", "type-mismatch", "input-taken", "unknown-node", "unknown-port"]);
 
+const ENTRY_KINDS: ReadonlySet<unknown> = new Set(["ticket", "input"]);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const fail = (error: string): ParseResult => ({ ok: false, error });
 
 /**
  * Reads a Flow file, checking it with the rules the editor applies (typed edges, one edge per
- * input, no cycles). Nothing is created from a file that fails. `ticket` is the Ticket sample
- * Node of this install: when there is one, a Ticket entry in the file means that one. When there
- * is none (an empty library), the file's own Ticket Node is read, if it fits the Ticket contract.
+ * input, no cycles). Nothing is created from a file that fails. `entries` are the Input Nodes of
+ * this install: an Input in the file means the one with the same Output Type (a `ticket` entry
+ * from an older file means `issue`). When there is none, the file's own Node is read, if it fits
+ * the Input contract.
  */
-export function parseFlowFile(text: string, ticket: { inputs: NodeInput[]; outputs: NodeOutput[] } | null): ParseResult {
+export function parseFlowFile(text: string, entries: readonly { inputs: NodeInput[]; outputs: NodeOutput[] }[]): ParseResult {
   if (text.length > FLOW_FILE_MAX_BYTES) return fail("That file is too large to be a Flow file.");
   let raw: unknown;
   try {
@@ -99,26 +101,28 @@ export function parseFlowFile(text: string, ticket: { inputs: NodeInput[]; outpu
     if (!isObject(n) || typeof n.ref !== "string" || !n.ref) return fail(`Node ${i + 1} has no ref.`);
     if (refs.has(n.ref)) return fail(`Node ref "${n.ref}" appears twice.`);
     refs.add(n.ref);
-    if (n.kind === "ticket") {
-      if (ticket) {
-        nodes.push({ ref: n.ref, isTicket: true, definition: { name: String(n.name ?? "Ticket"), kind: "ticket", instructions: "", command: null, inputs: ticket.inputs, outputs: ticket.outputs } });
+    if (ENTRY_KINDS.has(n.kind)) {
+      const declared = n.kind === "ticket" ? "issue" : Array.isArray(n.outputs) ? (n.outputs[0] as { type?: unknown } | undefined)?.type : undefined;
+      const known = entries.find((e) => e.outputs[0]?.type === declared);
+      if (known) {
+        nodes.push({ ref: n.ref, isEntry: true, definition: { name: String(n.name ?? "Input"), kind: "input", instructions: "", command: null, inputs: known.inputs, outputs: known.outputs } });
         continue;
       }
-      // No Ticket Node here yet: it comes from the file, once its ports fit the Ticket contract.
-      const checked = checkNodeDefinition({ ...n, kind: "agent", instructions: "Ticket", command: null });
+      // No such Input Node here yet: it comes from the file, once its ports fit the Input contract.
+      const checked = checkNodeDefinition({ ...n, kind: "agent", instructions: "Input", command: null });
       if (!checked.ok) return fail(`Node "${String(n.name ?? n.ref)}": ${checked.error}`);
       const d = checked.definition;
-      const issue = d.outputs.find((o) => o.name === "issue");
-      if (d.inputs.length > 0 || !issue || issue.type !== "issue" || issue.optional) {
-        return fail(`Node "${d.name}": a Ticket Node has no inputs and a required "issue" Output of type issue.`);
+      const only = d.outputs[0];
+      if (d.inputs.length > 0 || d.outputs.length !== 1 || !only || only.optional || !(INPUT_TYPES as readonly string[]).includes(only.type)) {
+        return fail(`Node "${d.name}": an Input Node has no inputs and one required Output of type ${INPUT_TYPES.join(", ")}.`);
       }
       const instructions = typeof n.instructions === "string" ? n.instructions.trim().slice(0, 20_000) : "";
-      nodes.push({ ref: n.ref, isTicket: true, definition: { name: d.name, kind: "ticket", instructions, command: null, inputs: [], outputs: d.outputs } });
+      nodes.push({ ref: n.ref, isEntry: true, definition: { name: d.name, kind: "input", instructions, command: null, inputs: [], outputs: d.outputs } });
       continue;
     }
     const checked = checkNodeDefinition(n);
     if (!checked.ok) return fail(`Node "${String(n.name ?? n.ref)}": ${checked.error}`);
-    nodes.push({ ref: n.ref, isTicket: false, definition: checked.definition });
+    nodes.push({ ref: n.ref, isEntry: false, definition: checked.definition });
   }
 
   const placements: ParsedFlow["placements"] = [];

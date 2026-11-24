@@ -861,7 +861,7 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
           <div className="fe-empty fc-overlay" onPointerDown={(e) => e.stopPropagation()}>
             <span className="fe-empty-ic">{FIcon.flow}</span>
             <b>This Flow is empty</b>
-            <span className="faint small">{readOnly ? "There is nothing to show." : "Start with a Ticket Node, then add the steps after it."}</span>
+            <span className="faint small">{readOnly ? "There is nothing to show." : "Start with an Input Node, then add the steps after it."}</span>
             {!readOnly && (
               <button type="button" className="fe-btn primary" onClick={() => setLibraryAt({ open: true, anchor: null })}>
                 {FIcon.plus}

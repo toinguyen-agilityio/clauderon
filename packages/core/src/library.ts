@@ -1,4 +1,4 @@
-import { NODE_KINDS, OUTPUT_TYPES, type NodeInput, type NodeKind, type NodeOutput } from "./flow";
+import { NODE_KINDS, OUTPUT_TYPES, isEntryKind, type NodeInput, type NodeKind, type NodeOutput } from "./flow";
 
 // What a Member may enter for a library Node (spec M2 §4, FLW-1, FLW-9).
 
@@ -13,8 +13,8 @@ export type NodeDefinition = {
   outputs: NodeOutput[];
 };
 
-/** Kinds a Member can create; the Ticket entry Node is a sample only. */
-export const CREATABLE_KINDS = NODE_KINDS.filter((k) => k !== "ticket");
+/** Kinds a Member can create; Input Nodes are samples only, one per Input Type. */
+export const CREATABLE_KINDS = NODE_KINDS.filter((k) => !isEntryKind(k));
 
 export type DefinitionCheck = { ok: true; definition: NodeDefinition } | { ok: false; error: string };
 
@@ -37,7 +37,7 @@ export function checkNodeDefinition(raw: {
 
   const kind = String(raw.kind) as NodeKind;
   if (!NODE_KINDS.includes(kind)) return { ok: false, error: "Pick a kind." };
-  if (kind === "ticket") return { ok: false, error: "The Ticket Node is a sample; a Flow has exactly one of it." };
+  if (isEntryKind(kind)) return { ok: false, error: "Input Nodes are samples; a Flow has exactly one of them." };
 
   const instructions = String(raw.instructions ?? "").trim().slice(0, 20_000);
   const command = raw.command == null ? null : String(raw.command).trim();
@@ -50,7 +50,9 @@ export function checkNodeDefinition(raw: {
     const inputName = String(i?.name ?? "").trim();
     if (!PORT_NAME.test(inputName)) return { ok: false, error: `Input name "${inputName}" must be lower case letters, digits and dashes.` };
     if (!(OUTPUT_TYPES as readonly string[]).includes(i.type)) return { ok: false, error: `Input ${inputName} needs an Output Type.` };
-    inputs.push({ name: inputName, type: i.type, required: Boolean(i.required) });
+    if (i.group !== undefined && !PORT_NAME.test(String(i.group))) return { ok: false, error: `Input ${inputName} has an invalid group.` };
+    // Keys in jsonb's stored order: imports compare definitions by their JSON text.
+    inputs.push({ name: inputName, type: i.type, ...(i.group === undefined ? {} : { group: String(i.group) }), required: Boolean(i.required) });
   }
   const outputs: NodeOutput[] = [];
   for (const o of raw.outputs as NodeOutput[]) {

@@ -1,8 +1,10 @@
 "use client";
 
+import { isEntryKind } from "@clauderon/core";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FlowRowActions } from "./flow-row-actions";
+import { StartFlow } from "./start-flow";
 import { kindIcon } from "./[id]/flow-icons";
 import { filterFlows, flowSteps, groupFlows, problemsLabel, scopeCounts, type FlowRowView, type FlowScope } from "./flows-view";
 
@@ -31,7 +33,7 @@ function Steps({ nodes }: { nodes: FlowRowView["nodes"] }) {
       {flowSteps(nodes).map((step, i) => (
         <li key={i} className={step.length > 1 ? "par" : undefined} aria-label={step.length > 1 ? `Side by side: ${step.map((n) => n.name).join(", ")}` : undefined}>
           {step.map((n, j) => (
-            <span key={j} className={`flow-step k-${n.kind} ${n.kind === "ticket" ? "ticket" : ""}`}>
+            <span key={j} className={`flow-step k-${n.kind} ${isEntryKind(n.kind) ? "ticket" : ""}`}>
               <span className="flow-step-ic" aria-hidden="true">
                 {kindIcon(n.kind)}
               </span>
@@ -69,6 +71,7 @@ function FlowCard({ flow: f }: { flow: FlowRowView }) {
         </span>
       </div>
       <FlowRowActions flowId={f.id} name={f.name} locked={f.lock !== null} runCount={f.runCount} />
+      {f.problems === 0 && f.inputType && f.inputType !== "issue" && <StartFlow flowId={f.id} name={f.name} />}
       <Steps nodes={f.nodes} />
       {f.updatedBy && (
         <span className="flow-who small faint" title={f.updatedTitle}>

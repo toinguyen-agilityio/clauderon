@@ -1,4 +1,4 @@
-import { agentSupportsFlowDrafts, buildFlowFile, isMachineReady, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind } from "@clauderon/core";
+import { agentSupportsFlowDrafts, buildFlowFile, isMachineReady, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind, isEntryKind, type OutputType } from "@clauderon/core";
 import {
   cloneFlow,
   createFlow,
@@ -46,6 +46,7 @@ export type FlowView = {
    * cycle), each with its step: Nodes on the same step can run side by side.
    */
   nodes: { name: string; kind: NodeKind; step: number }[];
+  inputType: OutputType | null;
   updatedByEmail: string;
   updatedByName: string | null;
   updatedAt: Date;
@@ -78,6 +79,7 @@ export async function viewFlows(deps: AppDeps) {
         const lib = libraryById.get(n.nodeId);
         return lib ? [{ name: lib.name, kind: lib.kind, step: steps.get(n.id) ?? 0 }] : [];
       }),
+      inputType: graph.nodes.map((n) => libraryById.get(n.nodeId)).find((l) => l && isEntryKind(l.kind))?.outputs[0]?.type ?? null,
       updatedByEmail: r.updatedByEmail,
       updatedByName: r.updatedByName,
       updatedAt: r.updatedAt,
@@ -100,7 +102,7 @@ export async function cloneMyFlow(deps: AppDeps, viewer: Viewer, flowId: string)
 export type CreateFlowResult = { ok: true; flowId: string; name: string } | { ok: false; error: string };
 
 /**
- * New Flow (FLW-9): any Member; it starts with the Ticket Node placed. A name already
+ * New Flow (FLW-9): any Member; it starts with the Ticket Input Node placed. A name already
  * taken becomes "Copy of <name>" so two Flows are not confused. Audit `flow.create`.
  */
 export async function createMyFlow(deps: AppDeps, viewer: Viewer, rawName: string): Promise<CreateFlowResult> {
@@ -250,13 +252,14 @@ const sameDefinition = (a: Definition, b: Definition) =>
  */
 export async function importMyFlow(deps: AppDeps, viewer: Viewer, text: string): Promise<ImportFlowResult> {
   const [rows, flowRows] = await Promise.all([listLibraryRows(deps.db), listFlowRows(deps.db)]);
-  const ticket = rows.find((n) => n.kind === "ticket" && n.isSample) ?? rows.find((n) => n.kind === "ticket") ?? null;
-  const parsed = parseFlowFile(text, ticket);
+  // Samples first, so an Input in the file means the seeded Node of its type.
+  const entries = rows.filter((n) => isEntryKind(n.kind)).sort((a, b) => Number(b.isSample) - Number(a.isSample));
+  const parsed = parseFlowFile(text, entries);
   if (!parsed.ok) return parsed;
 
   const nodeNames = rows.map((n) => n.name);
   const nodes = parsed.flow.nodes.map((n) => {
-    const same = rows.find((r) => (n.isTicket ? ticket !== null && r.id === ticket.id :sameDefinition(r, n.definition)));
+    const same = n.isEntry ? entries.find((r) => r.outputs[0]?.type === n.definition.outputs[0]?.type) : rows.find((r) => sameDefinition(r, n.definition));
     if (same) return { ref: n.ref, existingId: same.id, definition: n.definition };
     const clash = nodeNames.some((x) => x.toLowerCase() === n.definition.name.toLowerCase());
     const name = clash ? copyName(n.definition.name, nodeNames) : n.definition.name;

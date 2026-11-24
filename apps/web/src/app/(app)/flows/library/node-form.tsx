@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { CREATABLE_KINDS, OUTPUT_TYPES, type NodeInput, type NodeOutput, type OutputType } from "@clauderon/core";
+import { CREATABLE_KINDS, OUTPUT_TYPES, isEntryKind, type NodeInput, type NodeOutput, type OutputType } from "@clauderon/core";
 import { Icon } from "../../../../components/icons";
 import { outputColor } from "../../../../components/state-pill";
 import { kindIcon } from "../[id]/flow-icons";
@@ -188,12 +188,12 @@ export function NodeForm({
           </div>
           <fieldset className="field nf-kinds-field">
             <legend>Kind</legend>
-            {value.kind === "ticket" ? (
+            {isEntryKind(value.kind) ? (
               <p className="nf-kind-fixed">
-                <span className="nf-kind-ic k-ticket" aria-hidden="true">
-                  {kindIcon("ticket")}
+                <span className="nf-kind-ic k-input" aria-hidden="true">
+                  {kindIcon("input")}
                 </span>
-                Ticket, built in: it cannot change Kind.
+                Input, built in: it cannot change Kind.
               </p>
             ) : (
               <div className="nf-kinds">
@@ -257,7 +257,7 @@ export function NodeForm({
             (p) => (p as NodeInput).required,
             updateInput,
             () => set({ inputs: [...value.inputs, { name: "issue", type: "issue", required: true }] }),
-            readOnly || value.kind === "ticket" ? "No Inputs. This Node starts a Flow." : "No Inputs yet.",
+            readOnly || isEntryKind(value.kind) ? "No Inputs. This Node starts a Flow." : "No Inputs yet.",
           )}
           {ports(
             "outputs",

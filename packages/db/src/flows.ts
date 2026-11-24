@@ -113,13 +113,13 @@ export async function listFlowRows(db: Db): Promise<FlowListRow[]> {
 }
 
 /**
- * Creates a new, non-sample Flow with the library's Ticket Node already placed,
- * since every Flow starts with exactly one (FLW-5). The seeded Ticket is
- * preferred; if the library has no Ticket Node the Flow starts empty.
+ * Creates a new, non-sample Flow with an Input Node already placed, since every
+ * Flow starts with exactly one (FLW-5). The seeded Ticket Input is preferred;
+ * if the library has no Input Node the Flow starts empty.
  */
 export async function createFlow(db: Db, name: string, actorEmail: string, now: Date): Promise<{ id: string; name: string }> {
   return db.transaction(async (tx) => {
-    const tickets = await tx.select({ id: node.id, slug: node.slug }).from(node).where(eq(node.kind, "ticket")).orderBy(asc(node.createdAt));
+    const tickets = await tx.select({ id: node.id, slug: node.slug }).from(node).where(inArray(node.kind, ["input", "ticket"])).orderBy(asc(node.createdAt));
     const ticket = tickets.find((t) => t.slug === "ticket") ?? tickets[0];
     const [created] = await tx.insert(flow).values({ name, isSample: false, updatedByEmail: actorEmail, updatedAt: now }).returning();
     if (ticket) await tx.insert(flowNode).values({ flowId: created!.id, nodeId: ticket.id, x: 0, y: 0 });
