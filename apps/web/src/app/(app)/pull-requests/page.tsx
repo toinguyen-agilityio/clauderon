@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { Avatar } from "../../../components/brand";
 import { ago } from "../../../components/format";
-import { Icon } from "../../../components/icons";
 import { Tabs } from "../../../components/tabs";
 import { parsePullRequestTab, viewPullRequests } from "../../../server/runs";
 import { deps, requireMember } from "../../../server/runtime";
+import { PullRequestTable } from "./pull-request-table";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +36,7 @@ export default async function PullRequestsPage({ searchParams }: { searchParams:
         <div>
           <h1>Pull requests</h1>
           <p className="sub">
-            Open pull requests of every Project, read from GitHub at most every 30 seconds. Needs you: you are asked to review them.
+            Open pull requests of every Project, read from GitHub at most every 30 seconds. Needs you: you are asked to review them. Select some to start Runs with a Flow whose Input is a pull request.
           </p>
         </div>
       </div>
@@ -75,78 +74,7 @@ export default async function PullRequestsPage({ searchParams }: { searchParams:
       />
 
       <div className="card">
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Pull request</th>
-                <th>Ticket</th>
-                <th>Flow</th>
-                <th>Opened by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={4}>
-                    <div className="empty">
-                      <b>No pull requests</b>
-                      {empty}
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="t-title">
-                    <span className="mono faint small">
-                      {r.repo}{" "}
-                      {r.url ? (
-                        <a className="mono" href={r.url} target="_blank" rel="noreferrer">
-                          #{r.number} {Icon.external}
-                        </a>
-                      ) : (
-                        <span className="mono">#{r.number}</span>
-                      )}
-                    </span>
-                    {r.title && <div>{r.title}</div>}
-                    {r.needsYou && <span className="pill wait">Needs you</span>}
-                    {r.branch && <div className="mono faint small clip pr-branch">{r.branch}</div>}
-                  </td>
-                  <td className="t-title">
-                    {r.run ? (
-                      <>
-                        <span className="mono faint small">{r.run.key}</span>
-                        <div>
-                          <Link href={`/runs/${r.run.id}`}>{r.run.ticketTitle}</Link>
-                        </div>
-                      </>
-                    ) : (
-                      <span className="faint small">Not opened by a Run</span>
-                    )}
-                  </td>
-                  <td className="small nowrap">{r.run?.flowName ?? <span className="faint">—</span>}</td>
-                  <td>
-                    {r.run ? (
-                      <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
-                        <Avatar name={r.run.starterName} email={r.run.starterEmail} picture={r.run.starterPicture} />
-                        <span className="small nowrap">
-                          {r.run.starterName ?? r.run.starterEmail}
-                          <div className="faint">{ago(r.at, now)}</div>
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="small nowrap">
-                        <span className="mono">@{r.authorLogin}</span>
-                        <div className="faint">{ago(r.at, now)}</div>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <PullRequestTable rows={rows.map(({ at, ...r }) => ({ ...r, ago: ago(at, now) }))} empty={empty} />
         {(page > 1 || hasMore) && (
           <div className="pager">
             {page > 1 && (

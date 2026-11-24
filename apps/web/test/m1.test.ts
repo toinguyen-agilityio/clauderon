@@ -25,7 +25,7 @@ import {
 } from "../src/server/machines";
 import { enableRepository, enableableRepositories, removeRepository, syncAllProjects, syncProject } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
-import { startDialog, startFromInput, startRuns } from "../src/server/start";
+import { pullRequestStartDialog, startDialog, startFromInput, startFromPullRequests, startRuns } from "../src/server/start";
 import { viewTickets } from "../src/server/tickets";
 
 let test: TestDatabase;
@@ -542,6 +542,51 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     if (!started.ok) throw new Error(started.error);
     const [run] = await db.select().from(schema.run).where(sql`${schema.run.id} = ${started.runIds[0]!}`);
     expect(run).toMatchObject({ ticketId: null, projectId: project!.id, title: `From a branch on ${branch}`, inputValue: { type: "branch", value: { branch } } });
+  });
+
+  it("starts one Run per picked pull request as one Batch, only with a pull-request Flow and only while each is open", async () => {
+    const { ann, machine, flowId: ticketFlowId } = await ready();
+    const [project] = await db.select().from(schema.project);
+    const nodes = await db.select().from(schema.node);
+    const [flow] = await db.insert(schema.flow).values({ name: "Review a PR", updatedByEmail: ann.email }).returning();
+    const [from] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "input-pull-request")!.id }).returning();
+    const [to] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "approve-the-pull-request")!.id, x: 200 }).returning();
+    await db.insert(schema.flowEdge).values({ flowId: flow!.id, fromFlowNodeId: from!.id, fromOutput: "pull-request", toFlowNodeId: to!.id, toInput: "pull-request" });
+    const url = (n: number) => `https://github.com/${project!.owner}/${project!.repo}/pull/${n}`;
+    github.addRepository({
+      owner: project!.owner,
+      repo: project!.repo,
+      defaultBranch: "main",
+      pullRequests: [7, 8].map((number) => ({ number, url: url(number), state: "open" as const, branch: `feat/${number}` })),
+    });
+    const pick = (...numbers: number[]) => numbers.map((number) => ({ projectId: project!.id, number }));
+
+    const dialog = await pullRequestStartDialog(deps, ann, 2);
+    expect(dialog.flows.map((f) => f.name)).toEqual(["Review a PR"]);
+    expect(dialog.positions).toEqual([0, 0]);
+
+    expect(await startFromPullRequests(deps, ann, { flowId: flow!.id, pullRequests: [], extraInstructions: "" })).toEqual({ ok: false, error: "Select at least one pull request." });
+    expect(await startFromPullRequests(deps, ann, { flowId: ticketFlowId, pullRequests: pick(7), extraInstructions: "" })).toEqual({ ok: false, error: "Pick a Flow without problems." });
+    expect(await startFromPullRequests(deps, ann, { flowId: flow!.id, pullRequests: pick(7, 9), extraInstructions: "" })).toEqual({ ok: false, error: `${project!.repo}#9 is no longer open.` });
+    expect(await db.select().from(schema.run)).toEqual([]);
+
+    const started = await startFromPullRequests(deps, ann, { flowId: flow!.id, pullRequests: pick(7, 8, 7), extraInstructions: " Be brief. " });
+    if (!started.ok) throw new Error(started.error);
+    expect(started.runIds).toHaveLength(2);
+    const runs = await db.select().from(schema.run).orderBy(schema.run.queuedAt);
+    expect(runs.map((r) => ({ batchId: r.batchId, ticketId: r.ticketId, projectId: r.projectId, title: r.title, inputValue: r.inputValue, state: r.state }))).toEqual(
+      [7, 8].map((number) => ({
+        batchId: started.batchId,
+        ticketId: null,
+        projectId: project!.id,
+        title: `Review a PR on PR #${number}`,
+        inputValue: { type: "pull-request", value: { number, url: url(number) } },
+        state: "queued",
+      })),
+    );
+    const [b] = await db.select().from(schema.batch);
+    expect(b!.extraInstructions).toBe("Be brief.");
+    expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
   });
 
   it("T1-5: Start in Real mode is refused when gh is not logged in, with a link to the Machine", async () => {

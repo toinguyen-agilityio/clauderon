@@ -371,25 +371,58 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .outv { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px; background: var(--code-bg); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; margin: 0; }
 .outv.mono { font-size: 12px; }
 .md-box { display: flex; flex-direction: column; gap: 6px; }
-.md-bar { display: flex; gap: 4px; align-self: flex-end; }
-.md-bar button { height: 22px; padding: 0 8px; border-radius: 11px; border: 1px solid var(--line); background: var(--panel); font-size: 11px; font-weight: 600; color: var(--fg2); cursor: pointer; }
-.md-bar button.on { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-weak); }
-.md.outv { white-space: normal; max-height: 420px; line-height: 1.55; }
+/* Long text: the box fades out at the bottom and the Expand button sits on the fade, inside the box. */
+.md-box.long { position: relative; gap: 0; }
+.md-box.long .md.outv.collapsed { padding-bottom: 44px; }
+.md-more {
+  position: absolute; left: 1px; right: 1px; bottom: 1px; height: 72px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px;
+  border-radius: 0 0 var(--r-sm) var(--r-sm); pointer-events: none;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--code-bg) 0%, transparent), var(--code-bg) 70%);
+}
+.md-expand {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 14px;
+  border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow-lift);
+  transition: border-color .12s, color .12s, background .12s;
+}
+.md-expand svg { width: 12px; height: 12px; }
+.md-expand .md-size { color: var(--fg3); font-weight: 500; padding-left: 6px; border-left: 1px solid var(--line); }
+.md-expand:hover { border-color: var(--accent-text); color: var(--accent-text); }
+.md-expand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.md-dialog-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.md-dialog-t h2 { overflow-wrap: anywhere; }
+.md.outv { white-space: normal; max-height: 420px; line-height: 1.6; color: var(--fg); }
 .md.outv.collapsed { max-height: 180px; overflow: hidden; }
-.md.outv.full { max-height: none; overflow: visible; border: 0; padding: 0; background: none; }
+.md.outv.full { max-height: none; overflow: visible; border: 0; padding: 0; background: none; font-size: 14px; line-height: 1.7; max-width: 76ch; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
-.md h1, .md h2, .md h3, .md h4 { margin: 14px 0 6px; line-height: 1.25; }
-.md h1 { font-size: 17px; } .md h2 { font-size: 15px; } .md h3, .md h4 { font-size: 13px; }
-.md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0 0 10px; }
+.md h1, .md h2, .md h3, .md h4 { margin: 18px 0 8px; line-height: 1.3; color: var(--heading); font-weight: 650; }
+.md h1 { font-size: 1.3em; } .md h2 { font-size: 1.15em; } .md h3 { font-size: 1.02em; }
+.md h4 { font-size: .8em; text-transform: uppercase; letter-spacing: .04em; color: var(--fg3); }
+.md h1, .md h2 { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0 0 12px; }
 .md ul, .md ol { padding-left: 22px; }
-.md li + li { margin-top: 3px; }
-.md code { font-family: var(--mono, monospace); font-size: 12px; background: var(--accent-weak); padding: 1px 4px; border-radius: 4px; }
-.md pre { background: var(--term-bg); color: #e8f0ee; padding: 10px 12px; border-radius: var(--r-sm); overflow: auto; white-space: pre; }
-.md pre code { background: none; padding: 0; color: inherit; }
-.md blockquote { border-left: 3px solid var(--line-strong); padding-left: 10px; color: var(--fg2); }
-.md table { border-collapse: collapse; }
-.md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+.md li { padding-left: 2px; }
+.md li::marker { color: var(--fg3); }
+.md ol > li::marker { font-variant-numeric: tabular-nums; font-weight: 600; }
+.md li + li { margin-top: 6px; }
+/* A list item with nested blocks (paragraphs, sub-lists) gets room to breathe. */
+.md li > p { margin: 0 0 6px; }
+.md li > ul, .md li > ol { margin: 6px 0 0; }
+.md strong { font-weight: 650; color: var(--fg); }
+.md a { color: var(--accent-text); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 2px; }
+.md a:hover { text-decoration-color: currentColor; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+.md code { font-family: var(--font-mono), monospace; font-size: .88em; background: var(--accent-weak); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+/* Agent text puts prose in code fences too: wrap long lines instead of scrolling sideways. */
+.md pre { background: var(--term-bg); color: var(--term-fg); padding: 12px 14px; border-radius: var(--r-sm); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; line-height: 1.6; }
+.md pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+.md blockquote { border-left: 3px solid var(--accent); background: var(--accent-weak); padding: 8px 12px; border-radius: 0 var(--r-sm) var(--r-sm) 0; color: var(--fg2); }
+.md blockquote > :last-child { margin-bottom: 0; }
+.md table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; font-size: .93em; }
+.md th { background: var(--code-bg); font-weight: 600; }
+.md th, .md td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+.md input[type="checkbox"] { margin: 0 6px 0 -2px; vertical-align: -2px; }
+.md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -18px; }
 .xterm-box { background: var(--term-bg); border-radius: var(--r); padding: 8px; height: calc(100vh - 240px); min-height: 320px; }
 .xterm-box > div { height: 100%; }
 

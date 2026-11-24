@@ -43,23 +43,31 @@ async function keysFor(deps: AppDeps) {
   return ticketKeys(await listProjects(deps.db));
 }
 
-/** What the dialog shows: Flows, the Starter's Machine with Slots and Machine Ready, author warnings. */
-export async function startDialog(deps: AppDeps, viewer: Viewer, ticketIds: readonly string[]) {
-  const [flows, machine, tickets, keyOf] = await Promise.all([
-    startableFlows(deps).then((all) => all.filter((f) => f.inputType === "issue")),
-    getMachineOfMember(deps.db, viewer.id),
-    getTickets(deps.db, ticketIds),
-    keysFor(deps),
-  ]);
+/** The Starter's Machine with Slots and Machine Ready, and where `count` new Runs would land. */
+async function startingMachineView(deps: AppDeps, viewer: Viewer, count: number) {
+  const machine = await getMachineOfMember(deps.db, viewer.id);
   const counts = machine ? (await machineRunCounts(deps.db, [machine.id])).get(machine.id)! : null;
   return {
-    flows,
     machine:
       machine && counts
         ? { id: machine.id, connected: machine.connected, paired: machine.tokenHash !== null, slots: machine.slots, ...counts, ready: isMachineReady(machine) }
         : null,
     // Where each new Run would land: 0 starts at once, n is the n-th waiting (spec M2 §6).
-    positions: machine && counts ? queuePositions({ slots: machine.slots, ...counts }, ticketIds.length) : [],
+    positions: machine && counts ? queuePositions({ slots: machine.slots, ...counts }, count) : [],
+  };
+}
+
+/** What the dialog shows: Flows, the Starter's Machine with Slots and Machine Ready, author warnings. */
+export async function startDialog(deps: AppDeps, viewer: Viewer, ticketIds: readonly string[]) {
+  const [flows, mine, tickets, keyOf] = await Promise.all([
+    startableFlows(deps).then((all) => all.filter((f) => f.inputType === "issue")),
+    startingMachineView(deps, viewer, ticketIds.length),
+    getTickets(deps.db, ticketIds),
+    keysFor(deps),
+  ]);
+  return {
+    flows,
+    ...mine,
     tickets: tickets.map((t) => ({ id: t.id, key: keyOf(t.projectId, t.number), title: t.title })),
     // Not blocking (TIC-9): the Starter decides.
     warnings: tickets
@@ -188,11 +196,66 @@ export async function startFromInput(deps: AppDeps, viewer: Viewer, input: Start
       machineId: ready.machine.id,
       extraInstructions: input.extraInstructions.trim(),
       ticketIds: [],
-      direct: { projectId: project.id, title: runInputTitle(flow.name, resolved.input), input: resolved.input },
+      direct: [{ projectId: project.id, title: runInputTitle(flow.name, resolved.input), input: resolved.input }],
     },
     deps.clock.now(),
   );
   if (!result.ok) return { ok: false, error: result.reason === "flow-deleted" ? FLOW_DELETED : "The Run could not start." };
+  await deps.command({ type: "schedule", machineId: ready.machine.id });
+  return result;
+}
+
+/** The Start dialog for picked pull requests: the Flows whose Input is a pull request. */
+export async function pullRequestStartDialog(deps: AppDeps, viewer: Viewer, count: number) {
+  const [flows, mine] = await Promise.all([startableFlows(deps).then((all) => all.filter((f) => f.inputType === "pull-request")), startingMachineView(deps, viewer, count)]);
+  return { flows, ...mine };
+}
+
+export type PullRequestRef = { projectId: string; number: number };
+export type StartPullRequestsInput = { flowId: string; pullRequests: readonly PullRequestRef[]; extraInstructions: string };
+
+/**
+ * Start from the Pull requests page: one Batch with one Run per picked pull request, no Ticket.
+ * Each must still be open on GitHub; its URL comes from there, not the browser.
+ */
+export async function startFromPullRequests(deps: AppDeps, viewer: Viewer, input: StartPullRequestsInput): Promise<StartResult> {
+  const picked = [...new Map(input.pullRequests.map((p) => [`${p.projectId}#${p.number}`, p])).values()];
+  if (picked.length === 0) return { ok: false, error: "Select at least one pull request." };
+
+  const ready = await startingMachine(deps, viewer);
+  if (!ready.ok) return ready;
+  const flow = (await startableFlows(deps)).find((f) => f.id === input.flowId && f.inputType === "pull-request");
+  if (!flow) return { ok: false, error: "Pick a Flow without problems." };
+
+  const projects = new Map((await listProjects(deps.db)).map((p) => [p.id, p]));
+  const open = new Map<string, Awaited<ReturnType<AppDeps["github"]["listOpenPullRequests"]>>>();
+  try {
+    for (const projectId of new Set(picked.map((p) => p.projectId))) {
+      const project = projects.get(projectId);
+      if (!project) return { ok: false, error: "A selected pull request's Project was removed." };
+      open.set(projectId, await deps.github.listOpenPullRequests(project.owner, project.repo));
+    }
+  } catch {
+    return { ok: false, error: "Could not reach GitHub. Try again." };
+  }
+
+  const direct = [];
+  for (const p of picked) {
+    const pull = open.get(p.projectId)!.find((x) => x.number === p.number);
+    if (!pull) return { ok: false, error: `${projects.get(p.projectId)!.repo}#${p.number} is no longer open.` };
+    const checked = checkRunInput("pull-request", { number: pull.number, url: pull.url });
+    if (!checked.ok) return checked;
+    direct.push({ projectId: p.projectId, title: runInputTitle(flow.name, checked.input), input: checked.input });
+  }
+  const flowSnapshot = await buildFlowSnapshot(deps.db, input.flowId);
+  if (!flowSnapshot) return { ok: false, error: "Pick a Flow without problems." };
+
+  const result = await startBatch(
+    deps.db,
+    { flowId: input.flowId, flowSnapshot, starter: viewer, machineId: ready.machine.id, extraInstructions: input.extraInstructions.trim(), ticketIds: [], direct },
+    deps.clock.now(),
+  );
+  if (!result.ok) return { ok: false, error: "The Runs could not start." };
   await deps.command({ type: "schedule", machineId: ready.machine.id });
   return result;
 }

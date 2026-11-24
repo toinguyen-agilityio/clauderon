@@ -120,7 +120,7 @@ describe("Run engine", () => {
       };
       const start = await startBatch(
         db,
-        { flowId, flowSnapshot, starter: ctx.member, machineId: ctx.machine.id, extraInstructions: "", ticketIds: [], direct: { projectId: ctx.project.id, title: "Do the plan", input } },
+        { flowId, flowSnapshot, starter: ctx.member, machineId: ctx.machine.id, extraInstructions: "", ticketIds: [], direct: [{ projectId: ctx.project.id, title: "Do the plan", input }] },
         ctx.clock.now(),
       );
       if (!start.ok) throw new Error("start failed");

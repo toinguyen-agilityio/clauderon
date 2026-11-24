@@ -1,15 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "../../../components/icons";
 import { StatePill, TicketStatusPill } from "../../../components/state-pill";
 import type { TicketRow } from "../../../server/tickets";
 import { loadStartDialog, startAction } from "./actions";
-import { closeOnBackdrop } from "../../../components/dialog";
-
-type Dialog = Awaited<ReturnType<typeof loadStartDialog>>;
+import { StartRunsDialog } from "../../../components/start-runs-dialog";
 
 const selectable = (t: TicketRow) => t.activeRunId === null && t.status !== "Closed";
 
@@ -153,176 +150,29 @@ const TRUST_HINT = "opened by someone outside the repository";
 function StartDialog({ ticketIds: initial, onClose, onStarted }: { ticketIds: string[]; onClose: () => void; onStarted: () => void }) {
   // The selection is fixed while the dialog is open.
   const [ticketIds] = useState(initial);
-  const ref = useRef<HTMLDialogElement>(null);
-  const router = useRouter();
-  const [dialog, setDialog] = useState<Dialog | null>(null);
-  const [flowId, setFlowId] = useState("");
-  const [extra, setExtra] = useState("");
-  const [error, setError] = useState<{ text: string; machinePage?: string } | null>(null);
-  const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    if (!ref.current?.open) ref.current?.showModal();
-    void loadStartDialog(ticketIds).then((loaded) => {
-      setDialog(loaded);
-      setFlowId(loaded.flows[0]?.id ?? "");
-    });
-  }, [ticketIds]);
-
-  const start = async () => {
-    setPending(true);
-    setError(null);
-    const result = await startAction({ flowId, ticketIds, extraInstructions: extra });
-    setPending(false);
-    if (!result.ok) {
-      setError({ text: result.error, machinePage: result.machinePage });
-      return;
-    }
-    onStarted();
-    router.push(result.runIds.length === 1 ? `/runs/${result.runIds[0]}` : "/runs");
-  };
-
-  const machine = dialog?.machine;
-  const warned = new Map(dialog?.warnings.map((w) => [w.ticketId, w.authorAssociation]));
   return (
-    <dialog ref={ref} {...closeOnBackdrop} className="modal wide" aria-labelledby="sd-title" onClose={onClose}>
-      <div className="modal-in">
-        <div className="modal-h">
-          <div>
-            <h2 id="sd-title">Start Runs</h2>
-            <p className="muted small" style={{ marginTop: 4 }}>
-              One Run per Ticket, grouped as a Batch on your Machine.
-            </p>
-          </div>
-          <button type="button" className="btn ghost sm" aria-label="Close" onClick={() => ref.current?.close()}>
-            {Icon.x}
-          </button>
-        </div>
-
-        {!dialog ? (
-          <div className="modal-b">
-            <span className="faint small">Loading…</span>
-          </div>
-        ) : (
-          <div className="modal-b">
-            <div className="field">
-              <label>Flow</label>
-              <div className="grid g2" role="radiogroup" aria-label="Flow">
-                {dialog.flows.map((f) => (
-                  <label key={f.id} className={`opt-card ${flowId === f.id ? "on" : ""}`}>
-                    <input type="radio" name="flow" checked={flowId === f.id} onChange={() => setFlowId(f.id)} />
-                    <div className="grow">
-                      <b>{f.name}</b>
-                      <div className="faint small">
-                        {f.nodes} Nodes{f.needsHuman ? " · waits for people at its Human Nodes" : ""}
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="field">
-              <label>Machine</label>
-              {!machine?.paired ? (
-                <div className="banner fail">
-                  <div className="grow small">
-                    <b>You have no paired Machine yet.</b> Runs always run on the Starter&apos;s own computer.
-                  </div>
-                  <Link className="btn sm primary" href="/machines">
-                    Pair my computer
-                  </Link>
-                </div>
-              ) : machine.connected && !machine.ready ? (
-                <div className="banner fail">
-                  <div className="grow small">
-                    <b>Your Machine is not logged in to Claude Code and gh.</b> Log in on it in your own terminal, then check logins on its page.
-                  </div>
-                  <Link className="btn sm" href={`/machines/${machine.id}`}>
-                    Open my Machine
-                  </Link>
-                </div>
-              ) : (
-                <div className="opt-card on" style={{ cursor: "default" }}>
-                  {Icon.host}
-                  <div className="grow">
-                    <b>My Machine</b> <span className="faint small">· {machine.connected ? "online" : "offline"}</span>
-                    <div className="faint small num">
-                      {machine.inUse}/{machine.slots} Slots busy · {machine.queued} queued
-                    </div>
-                  </div>
-                </div>
-              )}
-              {machine?.paired && !machine.connected && <span className="hint">Your Machine is offline. Runs wait in its queue until its Agent connects.</span>}
-              {machine && dialog && (
-                <span className="hint" data-testid="queue-hint">
-                  {(() => {
-                    const now = dialog.positions.filter((p) => p === 0).length;
-                    const waiting = dialog.positions.length - now;
-                    if (waiting === 0) return `${now} of these start${now === 1 ? "s" : ""} at once.`;
-                    return `${now === 0 ? "None start at once" : `${now} start at once`}; ${waiting} wait${waiting === 1 ? "s" : ""} for a Slot, first in, first out (queue position${waiting === 1 ? "" : "s"} 1${waiting > 1 ? `–${waiting}` : ""}).`;
-                  })()}
-                </span>
-              )}
-            </div>
-
-            <div className="field">
-              <label htmlFor="sd-extra">
-                Extra instructions <span className="faint">(optional)</span>
-              </label>
-              <textarea
-                id="sd-extra"
-                className="textarea"
-                placeholder="e.g. Keep the public API unchanged."
-                value={extra}
-                onChange={(e) => setExtra(e.target.value)}
-              />
-              <span className="hint">Added to every Agent Node of these Runs.</span>
-            </div>
-
-            <div className="field">
-              <label>
-                Tickets <span className="faint num">{dialog.tickets.length}</span>
-              </label>
-              <div className="pick">
-                {dialog.tickets.map((t) => (
-                  <div key={t.id}>
-                    <span className="mono faint small">{t.key}</span>
-                    <span className="grow">{t.title}</span>
-                    {warned.has(t.id) && (
-                      <span className="pill wait plain" title={`${TRUST_HINT} (${warned.get(t.id)})`}>
-                        Outside author
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {warned.size > 0 && <span className="hint">Tickets marked Outside author were {TRUST_HINT}. Read them before you run them.</span>}
-            </div>
-
-            {error && (
-              <div className="banner fail" role="alert">
-                <div className="grow small">{error.text}</div>
-                {error.machinePage && (
-                  <Link className="btn sm" href={error.machinePage}>
-                    Open Machines
-                  </Link>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="modal-f">
-          <button type="button" className="btn" onClick={() => ref.current?.close()}>
-            Cancel
-          </button>
-          <button type="button" className="btn primary" disabled={!dialog || pending || !flowId || !machine?.paired} onClick={() => void start()}>
-            {Icon.play}
-            {pending ? "Starting…" : `Start ${ticketIds.length} Run${ticketIds.length === 1 ? "" : "s"}`}
-          </button>
-        </div>
-      </div>
-    </dialog>
+    <StartRunsDialog
+      count={ticketIds.length}
+      noun="Ticket"
+      subtitle="One Run per Ticket, grouped as a Batch on your Machine."
+      noFlows="No Flow starts from a Ticket without problems."
+      load={async () => {
+        const d = await loadStartDialog(ticketIds);
+        const warned = new Map(d.warnings.map((w) => [w.ticketId, w.authorAssociation]));
+        return {
+          flows: d.flows,
+          machine: d.machine,
+          positions: d.positions,
+          items: d.tickets.map((t) => ({
+            ...t,
+            warning: warned.has(t.id) ? { label: "Outside author", title: `${TRUST_HINT} (${warned.get(t.id)})` } : undefined,
+          })),
+          warningHint: `Tickets marked Outside author were ${TRUST_HINT}. Read them before you run them.`,
+        };
+      }}
+      start={(flowId, extraInstructions) => startAction({ flowId, ticketIds, extraInstructions })}
+      onClose={onClose}
+      onStarted={onStarted}
+    />
   );
 }

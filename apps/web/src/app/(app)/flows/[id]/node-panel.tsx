@@ -185,7 +185,7 @@ export function NodePanel({
                 {testOutputs.map((o) => (
                   <div key={o.name} className="stack" style={{ gap: 4 }}>
                     <span className="mono small">{o.name}</span>
-                    <OutputValue type={o.type} value={o.value} />
+                    <OutputValue type={o.type} value={o.value} name={o.name} />
                   </div>
                 ))}
               </div>
