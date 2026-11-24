@@ -642,11 +642,15 @@ code.lib-card-desc { font-size: 12.5px; white-space: pre-wrap; }
 dialog.modal.lib-dialog { width: min(980px, calc(100vw - 32px)); }
 
 /* Page tabs (Flows / Node library, Pull request states) */
-.tabs { display: flex; gap: 4px; box-shadow: inset 0 -1px var(--line); overflow-x: auto; scrollbar-width: none; }
-.tabs a { display: inline-flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 2px solid transparent; color: var(--fg2); font-weight: 500; white-space: nowrap; }
-.tabs a:hover { color: var(--fg); text-decoration: none; }
-.tabs a.on { color: var(--heading); font-weight: 600; border-bottom-color: var(--accent); }
-.tabs .n { color: var(--fg3); font-weight: 500; font-variant-numeric: tabular-nums; }
+.tabs { display: flex; gap: 6px; box-shadow: inset 0 -1px var(--line); overflow-x: auto; scrollbar-width: none; }
+/* the underline is a pseudo-element so it can have rounded ends and sit inset from the label's hover box */
+.tabs a { position: relative; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 7px 12px; border-radius: var(--r-sm); color: var(--fg2); font-weight: 500; white-space: nowrap; transition: color 150ms var(--ease), background-color 150ms var(--ease); }
+.tabs a::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -6px; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); transform: scaleX(0); transition: transform 200ms var(--ease); }
+.tabs a:hover { color: var(--fg); background: var(--hover); text-decoration: none; }
+.tabs a.on { color: var(--heading); font-weight: 600; }
+.tabs a.on::after { transform: scaleX(1); }
+.tabs .n { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--mute-bg); color: var(--fg3); font-size: 12px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; transition: background-color 150ms var(--ease), color 150ms var(--ease); }
+.tabs a.on .n { background: var(--accent-weak); color: var(--accent-text); }
 .pr-branch { max-width: 240px; margin-top: 2px; }
 .pill.merged { background: color-mix(in srgb, var(--violet) 14%, transparent); color: var(--t-plan); }
 
