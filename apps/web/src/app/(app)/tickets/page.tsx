@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { getMachineOfMember } from "@clauderon/db";
 import { Icon } from "../../../components/icons";
-import { syncAllProjects } from "../../../server/projects";
 import { deps, requireMember } from "../../../server/runtime";
 import { viewTickets } from "../../../server/tickets";
+import { FilterLink, FilterResults, TicketFilters, TicketSearch } from "./ticket-filters";
 import { TicketTable } from "./ticket-table";
+import { TicketsSync } from "./tickets-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -15,27 +16,26 @@ type Search = { project?: string; q?: string; status?: string };
 export default async function TicketsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const member = await requireMember();
   const search = await searchParams;
-  // GitHub stays the source of truth: pull every Project's issues before reading them.
-  await syncAllProjects(deps());
-  const [{ projects, counts, total, rows }, machine, all] = await Promise.all([
+  // Render from the database; TicketsSync pulls GitHub afterwards (at most once a minute per Project).
+  const [{ projects, all, counts, total, rows }, machine] = await Promise.all([
     viewTickets(deps(), { projectId: search.project, q: search.q, status: search.status }),
     getMachineOfMember(deps().db, member.id),
-    viewTickets(deps(), {}),
   ]);
   const href = (change: Search) => {
     const next = { ...search, ...change };
     const query = new URLSearchParams(Object.entries(next).filter(([, v]) => v) as [string, string][]);
     return `/tickets${query.size ? `?${query}` : ""}`;
   };
-  const perProject = (id: string) => all.rows.filter((r) => r.projectId === id).length;
+  const perProject = (id: string) => all.filter((r) => r.projectId === id).length;
   const failed = projects.filter((p) => p.syncError);
 
   return (
     <>
+      <TicketsSync />
       <div className="page-head">
         <div>
           <h1>Tickets</h1>
-          <p className="sub">Open GitHub issues of every Project, read from GitHub each time this page opens. Status comes from their Runs and pull requests.</p>
+          <p className="sub">Open GitHub issues of every Project, synced from GitHub in the background, at most once a minute. Status comes from their Runs and pull requests.</p>
         </div>
         <Link className="btn" href="/projects">
           {Icon.sync}
@@ -69,38 +69,36 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
           Enable a repository on the <Link href="/projects">Projects</Link> page, then Sync to pull its issues.
         </div>
       ) : (
-        <>
+        <TicketFilters>
           <div className="row between">
             <nav className="seg" aria-label="Project">
-              <Link href={href({ project: undefined })} className={!search.project ? "on" : ""}>
-                All <span className="faint num">{all.rows.length}</span>
-              </Link>
+              <FilterLink href={href({ project: undefined })} className={!search.project ? "on" : ""}>
+                All <span className="faint num">{all.length}</span>
+              </FilterLink>
               {projects.map((p) => (
-                <Link key={p.id} href={href({ project: p.id })} className={search.project === p.id ? "on" : ""}>
+                <FilterLink key={p.id} href={href({ project: p.id })} className={search.project === p.id ? "on" : ""}>
                   {p.repo} <span className="faint num">{perProject(p.id)}</span>
-                </Link>
+                </FilterLink>
               ))}
             </nav>
-            <form method="get" role="search" style={{ width: "min(320px, 100%)" }}>
-              {search.project && <input type="hidden" name="project" value={search.project} />}
-              {search.status && <input type="hidden" name="status" value={search.status} />}
-              <input className="input" name="q" defaultValue={search.q ?? ""} placeholder="Search title or key…" aria-label="Search Tickets" />
-            </form>
+            <TicketSearch project={search.project} status={search.status} q={search.q} />
           </div>
 
           <nav className="chips" aria-label="Ticket Status">
-            <Link className={`fchip ${!search.status ? "on" : ""}`} href={href({ status: undefined })}>
+            <FilterLink className={`fchip ${!search.status ? "on" : ""}`} href={href({ status: undefined })}>
               All <span className="n">{total}</span>
-            </Link>
+            </FilterLink>
             {STATUSES.map((s) => (
-              <Link key={s} className={`fchip ${search.status === s ? "on" : ""}`} href={href({ status: s })}>
+              <FilterLink key={s} className={`fchip ${search.status === s ? "on" : ""}`} href={href({ status: s })}>
                 {s} <span className="n">{counts[s] ?? 0}</span>
-              </Link>
+              </FilterLink>
             ))}
           </nav>
 
-          <TicketTable rows={rows} />
-        </>
+          <FilterResults>
+            <TicketTable rows={rows} />
+          </FilterResults>
+        </TicketFilters>
       )}
     </>
   );

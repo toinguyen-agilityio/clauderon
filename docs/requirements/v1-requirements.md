@@ -89,7 +89,7 @@ Acceptance checks:
 | # | Check | How to verify |
 | --- | --- | --- |
 | A1 | One real Ticket runs through the sample Flow and its Run shows a link to a real pull request | Live demo |
-| A2 | 10 Tickets started as a Dry-run Batch on a Pod with 2 Slots never run more than 2 at once; the rest stay Queued and start first-in, first-out | Automated test plus demo |
+| A2 | 10 Tickets started as a Batch on a Pod with 2 Slots never run more than 2 at once; the rest stay Queued and start first-in, first-out | Automated Gateway test with a fake Agent that holds Nodes open (the simulated Run mode that used to carry this check was removed: ADR 0009) |
 | A6 | Two Members each create a Pod on the Pod Host, log in to their own Claude Code and gh, and each opens a pull request under their own GitHub name | Live demo |
 | A3 | The Flow editor rejects an edge whose Output Type does not match the input, and rejects any cycle | Unit tests of the validator |
 | A4 | Each Run shows the correct state of every Node: queued, running, waiting for human, succeeded, failed | Manual script plus runner unit tests |
@@ -108,7 +108,7 @@ Acceptance checks:
 - **Pods:** one Docker container per Member on the Pod Host, created, started, stopped, recreated and deleted from the app; one standard Ubuntu image; a Workspace volume per Pod; Slots and CPU/RAM limits; a web terminal for the owner to log in to Claude Code and gh; measured CPU, RAM and disk use.
 - **Tickets:** open GitHub issues pulled in with a manual **Sync**, with a list, search, filter, a detail view and multi-select to start Runs.
 - **Flows:** a canvas editor for directed acyclic graphs of Nodes from the Node library. Edges are type-checked by Output Type and cycles are rejected. Sample Nodes and Flows are seeded, and members clone them to edit.
-- **Runs:** Batches, a queue per Pod, Human Nodes (Approve, Grill), Retry from any Node, Cancel, Dry-run, live logs, usage per Node and an Artifact per Run.
+- **Runs:** Batches, a queue per Pod, Human Nodes (Approve, Grill), Retry from any Node, Cancel, live logs, usage per Node and an Artifact per Run.
 - **Real runner:** Claude Code and shell commands in the Starter's Pod, one git worktree per Run in its Workspace, a real branch and pull request pushed with the Starter's own gh login.
 
 ### Out of scope
@@ -178,7 +178,7 @@ Priority: **Must** / **Should** / **Could**.
 | TIC-4 | Ticket detail: issue body from GitHub, every Run of the Ticket, links to their pull requests and Artifacts. | Should |
 | TIC-5 | **Sync** button pulls every open issue of a Project from GitHub, and the current state of every known Ticket (so an issue closed on GitHub shows `Closed`) and of every pull request opened by a Run. Sync never starts a Run. | Must |
 | TIC-6 | Ticket status is derived, never stored: `Open` (no Active Run), `Queued`, `In run`, `Needs you` (waiting for human), `Failed`, `Interrupted`, `PR open`, `PR merged`, `Closed` (issue closed on GitHub). Pull request state is read at Sync and whenever a Ticket, Run or Batch page opens. | Must |
-| TIC-7 | A Ticket has at most one Active Run. Dry-run Runs do not count. | Must |
+| TIC-7 | A Ticket has at most one Active Run. | Must |
 | TIC-8 | The app never changes issue state or labels and never comments on issues; pull requests reference the issue with `Refs #<n>`. | Must |
 | TIC-9 | Sync records the issue author's association with the repository. The Start dialog warns when a selected Ticket's author is not an `OWNER`, `MEMBER` or `COLLABORATOR`, because its text goes straight into the agent's prompt (R2). The warning does not block Start. | Must |
 
@@ -186,15 +186,15 @@ Priority: **Must** / **Should** / **Could**.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FLW-1 | **Node library:** each Node has a name, a kind (Agent, Command, Human, or the Ticket entry Node), instructions or a command, typed inputs (each required or optional) and typed Outputs (each always produced or optional). | Must |
+| FLW-1 | **Node library:** each Node has a name, a kind (Agent, Command, Human, or an Input entry Node), instructions or a command, typed inputs (each required or optional) and typed Outputs (each always produced or optional). | Must |
 | FLW-2 | Human Nodes come in two kinds. **Approve**: Approve, or Reject with feedback; an Approve Node passes its input through as an Output of the same Output Type. **Grill**: in each round Claude asks a batch of questions, one Member answers them all in one form, and Claude resumes the same Claude Code session; it may ask another round until it produces its Outputs. There is no limit on rounds; any Member can Cancel the Run. | Must |
 | FLW-3 | Canvas editor: drag Nodes from the library onto the Flow, connect an Output to an input. | Must |
 | FLW-4 | An edge is allowed only when the Output Type matches the input; a mismatch shows an error on the edge. | Must |
-| FLW-5 | Validate before saving: exactly one Ticket Node (the entry, which emits the `issue` for any Node that needs it), at least one end Node, no cycles, no required input left unconnected. A Flow with problems shows an "N problems" badge and cannot start Runs. | Must |
+| FLW-5 | Validate before saving: exactly one Input Node (the entry, typed `issue`, `branch`, `pull-request`, `plan` or `summary`; an `issue` Input emits the Ticket, the others what the Starter gives at Start, in a Run with no Ticket), at least one end Node, no cycles, no required input left unconnected. A Flow with problems shows an "N problems" badge and cannot start Runs. | Must |
 | FLW-6 | Node panel, for a Node placed in a Flow: its name, extra instructions for this Flow, optional Outputs on or off. | Must |
-| FLW-7 | A Flow cannot be edited or deleted while any Active Run (Dry-run included) uses it; it can still be viewed and cloned, and the editor shows which Run holds the lock. There are no Flow versions. | Must |
+| FLW-7 | A Flow cannot be edited or deleted while any Active Run uses it; it can still be viewed and cloned, and the editor shows which Run holds the lock. There are no Flow versions. | Must |
 | FLW-8 | Seed the sample Nodes and Flows below. Samples are edited and deleted like any Flow or Node (still subject to FLW-7 and FLW-10) and can be cloned. Seeding again only adds the samples that are missing; it never overwrites a Member's changes. | Must |
-| FLW-9 | Any Member can create a new Flow (it starts with the Ticket Node placed) and edit or delete any Flow or library Node, samples included; every change is recorded in the audit log. | Must |
+| FLW-9 | Any Member can create a new Flow (it starts with the Ticket Input Node placed) and edit or delete any Flow or library Node, samples included; every change is recorded in the audit log. | Must |
 | FLW-10 | A library Node cannot be edited while a Flow that uses it is locked. Editing a library Node changes every Flow that uses it. | Must |
 
 Output Types for v1: `issue`, `plan`, `branch`, `test-result`, `pull-request`, `summary`, `screenshot`.
@@ -203,11 +203,15 @@ Sample Nodes (FLW-8); optional inputs and Outputs are marked *opt*:
 
 | Node | Kind | Inputs | Outputs |
 | --- | --- | --- | --- |
-| Ticket | Entry | — | `issue` |
+| Ticket | Input | — | `issue` |
+| Branch | Input | — | `branch` |
+| Pull request | Input | — | `pull-request` |
+| Plan | Input | — | `plan` |
+| Summary | Input | — | `summary` |
 | Grill a plan | Human (Grill) | `issue` | `plan` |
 | Draft a plan | Agent | `issue` | `plan` |
 | Approve a plan | Human (Approve) | `plan` | `plan` |
-| Code a change | Agent | `issue`, `plan` *opt* | `branch`, `summary` *opt* |
+| Code a change | Agent | `issue` *opt*, `plan` *opt* (at least one) | `branch`, `summary` *opt* |
 | Run tests | Command | `branch` | `test-result` |
 | Capture screenshots | Command | `branch` | `screenshot` |
 | Open a pull request | Command | `branch`, `test-result` *opt*, `summary` *opt* | `pull-request` |
@@ -222,7 +226,7 @@ Sample Flows (FLW-8):
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| RUN-1 | Start dialog: pick a Flow, the Tickets, optional extra instructions, and mode `Real` / `Dry-run`. The Batch always runs on the Starter's Pod, shown with its Slots and queue. One Run per Ticket; Runs started together form a Batch. | Must |
+| RUN-1 | Start dialog: pick a Flow, the Tickets, optional extra instructions. The Batch always runs on the Starter's Pod, shown with its Slots and queue. One Run per Ticket; Runs started together form a Batch. | Must |
 | RUN-2 | A Run executes its Nodes **one at a time** in topological order, each Node once all its required inputs exist. The Gateway keeps all Run state in the database and asks the Host Agent to run one Node at a time; the Host Agent only executes and reports. | Must |
 | RUN-3 | Each Run has its own git worktree and branch in the Starter's Workspace; all Nodes of the Run share that worktree. The branch is named `clauderon/<issue-number>-<short-title-slug>-<short-run-id>`. | Must |
 | RUN-4 | A Human Node puts the Run in `waiting for human`. The Run keeps its Slot and there is no timeout. | Must |
@@ -234,7 +238,7 @@ Sample Flows (FLW-8):
 | RUN-10 | Real runner: Agent Nodes run Claude Code headless in the Starter's Pod with the Starter's own subscription, under POD-12; Command Nodes run a shell command there; output streams to the browser through the Host Agent and the Gateway. **Agent and Grill Nodes share one result contract:** the prompt asks Claude Code to end with a structured JSON result, which names each Output or, for a Grill Node, holds the next batch of questions instead. The app checks the result against the Node's Output Types and fails the Node when a required Output is missing. **Command Nodes:** exit code 0 succeeds and anything else fails; a `test-result` Output holds the exit code and the last 200 lines of output; a `branch` Output is the Run's branch at its current commit. | Must |
 | RUN-11 | The `Open a pull request` Node pushes the branch and opens the pull request with the Starter's gh login. When a pull request already exists for the branch (after a Retry), it pushes the new commits and reuses that pull request. When there are no changes, it succeeds without a `pull-request` Output and logs "no changes"; the Run can still succeed and the Ticket stays `Open`. The body includes `Refs #<n>`. | Must |
 | RUN-12 | The Host Agent sends a heartbeat every 10 seconds over one WebSocket whose messages carry ids, so both sides resume after a reconnect. **A drop under 30 seconds** while the Host Agent keeps running: the connection resumes from the message ids, nothing is killed and Runs stay Running. **30 seconds without a heartbeat, or a Host Agent restart**, or a Pod that stops or crashes: the Pod's Running Runs become `Interrupted`; on reconnect the Host Agent kills orphaned Node processes, meaning processes of Interrupted Runs and processes it no longer holds a handle for. **A Gateway restart or deploy** is handled the same way, since Run state is in the database: if the Host Agent reconnects within 30 seconds, Runs keep running. Runs waiting for a person keep their state; Queued Runs wait for the Pod to run again. Nothing is retried automatically. | Must |
-| RUN-13 | Dry-run: a simulated runner (each Node 2–8 s, configurable failure rate, fake Outputs) that runs in the Gateway and executes nothing in the Pod. It needs the Starter to have a Pod and occupies one of its Slots, but needs no Claude Code or gh login. It locks the Flow but does not count toward the Ticket's Active Run and never touches GitHub or Claude. Dry-run Runs are clearly marked. | Must |
+| RUN-13 | _Removed_ (ADR 0009): the Dry-run Run mode overlapped with the editor's Test run and cost code and rules across the Gateway, web app and database. The editor's Test run (FLW-3) stays. The queue and Slots are checked by a Gateway test with a fake Agent (A2). | Dropped |
 | RUN-14 | The worktree is deleted when a Run ends as `Succeeded` or `Cancelled`; it is kept while the Run is `Failed` or `Interrupted`. | Should |
 | RUN-15 | Every action on a Run (start, approve, reject, answer, cancel, retry), every Pod action (create, start, stop, recreate, delete, terminal session), every Flow and library Node change and every allowlist change records the Member's email and time. | Should |
 | RUN-16 | A Run succeeds when every Node it reaches succeeds. An optional Output that is not produced does not fail the Run. | Must |
@@ -337,7 +341,7 @@ A Run holds a Slot only while Running or Waiting for human.
 | R8 | **One Pod Host is a single point of failure:** if it is off, offline or out of disk, no Member can run anything | Medium | Keep it on a UPS and wired network; Interrupted Runs are retried by hand; show Pod Host health on the Pods page |
 | R9 | **Docker Desktop licence:** companies above 250 employees or USD 10 million revenue need a paid subscription | Low | Check with IT; an alternative Docker engine works the same for Clauderon |
 | R3 | **Anthropic terms** for running Claude Code headless on a subscription from a separate app | Medium | Check the official terms during design. Fallback: an API key on the Pod |
-| R4 | Subscription quota runs out mid-Run | Medium | The Node fails with a clear reason and can be retried; load-test with Dry-run; a Gateway deploy does not interrupt Runs (RUN-12), so Nodes are not re-run needlessly |
+| R4 | Subscription quota runs out mid-Run | Medium | The Node fails with a clear reason and can be retried; a Gateway deploy does not interrupt Runs (RUN-12), so Nodes are not re-run needlessly |
 | R5 | A Node waiting for a person holds a Slot indefinitely | Medium | Needs you queue; any member can answer or cancel |
 | R6 | **Allowlist drift:** someone who leaves the team keeps access until their email is removed | Low | The Operator removes the email on the Members page, which removes their Machine too; their Runs and audit entries stay |
 | R10 | **Two deploy targets:** the web app on Vercel and the Gateway on Railway or Fly must stay in step on the protocol and the database schema | Medium | One monorepo with shared protocol types; database migrations run before either part is deployed |
@@ -353,7 +357,7 @@ Each milestone ends when its check passes. The split below follows the [seven-da
 | --- | --- | --- |
 | **M0 — Foundations** | Monorepo, database schema and Host Agent protocol, domain core, seeded Nodes and Flows, Google sign-in with the allowlist in the database, the Allowlist page, the Gateway and Host Agent link, the Pod image | Core unit tests pass; unknown emails refused; Host Agent connected |
 | **M1 — Walking skeleton** | Create my Pod, Start and Stop, terminal login, Projects, Sync, Tickets, the fixed Flow `Basic ticket delivery` with Agent and Command Nodes, live logs, real branch and pull request | A7, A1 |
-| **M2 — Flows and scheduling** | Canvas editor, clone samples, Flow edit lock, Node library editing, Slots, limits and queue, Batches, Dry-run | A2, A3, A6 |
+| **M2 — Flows and scheduling** | Canvas editor, clone samples, Flow edit lock, Node library editing, Slots, limits and queue, Batches | A2, A3, A6 |
 | **M3 — People in the loop** | Approve and Grill Nodes, Needs you, Retry from any Node, Cancel, Attempts, Interrupted Runs, audit | A4, A5 |
 | **M4 — Refinement and release** | Usage, Artifact, diff, Batch page, Ticket detail, Pod Recreate and Delete, measured use, worktree cleanup, staging and production | Full journey on staging; A1–A7 on production |
 
@@ -388,7 +392,7 @@ How each difference between the two drafts was settled. "Team" is the team draft
 | Issue comments | None; the app never writes to GitHub | Practice |
 | Ticket sync | Manual Sync button only | Practice |
 | Ticket status | Derived from Runs, the pull request and the issue | New |
-| One Active Run per Ticket | Yes; Dry-run excluded | Team |
+| One Active Run per Ticket | Yes | Team |
 | Pods | Several Pods, each with a Pod Daemon that connects out (superseded 2026-11-13, see below) | Team |
 | Pod Environment | Dropped; the Pod's own environment is used | New |
 | Pod health and ports | Measured CPU, RAM, disk; forwarded-port metadata (ports dropped 2026-11-13) | Practice |
@@ -404,7 +408,7 @@ How each difference between the two drafts was settled. "Team" is the team draft
 | Approval timeout | None; the Run keeps its Slot | Team |
 | Flow versions | None; a Flow is locked while an Active Run uses it | New |
 | Node library and Flows | Seeded samples, cloned to edit; no Default Flow, no Skip Conditions | Practice, trimmed |
-| Dry-run | Option at Start; occupies a Slot, does not block the Ticket | Practice |
+| Dry-run | Removed (ADR 0009); the editor's Test run covers watching a Flow play | Team |
 | Worktree cleanup | When a Run ends as Succeeded or Cancelled | New |
 | Batch | Kept, with a Batch page | Team |
 | Artifact | One summary per Run: changes, how to test, screenshots, PR link | New |
@@ -458,7 +462,7 @@ The answers to the 47 questions in [PR #3](https://github.com/toinguyen-agilityi
 | Q22 | Changing limits | Slots at once, CPU and RAM at Recreate (POD-6) | Rec. |
 | Q23 | Cloning a Project | The first Real Run clones it (POD-10) | Rec. |
 | Q24 | Retry and the queue | A retried Run joins the end of the queue (RUN-7) | Rec. |
-| Q25 | Dry-run and Pod Ready | Needs a Pod, no logins, runs in the Gateway (RUN-13) | Rec. |
+| Q25 | _Dropped_ with RUN-13 (ADR 0009) | Start always needs a Pod and both logins | Rec. |
 | Q26 | Agent Node Outputs | A structured JSON result naming each Output, shared with Grill Nodes (RUN-10) | **Changed in review:** the answer was files in the worktree, which needed a second contract and could leak into commits |
 | Q27 | Command Node Outputs | Exit code; last 200 lines in `test-result` (RUN-10) | Rec. |
 | Q28 | Branch names | `clauderon/<issue>-<slug>-<run-id>` (RUN-3) | Rec. |
@@ -514,7 +518,7 @@ The full glossary is [CONTEXT.md](../../CONTEXT.md). Key terms:
 | Attempt | One execution of a Node in a Run; Retry creates a new one |
 | Artifact | The summary of a Run's work, produced when it ends |
 | Batch | The Runs started together in one action |
-| Dry-run | A Run using the simulated runner |
+| Test run | The editor's button that steps through a Flow in the browser with made-up Outputs; it stores nothing |
 
 ---
 

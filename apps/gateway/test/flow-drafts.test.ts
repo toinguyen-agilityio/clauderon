@@ -75,7 +75,7 @@ describe("Flow Drafts (ADR 0008)", () => {
     expect(sent!.resumeSessionId).toBeUndefined();
     expect(events).toEqual([{ type: "draft.ready", draftId: DRAFT, flow: expect.any(String), newNodes: ["Summarise"] }]);
     const file = JSON.parse((events[0] as { flow: string }).flow) as { nodes: { kind: string }[] };
-    expect(file.nodes[0]!.kind).toBe("ticket");
+    expect(file.nodes[0]!.kind).toBe("input");
   });
 
   it("asks the same session once to fix an invalid answer, then gives up", async () => {

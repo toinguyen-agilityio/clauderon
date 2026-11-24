@@ -342,5 +342,18 @@ describe("Agent Nodes (RUN-10, POD-12)", () => {
 
   it("parses a line that is not JSON as a plain log line", () => {
     expect(parseClaudeLine("plain")).toEqual({ log: "plain" });
+    // Subagents and earlier resumed rounds are only in `modelUsage`, summed over every model.
+    const withModels = parseClaudeLine(
+      JSON.stringify({
+        type: "result",
+        result: "",
+        usage: { input_tokens: 1, cache_read_input_tokens: 2, output_tokens: 3 },
+        modelUsage: {
+          main: { inputTokens: 10, cacheCreationInputTokens: 20, cacheReadInputTokens: 30, outputTokens: 40 },
+          sub: { inputTokens: 1, cacheCreationInputTokens: 2, cacheReadInputTokens: 3, outputTokens: 4 },
+        },
+      }),
+    );
+    expect(withModels.usage).toEqual({ inputTokens: 66, outputTokens: 44 });
   });
 });

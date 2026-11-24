@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
+import { runProjectId, runTitle } from "./runs";
 import { flow, machine, member, run, ticket, type MachineDoctor, type MachineUsage } from "./schema";
 
 export type { MachineDoctor, MachineUsage } from "./schema";
@@ -107,7 +108,7 @@ export type DeleteMachineResult = { ok: true } | { ok: false; reason: "missing" 
 
 /**
  * Removes a Machine's row, refused while it has an Active Run: anything
- * not Succeeded or Cancelled, Dry-runs included. Ended Runs keep their history
+ * not Succeeded or Cancelled. Ended Runs keep their history
  * with no Machine. The row lock serializes this with a Start queuing on the Machine.
  */
 export async function deleteMachine(db: Db, machineId: string, actorEmail: string): Promise<DeleteMachineResult> {
@@ -173,10 +174,9 @@ export async function saveMachineLinkIds(db: Db, machineId: string, ids: { lastR
 export type MachineRun = {
   runId: string;
   state: (typeof run.$inferSelect)["state"];
-  mode: "real" | "dry";
   queuedAt: Date;
   startedAt: Date | null;
-  ticketNumber: number;
+  ticketNumber: number | null;
   ticketTitle: string;
   projectId: string;
   flowName: string;
@@ -192,16 +192,15 @@ async function machineRunsIn(db: Db, machineIds: readonly string[], states: Mach
       machineId: run.machineId,
       runId: run.id,
       state: run.state,
-      mode: run.mode,
       queuedAt: run.queuedAt,
       startedAt: run.startedAt,
       ticketNumber: ticket.number,
-      ticketTitle: ticket.title,
-      projectId: ticket.projectId,
+      ticketTitle: runTitle,
+      projectId: runProjectId,
       flowName: flow.name,
     })
     .from(run)
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(flow, eq(flow.id, run.flowId))
     .where(and(inArray(run.machineId, [...machineIds]), inArray(run.state, states)))
     .orderBy(asc(run.queuedAt), asc(run.id));

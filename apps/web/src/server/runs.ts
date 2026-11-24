@@ -105,7 +105,7 @@ export type PullRequestQuery = { tab?: PullRequestTab; projectId?: string; membe
 
 /**
  * The Pull requests page: every open pull request of every Project, read from
- * GitHub each time the page opens, with the Run that opened it when one did.
+ * GitHub (cached briefly by the reader), with the Run that opened it when one did.
  * "Needs you" are the ones asking the gh login of the viewer's Machine for a
  * review. For a Project GitHub cannot read, the page
  * falls back to the pull requests its Runs recorded as open, and says so.
@@ -270,7 +270,6 @@ export async function viewNeedsYou(deps: AppDeps) {
     kind: r.request.kind,
     round: r.request.round,
     runId: r.runId,
-    mode: r.mode,
     key: keyOf(r.projectId, r.ticketNumber),
     ticketTitle: r.ticketTitle,
     ticketUrl: r.ticketUrl,
@@ -385,7 +384,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
   const durationMs = run.run.startedAt ? (run.run.endedAt ?? deps.clock.now()).getTime() - run.run.startedAt.getTime() : null;
   return {
     ...run,
-    key: keyOf(run.project.id, run.ticket.number),
+    key: keyOf(run.project.id, run.ticket?.number ?? null),
     timeline,
     tokens,
     durationMs,

@@ -8,6 +8,7 @@ import {
   type HumanResponse,
   type OutputValue,
   type RetryContext,
+  type RunInput,
   type RunState,
 } from "@clauderon/core";
 import type { Db } from "./client";
@@ -26,9 +27,10 @@ export type StartBatchInput = {
   flowSnapshot: FlowSnapshot;
   starter: { id: string; email: string };
   machineId: string;
-  mode: "real" | "dry";
   extraInstructions: string;
   ticketIds: readonly string[];
+  /** One Run without a Ticket, from a Flow's non-issue Input; `ticketIds` is then empty. */
+  direct?: { projectId: string; title: string; input: RunInput };
 };
 
 export type StartBatchResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; reason: "active-run"; ticketId: string; runId: string | null };
@@ -41,30 +43,34 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
-async function activeRealRun(db: Db, ticketIds: readonly string[]) {
+/** A Run's Project: its own when it has no Ticket, else its Ticket's. */
+export const runProjectId = sql<string>`coalesce(${run.projectId}, ${ticket.projectId})`;
+/** What a Run is called: its Ticket's title, else the title it was started with. */
+export const runTitle = sql<string>`coalesce(${ticket.title}, ${run.title}, 'Run')`;
+
+async function activeRun(db: Db, ticketIds: readonly string[]) {
+  if (ticketIds.length === 0) return null;
   const [row] = await db
     .select({ id: run.id, ticketId: run.ticketId })
     .from(run)
-    .where(and(inArray(run.ticketId, [...ticketIds]), eq(run.mode, "real"), sql`${run.state} not in ('succeeded', 'cancelled')`))
+    .where(and(inArray(run.ticketId, [...ticketIds]), sql`${run.state} not in ('succeeded', 'cancelled')`))
     .limit(1);
   return row ?? null;
 }
 
 /**
  * One Batch and one queued Run per Ticket, in one transaction (RUN-1). A
- * Ticket with an Active Real Run fails the whole Start (TIC-7); the partial
+ * Ticket with an Active Run fails the whole Start (TIC-7); the partial
  * unique index catches one gained meanwhile.
  */
 export async function startBatch(db: Db, input: StartBatchInput, now: Date): Promise<StartBatchResult> {
-  if (input.mode === "real") {
-    const active = await activeRealRun(db, input.ticketIds);
-    if (active) return { ok: false, reason: "active-run", ticketId: active.ticketId, runId: active.id };
-  }
+  const active = await activeRun(db, input.ticketIds);
+  if (active) return { ok: false, reason: "active-run", ticketId: active.ticketId!, runId: active.id };
   try {
     return await db.transaction(async (tx) => {
       const [b] = await tx
         .insert(batch)
-        .values({ flowId: input.flowId, starterMemberId: input.starter.id, mode: input.mode, extraInstructions: input.extraInstructions })
+        .values({ flowId: input.flowId, starterMemberId: input.starter.id, extraInstructions: input.extraInstructions })
         .returning({ id: batch.id });
       const runIds: string[] = [];
       // Queued in selection order, a millisecond apart, so the queue keeps it.
@@ -78,7 +84,6 @@ export async function startBatch(db: Db, input: StartBatchInput, now: Date): Pro
             flowSnapshot: input.flowSnapshot,
             machineId: input.machineId,
             starterMemberId: input.starter.id,
-            mode: input.mode,
             state: "queued",
             queuedAt: new Date(now.getTime() + i),
           })
@@ -86,12 +91,31 @@ export async function startBatch(db: Db, input: StartBatchInput, now: Date): Pro
         runIds.push(r!.id);
         await recordAudit(tx, { actorEmail: input.starter.email, action: "run.start", subjectType: "run", subjectId: r!.id, detail: { ticketId, batchId: b!.id } });
       }
+      if (input.direct) {
+        const [r] = await tx
+          .insert(run)
+          .values({
+            batchId: b!.id,
+            projectId: input.direct.projectId,
+            title: input.direct.title,
+            inputValue: input.direct.input,
+            flowId: input.flowId,
+            flowSnapshot: input.flowSnapshot,
+            machineId: input.machineId,
+            starterMemberId: input.starter.id,
+            state: "queued",
+            queuedAt: now,
+          })
+          .returning({ id: run.id });
+        runIds.push(r!.id);
+        await recordAudit(tx, { actorEmail: input.starter.email, action: "run.start", subjectType: "run", subjectId: r!.id, detail: { projectId: input.direct.projectId, inputType: input.direct.input.type, batchId: b!.id } });
+      }
       return { ok: true, batchId: b!.id, runIds } as const;
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    const active = await activeRealRun(db, input.ticketIds);
-    return { ok: false, reason: "active-run", ticketId: active?.ticketId ?? input.ticketIds[0]!, runId: active?.id ?? null };
+    const active = await activeRun(db, input.ticketIds);
+    return { ok: false, reason: "active-run", ticketId: active?.ticketId ?? input.ticketIds[0] ?? "", runId: active?.id ?? null };
   }
 }
 
@@ -107,26 +131,26 @@ export async function getRunContext(db: Db, runId: string) {
   const [row] = await db
     .select({ run, ticket, project, batchInstructions: batch.extraInstructions })
     .from(run)
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
-    .innerJoin(project, eq(project.id, ticket.projectId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(project, eq(project.id, runProjectId))
     .innerJoin(batch, eq(batch.id, run.batchId))
     .where(eq(run.id, runId));
-  return row ? { ...row, snapshot: row.run.flowSnapshot as FlowSnapshot } : null;
+  return row ? { ...row, title: row.ticket?.title ?? row.run.title ?? "Run", snapshot: row.run.flowSnapshot as FlowSnapshot } : null;
 }
 
 export async function runsOfMachine(db: Db, machineId: string, states: readonly RunState[]) {
   return db
-    .select({ id: run.id, state: run.state, mode: run.mode, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
+    .select({ id: run.id, state: run.state, queuedAt: run.queuedAt, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
     .from(run)
     .where(and(eq(run.machineId, machineId), inArray(run.state, [...states])));
 }
 
-/** Ended Real Runs of a Machine that still have a worktree to remove (RUN-14): Succeeded or Cancelled only. */
+/** Ended Runs of a Machine that still have a worktree to remove (RUN-14): Succeeded or Cancelled only. */
 export async function runsToCleanUp(db: Db, machineId: string) {
   return db
     .select({ id: run.id })
     .from(run)
-    .where(and(eq(run.machineId, machineId), eq(run.mode, "real"), inArray(run.state, ["succeeded", "cancelled"]), isNotNull(run.worktreePath)));
+    .where(and(eq(run.machineId, machineId), inArray(run.state, ["succeeded", "cancelled"]), isNotNull(run.worktreePath)));
 }
 
 export async function updateRun(db: Db, runId: string, patch: Partial<Omit<Run, "id">>): Promise<void> {
@@ -274,7 +298,7 @@ export async function retryRun(db: Db, runId: string, flowNodeId: string, note: 
         queuedAt: now,
         endedAt: null,
         failureReason: null,
-        pendingRetry: { flowNodeId, context, loginsChecked: current.mode === "dry" },
+        pendingRetry: { flowNodeId, context, loginsChecked: false },
       })
       .where(eq(run.id, runId));
     await recordAudit(tx, {
@@ -299,7 +323,7 @@ export async function markRetryLoginsChecked(db: Db, runId: string): Promise<voi
 /** Running Runs with their running Attempts, for the heartbeat watcher and recovery (RUN-12). */
 export async function runningRuns(db: Db, machineId?: string) {
   const runs = await db
-    .select({ id: run.id, machineId: run.machineId, mode: run.mode, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
+    .select({ id: run.id, machineId: run.machineId, branch: run.branch, worktreePath: run.worktreePath, pendingRetry: run.pendingRetry })
     .from(run)
     .where(machineId ? and(eq(run.state, "running"), eq(run.machineId, machineId)) : eq(run.state, "running"));
   if (runs.length === 0) return [];
@@ -446,7 +470,6 @@ export const RUNS_PAGE_SIZE = 25;
 const runListColumns = {
   id: run.id,
   state: run.state,
-  mode: run.mode,
   queuedAt: run.queuedAt,
   startedAt: run.startedAt,
   endedAt: run.endedAt,
@@ -454,7 +477,7 @@ const runListColumns = {
   flowId: run.flowId,
   flowName: flow.name,
   ticketNumber: ticket.number,
-  ticketTitle: ticket.title,
+  ticketTitle: runTitle,
   projectId: project.id,
   starterEmail: member.email,
   starterName: member.name,
@@ -473,8 +496,8 @@ export async function listRuns(db: Db, filters: RunFilters, page = 1) {
   const rows = await db
     .select(runListColumns)
     .from(run)
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
-    .innerJoin(project, eq(project.id, ticket.projectId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(project, eq(project.id, runProjectId))
     .innerJoin(flow, eq(flow.id, run.flowId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(where)
@@ -493,8 +516,8 @@ export async function listPullRequests(db: Db) {
   return db
     .select({ ...runListColumns, branch: run.branch, pullRequestUrl: run.pullRequestUrl, starterMemberId: run.starterMemberId })
     .from(run)
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
-    .innerJoin(project, eq(project.id, ticket.projectId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(project, eq(project.id, runProjectId))
     .innerJoin(flow, eq(flow.id, run.flowId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(isNotNull(run.pullRequestNumber))
@@ -511,10 +534,10 @@ export async function runStateCounts(db: Db): Promise<Partial<Record<RunState, n
 export async function getRunView(db: Db, runId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(runId)) return null;
   const [row] = await db
-    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, machineOwnerId: machine.memberId, machineName: machine.name, machineConnected: machine.connected })
+    .select({ run, ticket, project, starter: { email: member.email, name: member.name, pictureUrl: member.pictureUrl }, machineOwnerId: machine.memberId, machineName: machine.name, machineConnected: machine.connected, machineUsage: machine.usage })
     .from(run)
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
-    .innerJoin(project, eq(project.id, ticket.projectId))
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(project, eq(project.id, runProjectId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .leftJoin(machine, eq(machine.id, run.machineId))
     .where(eq(run.id, runId));
@@ -523,5 +546,5 @@ export async function getRunView(db: Db, runId: string) {
   const [machineOwner] = row.machineOwnerId
     ? await db.select({ email: member.email, name: member.name }).from(member).where(eq(member.id, row.machineOwnerId))
     : [];
-  return { ...row, snapshot: row.run.flowSnapshot as FlowSnapshot, machineOwner: machineOwner ?? null, attempts: await attemptsOfRun(db, runId) };
+  return { ...row, title: row.ticket?.title ?? row.run.title ?? "Run", snapshot: row.run.flowSnapshot as FlowSnapshot, machineOwner: machineOwner ?? null, attempts: await attemptsOfRun(db, runId) };
 }

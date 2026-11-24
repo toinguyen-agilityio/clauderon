@@ -26,10 +26,42 @@ export const sampleNodes: SampleNode[] = [
   {
     slug: "ticket",
     name: "Ticket",
-    kind: "ticket",
-    instructions: "The entry of every Flow: emits the GitHub issue the Run works on.",
+    kind: "input",
+    instructions: "Starts a Flow from a GitHub issue: one Run per Ticket.",
     inputs: [],
     outputs: [out("issue")],
+  },
+  {
+    slug: "input-branch",
+    name: "Branch",
+    kind: "input",
+    instructions: "Starts a Flow from a branch: the Run works on a new branch made from it.",
+    inputs: [],
+    outputs: [out("branch")],
+  },
+  {
+    slug: "input-pull-request",
+    name: "Pull request",
+    kind: "input",
+    instructions: "Starts a Flow from an open pull request.",
+    inputs: [],
+    outputs: [out("pull-request")],
+  },
+  {
+    slug: "input-plan",
+    name: "Plan",
+    kind: "input",
+    instructions: "Starts a Flow from a plan the Member writes when starting the Run.",
+    inputs: [],
+    outputs: [out("plan")],
+  },
+  {
+    slug: "input-summary",
+    name: "Summary",
+    kind: "input",
+    instructions: "Starts a Flow from free text the Member writes when starting the Run.",
+    inputs: [],
+    outputs: [out("summary")],
   },
   {
     slug: "grill-a-plan",
@@ -61,8 +93,11 @@ export const sampleNodes: SampleNode[] = [
     name: "Code a change",
     kind: "agent",
     instructions:
-      "Make the change the issue asks for, following the plan when there is one. Add or update tests. Commit your work on the current branch with a clear message. Summarise what you changed.",
-    inputs: [input("issue"), input("plan", false)],
+      "Make the change the issue or the plan asks for, following the plan when there is one. Add or update tests. Commit your work on the current branch with a clear message. Summarise what you changed.",
+    inputs: [
+      { name: "issue", type: "issue", group: "context", required: false },
+      { name: "plan", type: "plan", group: "context", required: false },
+    ],
     outputs: [out("branch"), out("summary", true)],
   },
   {

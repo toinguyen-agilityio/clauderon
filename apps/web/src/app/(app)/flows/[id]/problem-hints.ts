@@ -2,6 +2,7 @@
 // plain title naming the Nodes and ports involved, a hint on how to fix it, and, when
 // one click can fix it, that fix. Pure, so it is unit-tested.
 
+import { isEntryKind } from "@clauderon/core";
 import type { FlowEdge, LibraryNode, Problem } from "@clauderon/core";
 
 export type ProblemFix =
@@ -110,12 +111,17 @@ export function describeProblems(problems: readonly Problem[], placements: reado
           fix: problem.flowNodeId ? { kind: "remove-node", flowNodeId: problem.flowNodeId, label: "Remove this Node" } : undefined,
           nodeIds: problem.flowNodeId ? [problem.flowNodeId] : [],
         };
-      case "ticket-count": {
-        const tickets = placements.filter((p) => libOf(p.id)?.kind === "ticket").map((p) => p.id);
-        return tickets.length === 0
-          ? { problem, title: "The Flow has no Ticket Node", hint: "Every Flow starts from exactly one Ticket. Add a Ticket Node and connect it to the first step.", fix: { kind: "add-node", label: "Add a Node" }, nodeIds: [] }
-          : { problem, title: `The Flow has ${tickets.length} Ticket Nodes`, hint: "A Flow starts from exactly one Ticket. Remove the extra ones.", nodeIds: tickets };
+      case "entry-count": {
+        const entries = placements.filter((p) => {
+          const kind = libOf(p.id)?.kind;
+          return kind !== undefined && isEntryKind(kind);
+        }).map((p) => p.id);
+        return entries.length === 0
+          ? { problem, title: "The Flow has no Input Node", hint: "Every Flow starts from exactly one Input. Add an Input Node, such as Ticket or Branch, and connect it to the first step.", fix: { kind: "add-node", label: "Add a Node" }, nodeIds: [] }
+          : { problem, title: `The Flow has ${entries.length} Input Nodes`, hint: "A Flow starts from exactly one Input. Remove the extra ones.", nodeIds: entries };
       }
+      case "input-group-unconnected":
+        return { problem, title: "A Node has nothing to work from", hint: `${problem.message}. Connect one of them.`, nodeIds: problem.flowNodeId ? [problem.flowNodeId] : [] };
       case "no-end-node":
         return { problem, title: "The Flow never ends", hint: "At least one Node needs no edge going out of it. Remove an edge that leads back, or add a final step.", nodeIds: [] };
     }

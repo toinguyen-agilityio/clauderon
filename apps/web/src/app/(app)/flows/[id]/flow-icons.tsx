@@ -86,4 +86,4 @@ export const FIcon = {
   grill: svg(<path d="M2.5 3.5h11v7.5H7l-3 2.5V11H2.5zM6.5 6a1.5 1.5 0 113 0c0 1-1.5 1.25-1.5 2.25M8 9.75v.01" />),
 };
 
-export const kindIcon = (kind: string) => FIcon[kind as keyof typeof FIcon] ?? FIcon.agent;
+export const kindIcon = (kind: string) => FIcon[(kind === "input" ? "ticket" : kind) as keyof typeof FIcon] ?? FIcon.agent;

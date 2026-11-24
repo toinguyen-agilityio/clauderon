@@ -84,7 +84,7 @@ async function setup(slots = 2, ticketCount = 1) {
   for (let n = 1; n <= ticketCount; n++) tickets.push(await ticketRow(db, project.id, 410 + n));
   const ctx = await startGateway(db, TOKEN);
   const start = async (ticketIndexes = [0], slug = "plan-and-deliver") => {
-    const started = await startSampleBatch(db, ann, machine.id, ticketIndexes.map((i) => tickets[i]!.id), ctx.clock.now(), "", "real", slug);
+    const started = await startSampleBatch(db, ann, machine.id, ticketIndexes.map((i) => tickets[i]!.id), ctx.clock.now(), "", slug);
     if (!started.ok) throw new Error("start failed");
     await ctx.gateway.engine.schedule(machine.id);
     await ctx.flush();
@@ -436,21 +436,6 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     expect(agent.closeCode).toBe(4403);
     const [stored] = await db.select().from(schema.machine);
     expect(stored!.connected).toBe(false);
-  });
-
-  it("a restarted Gateway interrupts Dry-runs whose Node was being simulated", async () => {
-    const { ann, machine, tickets, gateway, agent, clock, flush, gatewaySide } = await setup();
-    const started = await startSampleBatch(db, ann, machine.id, [tickets[0]!.id], clock.now(), "", "dry", "basic-ticket-delivery");
-    if (!started.ok) throw new Error("start failed");
-    await gateway.engine.schedule(machine.id);
-    await flush();
-    const runId = started.runIds[0]!;
-    expect((await attemptsOfRun(db, runId)).at(-1)).toMatchObject({ state: "running" });
-
-    gatewaySide.cut();
-    await flush();
-    await restartGateway(db, TOKEN, agent, []);
-    expect(await getRun(db, runId)).toMatchObject({ state: "interrupted", failureReason: "Lost while the Gateway restarted" });
   });
 
   it("T3-11 (A5): restart the Gateway mid-Run; the Agent reconnects within 30 s listing the Attempt as live; the Run succeeds", async () => {

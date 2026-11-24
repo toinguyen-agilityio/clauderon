@@ -1,4 +1,4 @@
-import { isMachineReady, queuePositions, ticketKeys, validateFlow } from "@clauderon/core";
+import { INPUT_TYPES, checkRunInput, isEntryKind, isMachineReady, queuePositions, runInputTitle, ticketKeys, validateFlow, type InputType, type RunInput } from "@clauderon/core";
 import {
   buildFlowSnapshot,
   getMachineOfMember,
@@ -21,14 +21,18 @@ const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 async function startableFlows(deps: AppDeps) {
   const [flows, library] = await Promise.all([listFlows(deps.db), loadLibrary(deps.db)]);
   const kinds = new Map(library.map((n) => [n.id, n.kind]));
+  const byId = new Map(library.map((n) => [n.id, n]));
   const ok = [];
   for (const flow of flows) {
     const graph = await loadFlow(deps.db, flow.id);
     if (validateFlow(graph, library).length > 0) continue;
-    const runnable = graph.nodes.filter((n) => kinds.get(n.nodeId) !== "ticket");
+    const entry = graph.nodes.map((n) => byId.get(n.nodeId)).find((n) => n && isEntryKind(n.kind));
+    const inputType = entry?.outputs[0]?.type;
+    if (!inputType || !(INPUT_TYPES as readonly string[]).includes(inputType)) continue;
+    const runnable = graph.nodes.filter((n) => !isEntryKind(kinds.get(n.nodeId)!));
     // A Flow with Human Nodes waits for people at them (spec M3 §2).
     const needsHuman = runnable.some((n) => kinds.get(n.nodeId) === "approve" || kinds.get(n.nodeId) === "grill");
-    ok.push({ id: flow.id, name: flow.name, nodes: runnable.length, needsHuman });
+    ok.push({ id: flow.id, name: flow.name, nodes: runnable.length, needsHuman, inputType: inputType as InputType });
   }
   return ok;
 }
@@ -40,7 +44,7 @@ async function keysFor(deps: AppDeps) {
 /** What the dialog shows: Flows, the Starter's Machine with Slots and Machine Ready, author warnings. */
 export async function startDialog(deps: AppDeps, viewer: Viewer, ticketIds: readonly string[]) {
   const [flows, machine, tickets, keyOf] = await Promise.all([
-    startableFlows(deps),
+    startableFlows(deps).then((all) => all.filter((f) => f.inputType === "issue")),
     getMachineOfMember(deps.db, viewer.id),
     getTickets(deps.db, ticketIds),
     keysFor(deps),
@@ -62,30 +66,35 @@ export async function startDialog(deps: AppDeps, viewer: Viewer, ticketIds: read
   };
 }
 
-export type StartInput = { flowId: string; ticketIds: readonly string[]; extraInstructions: string; mode?: "real" | "dry" };
+export type StartInput = { flowId: string; ticketIds: readonly string[]; extraInstructions: string };
 export type StartResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; error: string; machinePage?: string };
+
+/** The Starter's Machine, once it is paired with both logins as last checked (POD-5). */
+async function startingMachine(deps: AppDeps, viewer: Viewer) {
+  const machine = await getMachineOfMember(deps.db, viewer.id);
+  if (!machine?.tokenHash) return { ok: false as const, error: "You have no paired Machine yet.", machinePage: "/machines" };
+  const machinePage = `/machines/${machine.id}`;
+  const fix = "Log in on your Machine in your own terminal, then check logins on its page.";
+  if (!machine.claudeLoggedIn) return { ok: false as const, error: `Claude Code is not logged in on your Machine. ${fix}`, machinePage };
+  if (!machine.ghLoggedIn) return { ok: false as const, error: `gh is not logged in on your Machine. ${fix}`, machinePage };
+  return { ok: true as const, machine };
+}
 
 /**
  * Start (RUN-1, MEM-2): one Batch and one queued Run per Ticket on the
- * Starter's own Machine, then the Gateway schedules. Real mode needs both
+ * Starter's own Machine, then the Gateway schedules. It needs both
  * logins as last checked (POD-5); an offline Machine accepts the Batch and its
- * Runs wait. Dry-run needs a Machine but no logins (RUN-13).
+ * Runs wait.
  */
 export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput): Promise<StartResult> {
   const ticketIds = [...new Set(input.ticketIds)];
   if (ticketIds.length === 0) return { ok: false, error: "Select at least one Ticket." };
 
-  const machine = await getMachineOfMember(deps.db, viewer.id);
-  if (!machine?.tokenHash) return { ok: false, error: "You have no paired Machine yet.", machinePage: "/machines" };
-  const machinePage = `/machines/${machine.id}`;
-  const mode = input.mode ?? "real";
-  if (mode === "real") {
-    const fix = "Log in on your Machine in your own terminal, then check logins on its page.";
-    if (!machine.claudeLoggedIn) return { ok: false, error: `Claude Code is not logged in on your Machine. ${fix}`, machinePage };
-    if (!machine.ghLoggedIn) return { ok: false, error: `gh is not logged in on your Machine. ${fix}`, machinePage };
-  }
+  const ready = await startingMachine(deps, viewer);
+  if (!ready.ok) return ready;
+  const { machine } = ready;
 
-  const flow = (await startableFlows(deps)).find((f) => f.id === input.flowId);
+  const flow = (await startableFlows(deps)).find((f) => f.id === input.flowId && f.inputType === "issue");
   if (!flow) return { ok: false, error: "Pick a Flow without problems." };
   const tickets = await getTickets(deps.db, ticketIds);
   if (tickets.length !== ticketIds.length) return { ok: false, error: "A selected Ticket no longer exists." };
@@ -94,7 +103,7 @@ export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput
 
   const result = await startBatch(
     deps.db,
-    { flowId: input.flowId, flowSnapshot, starter: viewer, machineId: machine.id, mode, extraInstructions: input.extraInstructions.trim(), ticketIds },
+    { flowId: input.flowId, flowSnapshot, starter: viewer, machineId: machine.id, extraInstructions: input.extraInstructions.trim(), ticketIds },
     deps.clock.now(),
   );
   if (!result.ok) {
@@ -107,5 +116,80 @@ export async function startRuns(deps: AppDeps, viewer: Viewer, input: StartInput
   }
 
   await deps.command({ type: "schedule", machineId: machine.id });
+  return result;
+}
+
+/** The form for a Flow that starts from something other than a Ticket. */
+export async function flowStartDialog(deps: AppDeps, flowId: string) {
+  const [flow, projects] = await Promise.all([startableFlows(deps).then((all) => all.find((f) => f.id === flowId && f.inputType !== "issue")), listProjects(deps.db)]);
+  if (!flow) return null;
+  return { flow: { id: flow.id, name: flow.name, inputType: flow.inputType }, projects: projects.map((p) => ({ id: p.id, name: `${p.owner}/${p.repo}`, baseBranch: p.baseBranch })) };
+}
+
+export type FlowStartChoice = { value: string; label: string };
+
+/** What a branch or pull-request Input can pick from in a Project. */
+export async function flowStartChoices(deps: AppDeps, projectId: string, type: InputType): Promise<FlowStartChoice[]> {
+  const project = (await listProjects(deps.db)).find((p) => p.id === projectId);
+  if (!project) return [];
+  if (type === "branch") return (await deps.github.listBranches(project.owner, project.repo)).map((b) => ({ value: b, label: b }));
+  if (type === "pull-request") {
+    const pulls = await deps.github.listOpenPullRequests(project.owner, project.repo);
+    return pulls.map((p) => ({ value: String(p.number), label: `#${p.number} ${p.title}` }));
+  }
+  return [];
+}
+
+export type StartFromInput = { flowId: string; projectId: string; value: string; extraInstructions: string };
+
+/** The picked branch or pull request must exist on GitHub; its URL comes from there, not the browser. */
+async function resolveInput(deps: AppDeps, project: { owner: string; repo: string }, type: InputType, value: string): Promise<{ ok: true; input: RunInput } | { ok: false; error: string }> {
+  if (type === "branch") {
+    const check = checkRunInput(type, { branch: value });
+    if (!check.ok) return check;
+    const branches = await deps.github.listBranches(project.owner, project.repo);
+    return check.input.type === "branch" && branches.includes(check.input.value.branch) ? check : { ok: false, error: "That branch no longer exists." };
+  }
+  if (type === "pull-request") {
+    const pull = (await deps.github.listOpenPullRequests(project.owner, project.repo)).find((p) => String(p.number) === value);
+    return pull ? checkRunInput(type, { number: pull.number, url: pull.url }) : { ok: false, error: "That pull request is no longer open." };
+  }
+  return checkRunInput(type, value);
+}
+
+/** Start without a Ticket: one Run in its own Batch, in the Project the Starter picked. */
+export async function startFromInput(deps: AppDeps, viewer: Viewer, input: StartFromInput): Promise<StartResult> {
+  const ready = await startingMachine(deps, viewer);
+  if (!ready.ok) return ready;
+  const flow = (await startableFlows(deps)).find((f) => f.id === input.flowId && f.inputType !== "issue");
+  if (!flow) return { ok: false, error: "Pick a Flow without problems." };
+  const project = (await listProjects(deps.db)).find((p) => p.id === input.projectId);
+  if (!project) return { ok: false, error: "Pick a Project." };
+
+  let resolved: Awaited<ReturnType<typeof resolveInput>>;
+  try {
+    resolved = await resolveInput(deps, project, flow.inputType, input.value);
+  } catch {
+    return { ok: false, error: "Could not reach GitHub. Try again." };
+  }
+  if (!resolved.ok) return resolved;
+  const flowSnapshot = await buildFlowSnapshot(deps.db, input.flowId);
+  if (!flowSnapshot) return { ok: false, error: "Pick a Flow without problems." };
+
+  const result = await startBatch(
+    deps.db,
+    {
+      flowId: input.flowId,
+      flowSnapshot,
+      starter: viewer,
+      machineId: ready.machine.id,
+      extraInstructions: input.extraInstructions.trim(),
+      ticketIds: [],
+      direct: { projectId: project.id, title: runInputTitle(flow.name, resolved.input), input: resolved.input },
+    },
+    deps.clock.now(),
+  );
+  if (!result.ok) return { ok: false, error: "The Run could not start." };
+  await deps.command({ type: "schedule", machineId: ready.machine.id });
   return result;
 }

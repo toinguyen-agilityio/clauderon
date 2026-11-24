@@ -11,6 +11,7 @@
 | [adr/](adr/) | Architecture decision records, one decision per file |
 | [prototype/clauderon-prototype.html](prototype/clauderon-prototype.html) | Clickable UI prototype built from the v1 requirements, on simulated data; open it in a browser |
 | [Product brief](https://claude.ai/artifact/2tCo9jMTGf5jVfXKqegs3t) | Client-facing product brief (EN/VI): problem, idea, screens, requirements, roadmap, open questions. Hosted as a Claude artifact |
+| [Plain-language guide](https://claude.ai/artifact/Uoah9d66hwGAi5feUGg1sK) | Landing page for non-technical readers (EN/VI): features, how it works, safety and what changed in each release. Hosted as a Claude artifact; source in [landing-page.html](landing-page.html); refreshed after every release (see [.claude/rules/release.md](../.claude/rules/release.md)) |
 | [../CONTEXT.md](../CONTEXT.md) | Domain glossary: the words to use in code, UI and conversation |
 
 ## Decision records

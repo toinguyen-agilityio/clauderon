@@ -51,7 +51,7 @@ export function NewFlow() {
             </button>
           </div>
           <div className="modal-b">
-            <p className="small muted">The Flow starts with the Ticket Node; add the steps after it in the editor.</p>
+            <p className="small muted">The Flow starts with the Ticket Input, which you can swap for another Input; add the steps after it in the editor.</p>
             <input
               className="input"
               aria-label="Flow name"

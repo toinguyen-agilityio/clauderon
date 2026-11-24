@@ -69,16 +69,16 @@ _Avoid_: Worker, concurrency
 ### Flows
 
 **Node**:
-A reusable step kept in the Node library, of kind Agent, Command, Human or Ticket, with instructions or a command, typed inputs and typed Outputs; a Flow places Nodes from the library, and each placement has its own name and extra instructions. Editing a library Node changes every Flow that uses it.
+A reusable step kept in the Node library, of kind Agent, Command, Human or Input, with instructions or a command, typed inputs and typed Outputs; a Flow places Nodes from the library, and each placement has its own name and extra instructions. Editing a library Node changes every Flow that uses it.
 _Avoid_: Task, step, stage, job, action
 
 **Node library**:
 The set of Nodes, samples and Member-made, that Flows are built from.
 _Avoid_: Task library, catalogue, palette
 
-**Ticket Node**:
-The one entry Node of every Flow; it emits the Ticket's `issue` to any Node that needs it.
-_Avoid_: Start node, trigger
+**Input Node**:
+The one entry Node of every Flow; it emits what a Run starts from, typed `issue` (the **Ticket** Input), `branch`, `pull-request`, `plan` or `summary`. An `issue` Flow starts from Tickets, one Run each; any other starts as one Run with no Ticket, in a Project the Starter picks.
+_Avoid_: Start node, trigger, source node
 
 **Agent Node**:
 A Node that gives instructions to Claude Code on a Machine and ends with a structured result naming its Outputs.
@@ -92,7 +92,7 @@ A Node that pauses the Run until a Member responds: an Approve Node (approve, or
 _Avoid_: Gate, manual step, approval step
 
 **Flow**:
-A directed acyclic graph of Nodes that a Ticket is taken through.
+A directed acyclic graph of Nodes that a Run takes its Input through.
 _Avoid_: Pipeline, workflow, template
 
 **Output**:
@@ -136,9 +136,9 @@ _Avoid_: Rerun, restart, Loop-back
 A Member ending any Active Run for good, as Cancelled.
 _Avoid_: Close, abort, stop
 
-**Dry-run**:
-A Run using the simulated runner, which never calls Claude or GitHub; it occupies a Slot but does not count toward the Ticket's Active Run.
-_Avoid_: Mock run, test run, simulation
+**Test run**:
+The editor's button that steps through a Flow in the browser with made-up Outputs. It stores nothing and never touches a Machine, Claude or GitHub. (The Run mode "Dry-run" was removed: ADR 0009.)
+_Avoid_: Dry-run, mock run, simulation
 
 **Artifact**:
 The summary of a Run's work, produced when it ends: what changed, how to test it, screenshots and the pull request link.

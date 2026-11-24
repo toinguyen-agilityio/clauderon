@@ -23,10 +23,10 @@ const file = (over: Record<string, unknown> = {}) => JSON.stringify({ ...buildFl
 
 describe("Flow file (issue #98)", () => {
   it("round trips: what is exported is read back with the same Nodes, positions and edges", () => {
-    const parsed = parseFlowFile(JSON.stringify(buildFlowFile(flow)), ticket);
+    const parsed = parseFlowFile(JSON.stringify(buildFlowFile(flow)), [ticket]);
     if (!parsed.ok) throw new Error(parsed.error);
     expect(parsed.flow.name).toBe("Ship it");
-    expect(parsed.flow.nodes.map((n) => [n.definition.name, n.isTicket])).toEqual([
+    expect(parsed.flow.nodes.map((n) => [n.definition.name, n.isEntry])).toEqual([
       ["Ticket", true],
       ["Code a change", false],
     ]);
@@ -66,16 +66,16 @@ describe("Flow file (issue #98)", () => {
     ["a placement of an unknown Node", file({ placements: [{ ...buildFlowFile(flow).placements[0]!, node: "zzz" }] }), "not in the file"],
     ["an edge to a Node that is not placed", file({ edges: [{ from: "p1", output: "issue", to: "p9", input: "issue" }] }), "not placed"],
   ])("refuses %s", (_what, text, message) => {
-    const parsed = parseFlowFile(text, ticket);
+    const parsed = parseFlowFile(text, [ticket]);
     expect(parsed.ok).toBe(false);
     if (!parsed.ok) expect(parsed.error).toContain(message);
   });
 
   it("reads the file's own Ticket Node when the install has none, if it fits the Ticket contract", () => {
-    const parsed = parseFlowFile(JSON.stringify(buildFlowFile(flow)), null);
+    const parsed = parseFlowFile(JSON.stringify(buildFlowFile(flow)), []);
     if (!parsed.ok) throw new Error(parsed.error);
-    expect(parsed.flow.nodes[0]).toMatchObject({ isTicket: true, definition: { kind: "ticket", name: "Ticket", inputs: [], outputs: ticket.outputs } });
-    const bad = (over: Record<string, unknown>) => parseFlowFile(file({ nodes: [{ ...buildFlowFile(flow).nodes[0]!, ...over }, ...buildFlowFile(flow).nodes.slice(1)] }), null);
+    expect(parsed.flow.nodes[0]).toMatchObject({ isEntry: true, definition: { kind: "input", name: "Ticket", inputs: [], outputs: ticket.outputs } });
+    const bad = (over: Record<string, unknown>) => parseFlowFile(file({ nodes: [{ ...buildFlowFile(flow).nodes[0]!, ...over }, ...buildFlowFile(flow).nodes.slice(1)] }), []);
     expect(bad({ outputs: [{ name: "plan", type: "plan", optional: false }] }).ok).toBe(false);
     expect(bad({ outputs: [{ name: "issue", type: "issue", optional: true }] }).ok).toBe(false);
     expect(bad({ inputs: [{ name: "issue", type: "issue", required: true }] }).ok).toBe(false);
@@ -86,7 +86,7 @@ describe("Flow file (issue #98)", () => {
     // issue -> an input of another type
     const wrongType = parseFlowFile(
       JSON.stringify({ ...built, nodes: [built.nodes[0], { ...built.nodes[1], inputs: [{ name: "issue", type: "plan", required: true }] }] }),
-      ticket,
+      [ticket],
     );
     expect(wrongType).toMatchObject({ ok: false, error: expect.stringContaining("does not match") });
 
@@ -96,12 +96,12 @@ describe("Flow file (issue #98)", () => {
         nodes: [built.nodes[0], { ...built.nodes[1], inputs: [{ name: "x", type: "branch", required: false }], outputs: [{ name: "branch", type: "branch", optional: false }] }],
         edges: [{ from: "p2", output: "branch", to: "p2", input: "x" }],
       }),
-      ticket,
+      [ticket],
     );
     expect(loop).toMatchObject({ ok: false, error: expect.stringContaining("cycle") });
   });
 
   it("accepts an unfinished Flow, as the editor saves those too", () => {
-    expect(parseFlowFile(JSON.stringify({ ...buildFlowFile(flow), edges: [] }), ticket).ok).toBe(true);
+    expect(parseFlowFile(JSON.stringify({ ...buildFlowFile(flow), edges: [] }), [ticket]).ok).toBe(true);
   });
 });

@@ -16,7 +16,7 @@
 | 1 | **M0** Foundations | Monorepo, database schema, Host Agent protocol, domain core, seeds, Google sign-in with allowlist, Gateway ↔ Host Agent link, Pod image | Core unit tests; sign-in refuses unknown emails; Host Agent connected |
 | 2 | **M1** Pods and Tickets | Pod lifecycle, web terminal, login checks, Workspace; Projects, Sync, Tickets, Pods page | **A7**; a Pod reaches Pod Ready; Sync pulls real issues |
 | 3 | **M1** First pull request | Run engine, Agent and Command Nodes, Open a pull request, Start dialog, Run page with live logs, Runs list | **A1** |
-| 4 | **M2** Flows and scheduling | Canvas editor and validator, clone samples, Flow lock, Slots and queue, Batches, Dry-run | **A2, A3, A6** |
+| 4 | **M2** Flows and scheduling | Canvas editor and validator, clone samples, Flow lock, Slots and queue, Batches | **A2, A3, A6** |
 | 5 | **M3** People in the loop | Approve and Grill Nodes, Needs you, Retry, Cancel, Attempts, Interrupted, audit | **A4, A5** |
 | 6 | **M4** Refinement | Diff, usage, Artifact, Batch page, Pod Recreate and Delete, worktree cleanup, staging deploy | Full journey on staging |
 | 7 | **Release** | Production deploy, backups, guides, bug bash, demo; buffer for anything that slipped | **A1–A7** on production |
@@ -40,7 +40,7 @@ gantt
   Canvas editor, lock                        :2026-11-19, 1d
   section Runs
   Run engine, real runner, PR                :2026-11-18, 1d
-  Dry-run, Batches                           :2026-11-19, 1d
+  Batches                                    :2026-11-19, 1d
   Human Nodes, Retry, Cancel, Interrupted    :2026-11-20, 1d
   Artifact in PR, cleanup                    :2026-11-21, 1d
   section Tracking
@@ -102,7 +102,7 @@ Every day ends with an integration: all work merges to `main`, the preview deplo
 
 - Canvas editor with typed edges and a problems badge; Node panel; clone samples (FLW-3..6, FLW-8).
 - Flow edit lock and Node library editing (FLW-7, FLW-9, FLW-10).
-- Slots and first-in, first-out queue per Pod (POD-3); Dry-run runner (RUN-13); Batches.
+- Slots and first-in, first-out queue per Pod (POD-3); Batches. (The Dry-run runner, RUN-13, was removed: ADR 0009.)
 - A second Member opens a pull request under their own name (A6).
 
 ### Day 5 — People in the loop (M3)

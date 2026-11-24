@@ -34,7 +34,8 @@ export const KIND_HELP: Record<NodeKind, string> = {
   command: "Runs a bash command on the Starter's Machine. The exit code and the end of its output become the Output.",
   approve: "Pauses the Run until a person approves, or rejects with feedback for the next try.",
   grill: "Claude asks a person its questions first, then produces its Outputs.",
-  ticket: "The entry of every Flow (built in).",
+  input: "The entry of a Flow (built in): what a Run starts from.",
+  ticket: "The entry of a Flow (built in): the Ticket a Run starts from.",
 };
 
 export const TYPE_HELP: Record<OutputType, string> = {
@@ -50,11 +51,12 @@ export const TYPE_HELP: Record<OutputType, string> = {
 export const INSTRUCTIONS_MAX = 20_000;
 
 /** The filter groups of the library: approve and grill both wait on a person. */
-export type KindGroup = "agent" | "command" | "human" | "ticket";
-export const KIND_GROUPS: readonly KindGroup[] = ["agent", "command", "human", "ticket"];
-export const KIND_GROUP_LABEL: Record<KindGroup, string> = { agent: "Agent", command: "Command", human: "Human", ticket: "Ticket" };
+export type KindGroup = "agent" | "command" | "human" | "input";
+export const KIND_GROUPS: readonly KindGroup[] = ["agent", "command", "human", "input"];
+export const KIND_GROUP_LABEL: Record<KindGroup, string> = { agent: "Agent", command: "Command", human: "Human", input: "Input" };
 
 export function kindGroupOf(kind: NodeKind): KindGroup {
+  if (kind === "ticket") return "input";
   return kind === "approve" || kind === "grill" ? "human" : kind;
 }
 

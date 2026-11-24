@@ -1,5 +1,6 @@
 // Small pieces shared by the Machines page and the Machine page.
 
+import { diskState, type DiskState } from "@clauderon/core";
 import { Icon } from "../../../components/icons";
 
 /** Mirrors the server's limits; kept here so client dialogs need no server import. */
@@ -17,7 +18,7 @@ type ResourceMachine = {
   cpus: number | null;
   memoryMb: number | null;
   diskGb: number | null;
-  usage: { memoryUsedMb: number; diskFreeGb: number; cpuPercent: number } | null;
+  usage: { memoryUsedMb: number; diskFreeGb?: number; cpuPercent: number } | null;
 };
 
 /** One resource: its label, and the share in use (0-100) when the Agent reports it. */
@@ -33,7 +34,8 @@ export function resourceLabels(machine: ResourceMachine): { cpu: Resource; ram: 
   const usage = machine.connected ? machine.usage : null;
   const { cpus, memoryMb, diskGb } = machine;
   const none = { text: "—", percent: null };
-  const diskUsed = usage && diskGb ? Math.max(0, diskGb - usage.diskFreeGb) : 0;
+  const diskFree = usage?.diskFreeGb;
+  const diskUsed = diskFree !== undefined && diskGb ? Math.max(0, diskGb - diskFree) : 0;
   return {
     cpu: !cpus ? none : usage ? { text: `${usage.cpuPercent}% of ${cpus} cores`, percent: share(usage.cpuPercent, 100) } : { text: `${cpus} cores`, percent: null },
     ram: !memoryMb
@@ -41,8 +43,34 @@ export function resourceLabels(machine: ResourceMachine): { cpu: Resource; ram: 
       : usage
         ? { text: `${toGb(usage.memoryUsedMb)} / ${formatGb(memoryMb)}`, percent: share(usage.memoryUsedMb, memoryMb) }
         : { text: formatGb(memoryMb), percent: null },
-    disk: !diskGb ? none : usage ? { text: `${diskUsed} / ${diskGb} GB`, percent: share(diskUsed, diskGb) } : { text: `${diskGb} GB`, percent: null },
+    disk: !diskGb ? none : diskFree !== undefined ? { text: `${diskUsed} / ${diskGb} GB`, percent: share(diskUsed, diskGb) } : { text: `${diskGb} GB`, percent: null },
   };
+}
+
+export type DiskFree = { state: DiskState; text: string; advice: string | null };
+
+export const DISK_ADVICE = "Free up space under ~/.clauderon, or stop the Run.";
+
+/** Free disk as the Agent last reported it; "unknown" while offline, before the first report or when the disk cannot be read (never 0). */
+export function diskFree(machine: { connected: boolean; diskGb?: number | null; usage: { diskFreeGb?: number } | null }): DiskFree {
+  const free = machine.connected ? machine.usage?.diskFreeGb : undefined;
+  const state = diskState(free);
+  if (state === "unknown" || free === undefined) return { state, text: "unknown", advice: null };
+  const total = machine.diskGb ? ` of ${machine.diskGb} GB` : "";
+  return { state, text: `${free} GB free${total}`, advice: state === "ok" ? null : DISK_ADVICE };
+}
+
+/** Free disk with a warning or critical pill and what to do about it. */
+export function DiskStatus({ machine, advice = true }: { machine: Parameters<typeof diskFree>[0]; advice?: boolean }) {
+  const d = diskFree(machine);
+  return (
+    <span className="disk-status" data-disk={d.state}>
+      <span className={d.state === "unknown" ? "faint" : ""}>{`Disk: ${d.text}`}</span>
+      {d.state === "low" && <span className="pill wait">Low disk</span>}
+      {d.state === "critical" && <span className="pill fail">Disk almost full</span>}
+      {advice && d.advice && <span className="small muted"> {d.advice}</span>}
+    </span>
+  );
 }
 
 /** Green below 70% in use, amber from 70%, red from 90%. */
@@ -58,6 +86,23 @@ export function ResourceMeter({ label, resource }: { label: string; resource: Re
         <span className={`meter-fill ${usageLevel(resource.percent)}`} style={{ width: `${resource.percent}%` }} />
       </span>
     </span>
+  );
+}
+
+/** CPU, RAM and Disk of one Machine as labelled meters (the list tiles); the same data as the Machine page. */
+export function MachineResources({ machine }: { machine: ResourceMachine }) {
+  const resources = resourceLabels(machine);
+  return (
+    <dl className="res-list" aria-label="Resources">
+      {([["CPU", resources.cpu], ["RAM", resources.ram], ["Disk", resources.disk]] as const).map(([label, resource]) => (
+        <div key={label} className="res-item">
+          <dt className="faint">{label}</dt>
+          <dd>
+            <ResourceMeter label={label} resource={resource} />
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

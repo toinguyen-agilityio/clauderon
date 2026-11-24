@@ -7,8 +7,8 @@ import { renderRetryContext, resultContract, type RetryContext } from "./human";
 
 const SLUG_MAX = 40;
 
-/** `clauderon/<issue>-<slug>-<first 6 of run id>` (RUN-3). */
-export function branchName(issueNumber: number, title: string, runId: string): string {
+/** `clauderon/<issue>-<slug>-<first 6 of run id>` (RUN-3), `clauderon/run-…` without a Ticket. */
+export function branchName(issueNumber: number | null, title: string, runId: string): string {
   const slug =
     title
       .toLowerCase()
@@ -16,21 +16,22 @@ export function branchName(issueNumber: number, title: string, runId: string): s
       .replace(/[^a-z0-9]+/g, "-")
       .slice(0, SLUG_MAX)
       .replace(/^-+|-+$/g, "") || "ticket";
-  return `clauderon/${issueNumber}-${slug}-${runId.replaceAll("-", "").slice(0, 6)}`;
+  return `clauderon/${issueNumber ?? "run"}-${slug}-${runId.replaceAll("-", "").slice(0, 6)}`;
 }
 
 /**
  * Ticket keys (TIC-1): `repo#n`, or `owner/repo#n` when two Projects share a
- * repository name.
+ * repository name. A Run without a Ticket is known by its repository alone.
  */
 export function ticketKeys(projects: readonly { id: string; owner: string; repo: string }[]) {
   const counts = new Map<string, number>();
   for (const p of projects) counts.set(p.repo, (counts.get(p.repo) ?? 0) + 1);
   const byId = new Map(projects.map((p) => [p.id, p]));
-  return (projectId: string, number: number): string => {
+  return (projectId: string, number: number | null): string => {
     const p = byId.get(projectId);
-    if (!p) return `#${number}`;
-    return (counts.get(p.repo) ?? 0) > 1 ? `${p.owner}/${p.repo}#${number}` : `${p.repo}#${number}`;
+    const suffix = number === null ? "" : `#${number}`;
+    if (!p) return suffix || "?";
+    return (counts.get(p.repo) ?? 0) > 1 ? `${p.owner}/${p.repo}${suffix}` : `${p.repo}${suffix}`;
   };
 }
 

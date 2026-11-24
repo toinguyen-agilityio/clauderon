@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, inArray, isNotNull, notExists, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, notExists, notInArray, or } from "drizzle-orm";
 import type { Issue } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
+import { runProjectId } from "./runs";
 import { batch, project, run, ticket } from "./schema";
 
 // Projects and Tickets (spec M1 §3). GitHub stays the source of truth: Sync
@@ -66,13 +67,14 @@ export async function removeProject(db: Db, actorEmail: string, projectId: strin
     if (!row) return { ok: false, reason: "not-found" } as const;
     const tickets = await tx.select({ id: ticket.id }).from(ticket).where(eq(ticket.projectId, projectId)).for("update");
     const ticketIds = tickets.map((t) => t.id);
-    const runs =
-      ticketIds.length === 0 ? [] : await tx.select({ id: run.id, state: run.state, batchId: run.batchId }).from(run).where(inArray(run.ticketId, ticketIds));
+    // A Run without a Ticket belongs to the Project directly.
+    const ofProject = or(eq(run.projectId, projectId), ticketIds.length === 0 ? undefined : inArray(run.ticketId, ticketIds));
+    const runs = await tx.select({ id: run.id, state: run.state, batchId: run.batchId }).from(run).where(ofProject);
     const activeRuns = runs.filter((r) => r.state !== "succeeded" && r.state !== "cancelled").length;
     if (activeRuns > 0) return { ok: false, reason: "active-runs", activeRuns } as const;
 
     if (runs.length > 0) {
-      await tx.delete(run).where(inArray(run.ticketId, ticketIds));
+      await tx.delete(run).where(ofProject);
       // A Batch may hold other Projects' Tickets; only the ones left empty go.
       const batchIds = [...new Set(runs.map((r) => r.batchId))];
       await tx.delete(batch).where(and(inArray(batch.id, batchIds), notExists(tx.select({ id: run.id }).from(run).where(eq(run.batchId, batch.id)))));
@@ -158,13 +160,23 @@ export async function recordSync(
 
 export type RunWithPullRequest = { id: string; branch: string; pullRequestNumber: number; pullRequestCheckedAt: Date | null };
 
-/** Runs of a Project that recorded a pull request (TIC-5 step 3). */
+/** Pull request states that never change again, so Sync skips them. */
+const FINAL_PR_STATES = ["merged", "closed"];
+
+/** Runs of a Project whose recorded pull request may still change: not merged or closed (TIC-5 step 3). */
 export async function runsWithPullRequests(db: Db, projectId: string): Promise<RunWithPullRequest[]> {
   const rows = await db
     .select({ id: run.id, branch: run.branch, pullRequestNumber: run.pullRequestNumber, pullRequestCheckedAt: run.pullRequestCheckedAt })
     .from(run)
-    .innerJoin(ticket, eq(ticket.id, run.ticketId))
-    .where(and(eq(ticket.projectId, projectId), isNotNull(run.pullRequestNumber), isNotNull(run.branch)));
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
+    .where(
+      and(
+        eq(runProjectId, projectId),
+        isNotNull(run.pullRequestNumber),
+        isNotNull(run.branch),
+        or(isNull(run.pullRequestState), notInArray(run.pullRequestState, FINAL_PR_STATES)),
+      ),
+    );
   return rows as RunWithPullRequest[];
 }
 
@@ -172,7 +184,7 @@ export async function setPullRequestState(db: Db, runId: string, state: string, 
   await db.update(run).set({ pullRequestState: state, pullRequestCheckedAt: now }).where(eq(run.id, runId));
 }
 
-export type TicketRunView = { id: string; mode: "real" | "dry"; state: (typeof run.$inferSelect)["state"]; queuedAt: Date; pullRequestState: string | null };
+export type TicketRunView = { id: string; state: (typeof run.$inferSelect)["state"]; queuedAt: Date; pullRequestState: string | null };
 export type TicketWithRuns = Ticket & { runs: TicketRunView[] };
 
 /** Tickets with their Runs, for the derived Ticket Status (TIC-6). */
@@ -184,7 +196,7 @@ export async function listTicketsWithRuns(db: Db, projectId?: string): Promise<T
     .orderBy(asc(ticket.projectId), desc(ticket.number));
   if (tickets.length === 0) return [];
   const runs = await db
-    .select({ id: run.id, ticketId: run.ticketId, mode: run.mode, state: run.state, queuedAt: run.queuedAt, pullRequestState: run.pullRequestState })
+    .select({ id: run.id, ticketId: run.ticketId, state: run.state, queuedAt: run.queuedAt, pullRequestState: run.pullRequestState })
     .from(run)
     .where(
       inArray(
@@ -193,7 +205,7 @@ export async function listTicketsWithRuns(db: Db, projectId?: string): Promise<T
       ),
     );
   const byTicket = new Map<string, TicketRunView[]>();
-  for (const { ticketId, ...r } of runs) byTicket.set(ticketId, [...(byTicket.get(ticketId) ?? []), r]);
+  for (const { ticketId, ...r } of runs) byTicket.set(ticketId!, [...(byTicket.get(ticketId!) ?? []), r]);
   return tickets.map((t) => ({ ...t, runs: byTicket.get(t.id) ?? [] }));
 }
 

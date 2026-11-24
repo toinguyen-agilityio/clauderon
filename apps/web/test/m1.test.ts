@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPairing, hashToken, schema, sql, type Db, type GatewayCommand } from "@clauderon/db";
 import {
   FakeClock,
@@ -25,7 +25,7 @@ import {
 } from "../src/server/machines";
 import { enableRepository, enableableRepositories, removeRepository, syncAllProjects, syncProject } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
-import { startDialog, startRuns } from "../src/server/start";
+import { startDialog, startFromInput, startRuns } from "../src/server/start";
 import { viewTickets } from "../src/server/tickets";
 
 let test: TestDatabase;
@@ -204,6 +204,20 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     expect(await actions()).toEqual(["project.enable"]);
   });
 
+  it("the list is the app token's, the same whichever Members have Machines and whatever their gh logins reach", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    github.addRepository({ owner: "acme", repo: "api", defaultBranch: "main" });
+    const before = (await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`);
+
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    await machineRow(db, ann.id, { ghTokenScope: { tokenRepos: ["acme/web"] } });
+    await machineRow(db, bob.id, { ghTokenScope: { tokenRepos: [] } });
+
+    expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(before);
+    expect(before).toEqual(["acme/api", "acme/web"]);
+  });
+
   it("only an Operator enables a Project", async () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
     const bob = await memberRow(db, "bob@example.com");
@@ -308,12 +322,51 @@ describe("Tickets page Sync", () => {
     await projectRow(db, "acme", "web");
     await projectRow(db, "acme", "gone");
 
-    await syncAllProjects(deps);
+    expect(await syncAllProjects(deps)).toBe(true);
 
     expect((await viewTickets(deps, {})).rows.map((r) => r.number)).toEqual([1]);
     expect(await actions()).toEqual([]);
     const [gone] = await db.select().from(schema.project).where(sql`repo = 'gone'`);
     expect(gone!.syncError).toContain("acme/gone");
+  });
+
+  it("syncs a Project at most once a minute, however often it is asked", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    github.addIssue("acme", "web", { number: 1, title: "One" });
+    await projectRow(db, "acme", "web");
+    const listed = vi.spyOn(github, "listOpenIssues");
+    const clock = new FakeClock(new Date("2026-11-23T10:00:00Z"));
+    deps.clock = clock;
+
+    expect(await syncAllProjects(deps)).toBe(true);
+    await clock.advance(30_000);
+    expect(await syncAllProjects(deps)).toBe(false);
+    expect(listed).toHaveBeenCalledTimes(1);
+
+    await clock.advance(31_000);
+    expect(await syncAllProjects(deps)).toBe(true);
+    expect(listed).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not look up pull requests that are already merged or closed", async () => {
+    github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
+    const ann = await memberRow(db, "ann@example.com");
+    const machine = await machineRow(db, ann.id);
+    const project = await projectRow(db);
+    const tickets = [await ticketRow(db, project.id, 1), await ticketRow(db, project.id, 2), await ticketRow(db, project.id, 3)];
+    await startSampleBatch(db, ann, machine.id, tickets.map((t) => t.id), deps.clock.now());
+    const runs = await db.select().from(schema.run).orderBy(schema.run.id);
+    const states = ["merged", "closed", "open"];
+    for (const [i, r] of runs.entries()) {
+      await db.update(schema.run).set({ branch: `b${i}`, pullRequestNumber: i + 1, pullRequestState: states[i] }).where(sql`id = ${r.id}`);
+    }
+    const lookups: string[] = [];
+    const find = github.findPullRequest.bind(github);
+    vi.spyOn(github, "findPullRequest").mockImplementation(async (o, r, branch) => (lookups.push(branch), find(o, r, branch)));
+
+    await syncProject(deps, ann, project.id);
+
+    expect(lookups).toEqual(["b2"]);
   });
 });
 
@@ -470,6 +523,27 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     expect(dialog.flows.map((f) => f.name).sort()).toEqual(["Basic ticket delivery", "Plan and deliver"]);
   });
 
+  it("starts a Flow from a branch Input: one Run with no Ticket, and only on a branch that exists", async () => {
+    const { ann } = await ready();
+    const [project] = await db.select().from(schema.project);
+    const nodes = await db.select().from(schema.node);
+    const [flow] = await db.insert(schema.flow).values({ name: "From a branch", updatedByEmail: ann.email }).returning();
+    const [from] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "input-branch")!.id }).returning();
+    const [to] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "run-tests")!.id, x: 200 }).returning();
+    await db.insert(schema.flowEdge).values({ flowId: flow!.id, fromFlowNodeId: from!.id, fromOutput: "branch", toFlowNodeId: to!.id, toInput: "branch" });
+    github.addRepository({ owner: project!.owner, repo: project!.repo, defaultBranch: "main", branches: ["main", "feat/x"] });
+    const branch = "feat/x";
+    const input = { flowId: flow!.id, projectId: project!.id, extraInstructions: "" };
+
+    expect((await startDialog(deps, ann, [])).flows.map((f) => f.name)).not.toContain("From a branch");
+    expect(await startFromInput(deps, ann, { ...input, value: "no-such-branch" })).toEqual({ ok: false, error: "That branch no longer exists." });
+
+    const started = await startFromInput(deps, ann, { ...input, value: branch });
+    if (!started.ok) throw new Error(started.error);
+    const [run] = await db.select().from(schema.run).where(sql`${schema.run.id} = ${started.runIds[0]!}`);
+    expect(run).toMatchObject({ ticketId: null, projectId: project!.id, title: `From a branch on ${branch}`, inputValue: { type: "branch", value: { branch } } });
+  });
+
   it("T1-5: Start in Real mode is refused when gh is not logged in, with a link to the Machine", async () => {
     const { ann, machine, mine, flowId } = await ready({ ghLoggedIn: false });
     expect(await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "" })).toEqual({
@@ -478,14 +552,6 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
       machinePage: `/machines/${machine.id}`,
     });
     expect(await db.select().from(schema.run)).toEqual([]);
-  });
-
-  it("a Dry-run Start needs no logins and queues a dry Run", async () => {
-    const { ann, machine, mine, flowId } = await ready({ ghLoggedIn: false, claudeLoggedIn: false });
-    const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id], extraInstructions: "", mode: "dry" });
-    expect(result).toMatchObject({ ok: true });
-    expect(await db.select().from(schema.run)).toEqual([expect.objectContaining({ mode: "dry", state: "queued", machineId: machine.id })]);
-    expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
   });
 
   it("refuses a Member with no paired Machine", async () => {
@@ -501,7 +567,7 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     const result = await startRuns(deps, ann, { flowId, ticketIds: [mine.id, outside.id], extraInstructions: "Be brief." });
     expect(result).toEqual({ ok: true, batchId: expect.any(String), runIds: [expect.any(String), expect.any(String)] });
     const runs = await db.select().from(schema.run);
-    expect(runs.every((r) => r.state === "queued" && r.machineId === machine.id && r.mode === "real")).toBe(true);
+    expect(runs.every((r) => r.state === "queued" && r.machineId === machine.id)).toBe(true);
     expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
     expect(await actions()).toEqual(["run.start", "run.start"]);
   });
@@ -551,8 +617,10 @@ describe("Runs (TRK-1, TRK-2, TRK-7)", () => {
     expect((await viewRuns(deps, { state: "failed", flowId: "00000000-0000-0000-0000-000000000000" }, 1)).rows).toEqual([]);
 
     const run = await viewRun(deps, first.runIds[0]!);
-    expect(run).not.toBe("not-found");
-    if (run === "not-found") return;
+    if (run === "not-found") throw new Error("run not found");
+    expect(run.key).toBe("web#1");
+    expect(run).toHaveProperty("machineUsage");
+    expect(run).toHaveProperty("machineConnected");
     expect(run.key).toBe("web#1");
     expect(run.timeline.map((n) => [n.name, n.state])).toEqual([
       ["Ticket", "not reached"],

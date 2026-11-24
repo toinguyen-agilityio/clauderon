@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { signOut } from "../../auth";
 import { Avatar, Brand } from "../../components/brand";
 import { Icon } from "../../components/icons";
-import { AutoRefresh } from "./machines/auto-refresh";
+import { NeedsYouProvider } from "../../components/needs-you-live";
+import { needsYouAction } from "./actions";
 import { MobileShell } from "../../components/mobile-shell";
 import { SideNav } from "../../components/side-nav";
 import { needsYouCount } from "../../server/runs";
@@ -16,7 +17,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="shell">
-      <AutoRefresh everyMs={15000} />
+      <NeedsYouProvider initial={needsYou} load={needsYouAction}>
       <MobileShell needsYou={needsYou}>
         <Brand />
         <SideNav needsYou={needsYou} />
@@ -43,6 +44,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
       </MobileShell>
+      </NeedsYouProvider>
       <main className="main">
         <div className="view">{children}</div>
       </main>

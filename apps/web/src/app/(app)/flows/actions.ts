@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { cloneMyFlow, createMyFlow, deleteMyFlow, exportMyFlow, importMyFlow, type CreateFlowResult, type ExportFlowResult, type ImportFlowResult } from "../../../server/flows";
 import { deps, requireMember } from "../../../server/runtime";
+import { flowStartChoices, flowStartDialog, startFromInput, type StartFromInput, type StartResult } from "../../../server/start";
+import type { InputType } from "@clauderon/core";
 
 export type FlowFormState = { error: string | null; notice: string | null; /** The Flow a clone just made, so the row can link to it. */ openFlowId: string | null };
 
@@ -23,7 +25,7 @@ export async function flowActionAction(_state: FlowFormState, form: FormData): P
   return { error: "Unknown action.", notice: null, openFlowId: null };
 }
 
-/** Creates an empty Flow (with the Ticket Node placed) for the editor to open. */
+/** Creates an empty Flow (with the Ticket Input Node placed) for the editor to open. */
 export async function createFlowAction(name: string): Promise<CreateFlowResult> {
   const member = await requireMember();
   const result = await createMyFlow(deps(), member, name);
@@ -43,5 +45,26 @@ export async function importFlowAction(text: string): Promise<ImportFlowResult> 
   const result = await importMyFlow(deps(), member, text);
   revalidatePath("/flows");
   revalidatePath("/flows/library");
+  return result;
+}
+
+export async function loadFlowStartAction(flowId: string) {
+  await requireMember();
+  return flowStartDialog(deps(), flowId);
+}
+
+export async function loadFlowStartChoicesAction(projectId: string, type: InputType) {
+  await requireMember();
+  try {
+    return { ok: true as const, choices: await flowStartChoices(deps(), projectId, type) };
+  } catch {
+    return { ok: false as const, error: "Could not reach GitHub. Try again." };
+  }
+}
+
+export async function startFromInputAction(input: StartFromInput): Promise<StartResult> {
+  const member = await requireMember();
+  const result = await startFromInput(deps(), member, input);
+  revalidatePath("/runs");
   return result;
 }

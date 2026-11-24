@@ -4,7 +4,6 @@ import { ticketStatus, type RunForStatus } from "../src/index";
 const open = { issueState: "open" as const };
 const at = (n: number) => new Date(Date.UTC(2026, 10, 16, 0, n));
 const real = (state: RunForStatus["state"], n: number, pullRequestState: RunForStatus["pullRequestState"] = null): RunForStatus => ({
-  mode: "real",
   state,
   queuedAt: at(n),
   pullRequestState,
@@ -21,10 +20,6 @@ describe("ticketStatus", () => {
     expect(ticketStatus(open, [real("succeeded", 1, "merged")])).toBe("PR merged");
     expect(ticketStatus(open, [real("succeeded", 1, "open")])).toBe("PR open");
     expect(ticketStatus(open, [])).toBe("Open");
-  });
-
-  it("T0-8: ignores Dry-run Runs", () => {
-    expect(ticketStatus(open, [{ ...real("running", 1), mode: "dry" }])).toBe("Open");
   });
 
   it("an Active Run wins over an earlier pull request", () => {

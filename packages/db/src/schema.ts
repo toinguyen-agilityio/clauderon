@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
+import type { RunInput } from "@clauderon/core";
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -22,8 +24,7 @@ const id = () => uuid("id").primaryKey().defaultRandom();
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const ts = (name: string) => timestamp(name, { withTimezone: true });
 
-export const nodeKind = pgEnum("node_kind", ["ticket", "agent", "command", "approve", "grill"]);
-export const runMode = pgEnum("run_mode", ["real", "dry"]);
+export const nodeKind = pgEnum("node_kind", ["ticket", "input", "agent", "command", "approve", "grill"]);
 export const runState = pgEnum("run_state", [
   "queued",
   "running",
@@ -104,7 +105,7 @@ export type MachineDoctor = {
 };
 
 /** What the Machine was using at its latest heartbeat, as `machine.usage` carries it. */
-export type MachineUsage = { memoryUsedMb: number; diskFreeGb: number; cpuPercent: number };
+export type MachineUsage = { memoryUsedMb: number; diskFreeGb?: number; cpuPercent: number };
 
 /**
  * One Member's Machine (ADR 0006): their own computer, paired with a token
@@ -278,7 +279,6 @@ export const batch = pgTable("batch", {
   starterMemberId: uuid("starter_member_id")
     .notNull()
     .references(() => member.id),
-  mode: runMode("mode").notNull(),
   extraInstructions: text("extra_instructions").notNull().default(""),
 });
 
@@ -290,9 +290,12 @@ export const run = pgTable(
     batchId: uuid("batch_id")
       .notNull()
       .references(() => batch.id),
-    ticketId: uuid("ticket_id")
-      .notNull()
-      .references(() => ticket.id),
+    /** Null for a Run started from a Flow's non-issue Input. */
+    ticketId: uuid("ticket_id").references(() => ticket.id),
+    /** Set only on a Run without a Ticket; otherwise the Ticket says which Project. */
+    projectId: uuid("project_id").references(() => project.id),
+    title: text("title"),
+    inputValue: jsonb("input_value").$type<RunInput>(),
     flowId: uuid("flow_id")
       .notNull()
       .references(() => flow.id),
@@ -302,8 +305,7 @@ export const run = pgTable(
     starterMemberId: uuid("starter_member_id")
       .notNull()
       .references(() => member.id),
-    mode: runMode("mode").notNull(),
-    state: runState("state").notNull().default("queued"),
+      state: runState("state").notNull().default("queued"),
     queuedAt: ts("queued_at").notNull().defaultNow(),
     startedAt: ts("started_at"),
     endedAt: ts("ended_at"),
@@ -320,10 +322,11 @@ export const run = pgTable(
   },
   (t) => [
     index("run_machine_queue_idx").on(t.machineId, t.state, t.queuedAt),
-    // One Active Run per Ticket, Dry-runs excluded (TIC-7).
+    // One Active Run per Ticket (TIC-7).
     uniqueIndex("run_one_active_per_ticket_idx")
       .on(t.ticketId)
-      .where(sql`${t.state} not in ('succeeded', 'cancelled') and ${t.mode} = 'real'`),
+      .where(sql`${t.state} not in ('succeeded', 'cancelled')`),
+    check("run_ticket_or_project", sql`${t.ticketId} is not null or ${t.projectId} is not null`),
   ],
 );
 
