@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getMachineOfMember } from "@clauderon/db";
-import { Icon } from "../../../components/icons";
 import { deps, requireMember } from "../../../server/runtime";
 import { viewTickets } from "../../../server/tickets";
 import { FilterLink, FilterResults, TicketFilters, TicketSearch } from "./ticket-filters";
@@ -37,10 +36,6 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
           <h1>Tickets</h1>
           <p className="sub">Open GitHub issues of every Project, synced from GitHub in the background, at most once a minute. Status comes from their Runs and pull requests.</p>
         </div>
-        <Link className="btn" href="/projects">
-          {Icon.sync}
-          Sync on Projects
-        </Link>
       </div>
 
       {!(machine?.tokenHash && machine.claudeLoggedIn && machine.ghLoggedIn) && (
@@ -66,7 +61,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
       {projects.length === 0 ? (
         <div className="card empty">
           <b>No Project yet</b>
-          Enable a repository on the <Link href="/projects">Projects</Link> page, then Sync to pull its issues.
+          Enable a repository on the <Link href="/projects">Projects</Link> page; its open issues show up here.
         </div>
       ) : (
         <TicketFilters>

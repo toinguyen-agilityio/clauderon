@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import type { ConfirmState } from "../../../components/confirm";
-import { canManageProjects, enableRepository, enableableRepositories, removeRepository, syncProject } from "../../../server/projects";
-import { deps, requireMember } from "../../../server/runtime";
+import { removeGitHubToken, saveGitHubToken } from "../../../server/github-access";
+import { canManageProjects, enableRepository, enableableRepositories, removeRepository } from "../../../server/projects";
+import { deps, gitHubAccessDeps, requireMember } from "../../../server/runtime";
 
 export type EnableState = { error: string | null };
-export type SyncState = { message: string | null; error: string | null };
+export type TokenState = { error: string | null; saved: string | null };
 
 const ENABLE_ERRORS = {
   "other-owner": "All Projects must share one owner.",
@@ -39,15 +40,20 @@ export async function enableAction(_state: EnableState, form: FormData): Promise
   return { error: result.ok ? null : ENABLE_ERRORS[result.reason] };
 }
 
-export async function syncAction(_state: SyncState, form: FormData): Promise<SyncState> {
+/** Sets or replaces the app's GitHub token (Operator only, ADR 0010). */
+export async function saveTokenAction(_state: TokenState, form: FormData): Promise<TokenState> {
   const member = await requireMember();
-  const result = await syncProject(deps(), member, String(form.get("projectId") ?? ""));
+  const result = await saveGitHubToken(gitHubAccessDeps(), member, String(form.get("token") ?? ""));
+  if (result === "not-found") notFound();
   revalidatePath("/projects");
-  revalidatePath("/tickets");
-  if (result === "not-found") return { message: null, error: "That Project no longer exists." };
-  if (!result.ok) return { message: null, error: result.error };
-  const { added, updated, closed } = result.summary;
-  return { message: `${added} added, ${updated} updated, ${closed} closed`, error: null };
+  return result.ok ? { error: null, saved: result.login } : { error: result.error, saved: null };
+}
+
+export async function removeTokenAction(): Promise<ConfirmState> {
+  const member = await requireMember();
+  if ((await removeGitHubToken(deps(), member)) === "not-found") notFound();
+  revalidatePath("/projects");
+  return { error: null, done: true };
 }
 
 export async function removeProjectAction(_state: ConfirmState, form: FormData): Promise<ConfirmState> {

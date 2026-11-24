@@ -23,7 +23,7 @@ import {
   viewMachine,
   viewMachines,
 } from "../src/server/machines";
-import { enableRepository, enableableRepositories, removeRepository, syncAllProjects, syncProject } from "../src/server/projects";
+import { enableRepository, enableableRepositories, removeRepository, syncAllProjects } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
 import { pullRequestStartDialog, startDialog, startFromInput, startFromPullRequests, startRuns } from "../src/server/start";
 import { viewTickets } from "../src/server/tickets";
@@ -271,15 +271,19 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
     github.addIssue("acme", "web", { number: 1, title: "One", authorAssociation: "OWNER", labels: ["bug"] });
     github.addIssue("acme", "web", { number: 2, title: "Two", authorAssociation: "NONE" });
-    const ann = await memberRow(db, "ann@example.com");
     const project = await projectRow(db);
+    const clock = new FakeClock(new Date("2026-11-23T10:00:00Z"));
+    deps.clock = clock;
 
-    expect(await syncProject(deps, ann, project.id)).toEqual({ ok: true, summary: { added: 2, updated: 0, closed: 0 } });
+    expect(await syncAllProjects(deps)).toBe(true);
+    expect((await db.select().from(schema.project))[0]!.syncSummary).toEqual({ added: 2, updated: 0, closed: 0 });
 
     // Issue 2 is closed on GitHub, issue 3 is new.
     (await github.getIssue("acme", "web", 2))!.state = "closed";
     github.addIssue("acme", "web", { number: 3, title: "Three" });
-    expect(await syncProject(deps, ann, project.id)).toEqual({ ok: true, summary: { added: 1, updated: 1, closed: 1 } });
+    await clock.advance(61_000);
+    expect(await syncAllProjects(deps)).toBe(true);
+    expect((await db.select().from(schema.project).where(sql`id = ${project.id}`))[0]!.syncSummary).toEqual({ added: 1, updated: 1, closed: 1 });
 
     const tickets = await db.select().from(schema.ticket).orderBy(schema.ticket.number);
     expect(tickets.map((t) => [t.number, t.issueState, t.authorAssociation])).toEqual([
@@ -289,11 +293,11 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     ]);
     expect(await db.select().from(schema.run)).toEqual([]);
     expect(commands).toEqual([]);
-    expect(await actions()).toEqual(["project.sync", "project.sync"]);
+    expect(await actions()).toEqual([]);
     expect((await viewTickets(deps, {})).rows.find((r) => r.number === 2)?.status).toBe("Closed");
   });
 
-  it("Sync refreshes the state of recorded pull requests and shows GitHub errors on the Project", async () => {
+  it("Sync refreshes the state of recorded pull requests and keeps GitHub errors on the Project", async () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
     github.addIssue("acme", "web", { number: 5, title: "Five" });
     const ann = await memberRow(db, "ann@example.com");
@@ -304,12 +308,9 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/5-x-abc", pullRequestNumber: 9, pullRequestState: "open" });
     github.addPullRequest("acme", "web", { number: 9, branch: "clauderon/5-x-abc", state: "merged", url: "u" });
 
-    await syncProject(deps, ann, project.id);
+    await projectRow(db, "acme", "gone");
+    await syncAllProjects(deps);
     expect((await viewTickets(deps, {})).rows[0]!.status).toBe("PR merged");
-
-    const broken = await projectRow(db, "acme", "gone");
-    const result = await syncProject(deps, ann, broken.id);
-    expect(result).toEqual({ ok: false, error: expect.stringContaining("acme/gone") });
     const [stored] = await db.select().from(schema.project).where(sql`repo = 'gone'`);
     expect(stored!.syncError).toContain("acme/gone");
   });
@@ -364,7 +365,7 @@ describe("Tickets page Sync", () => {
     const find = github.findPullRequest.bind(github);
     vi.spyOn(github, "findPullRequest").mockImplementation(async (o, r, branch) => (lookups.push(branch), find(o, r, branch)));
 
-    await syncProject(deps, ann, project.id);
+    await syncAllProjects(deps);
 
     expect(lookups).toEqual(["b2"]);
   });

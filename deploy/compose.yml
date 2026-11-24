@@ -12,7 +12,6 @@ x-app-env: &app-env
   DATABASE_URL: postgres://clauderon:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/clauderon
   SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
   OPERATOR_EMAILS: ${OPERATOR_EMAILS:?set OPERATOR_EMAILS}
-  GITHUB_TOKEN: ${GITHUB_TOKEN:-}
 
 x-public-url: &public-url https://${WEB_HOSTNAME:?set WEB_HOSTNAME}
 

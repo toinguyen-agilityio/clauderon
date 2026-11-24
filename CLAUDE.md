@@ -47,7 +47,7 @@ Rules that shape the code (details in the ADRs):
 - A Flow is a DAG with typed edges, no cycles; a failed Node fails the Run and a person retries (ADR 0002).
 - Everything that writes to GitHub happens on the Starter's Machine under their own `gh` login; the app holds only a read-only token (ADR 0001).
 - Each Run executes on its Starter's Machine, under that Member's own Claude Code login. Never read, store or forward Claude/OAuth tokens; the Agent only checks login status (`apps/host-agent/src/logins.ts`). A Machine token is stored only as its SHA-256 hash.
-- No secrets in the database; configuration comes from the environment (NFR-1). Mask known token patterns before any log line is stored or streamed.
+- No secrets in the database in the clear; configuration comes from the environment, except the app's GitHub token, which an Operator sets on the Projects page and is stored encrypted with a key from `SESSION_SECRET` (NFR-1, ADR 0010). Mask known token patterns before any log line is stored or streamed.
 - Web and Gateway restart separately, so protocol and schema changes must stay compatible with both.
 
 ## Contributing

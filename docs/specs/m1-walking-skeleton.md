@@ -59,19 +59,19 @@ When the check right before a Run fails, the Run fails with `failure_reason = "C
 
 ### 3.1 Enable a Project (PRJ-1, PRJ-2)
 
-Projects page: **Enable a repository** lists the repositories `GITHUB_TOKEN` can read (`GET /user/repos`), minus enabled ones. Pick one, then its base branch from its branches (default branch preselected). All Projects must share one owner: once one is enabled, the list shows only that owner's repositories. Audit: `project.enable`.
+Projects page: **Enable a repository** lists the repositories the app's GitHub token can read (an Operator saves it on the same page, ADR 0010) (`GET /user/repos`), minus enabled ones. Pick one, then its base branch from its branches (default branch preselected). All Projects must share one owner: once one is enabled, the list shows only that owner's repositories. Audit: `project.enable`.
 
 **Decision (issue #89): whose repositories the list shows.** Always the app token's, whoever is signed in and however many Members have Machines. The app cannot read a Member's `gh` access to a repository that is not yet a Project (ADR 0001; the Agent reports only `tokenRepos`, the Projects' repositories its `gh` login reaches, POD-4), so an intersection or union across Machines is not computable, and the signed-in Member's Machines say nothing about the Project every Member shares. The list is therefore not per Member and does not change with Machines. Whether a Member's Machine can push to an enabled Project is shown after enabling, per Machine, from `tokenRepos` on the Machines page.
 
 ### 3.2 Sync (TIC-5, TIC-9)
 
-**Sync** on a Project, from the web app:
+Sync runs in the background after the Tickets page renders, at most once a minute per Project (the manual **Sync** button was removed, ADR 0010):
 
 1. Fetch every open issue (paginated, pull requests excluded) and upsert `ticket` rows: title, body, labels, author login, `author_association`, `issue_state`, URL.
 2. Fetch the current state of every known Ticket that did not come back open (so it shows `Closed`).
 3. Fetch the state of every pull request recorded on a Run of the Project.
 
-Sync never starts a Run and never writes to GitHub. It shows how many Tickets were added, updated and closed. Errors from GitHub (rate limit, revoked token) are shown on the Project, not swallowed.
+Sync never starts a Run and never writes to GitHub. Errors from GitHub (rate limit, revoked or missing token) are kept on the Project and shown on the Tickets page, not swallowed.
 
 Pull request state is also refreshed when a Ticket, Run or Batch page opens (TIC-6), throttled to once per minute per pull request.
 

@@ -146,7 +146,7 @@ Priority: **Must** / **Should** / **Could**.
 | MEM-4 | **Members page**, readable by every Member: each allowed email with the Member's name and picture, status (Active once signed in, Invited until then, Removed while a removed Member's Machine is left), Operator tag, last sign-in, Machine status and Active Runs. Only the Operator adds an email, removes one (behind a confirm that warns the Machine is removed too, with a link to the blocking Runs when refused), and removes another Member's Machine. Every change is recorded in the audit log. The old Allowlist address redirects here. | Must |
 | MEM-2 | Every member can approve, reject, answer, cancel and retry any Run. Starting a Run and opening a Pod's terminal are tied to the Member's own Pod (POD-3, POD-9). | Must |
 | PRJ-1 | The **Operator** enables a GitHub repository as a Project by picking it from the repositories the app's token can read, then choosing its base branch from the repository's branches. Every Member reads and Syncs the Projects. | Must |
-| PRJ-2 | One fine-grained personal access token for the app, with Issues: read and Pull requests: read on the Projects' repositories, kept in the app's configuration and never stored in the database. One token reads the repositories of one owner, so every Project belongs to that owner. | Must |
+| PRJ-2 | One fine-grained personal access token for the app, with Issues: read and Pull requests: read on the Projects' repositories, set by an Operator on the Projects page and stored only encrypted (ADR 0010). One token reads the repositories of one owner, so every Project belongs to that owner. | Must |
 | PRJ-3 | The **Operator** removes a Project behind a confirm: its Tickets and their Runs (logs and Outputs included) are deleted from the app, nothing changes on GitHub, and the removal is recorded in the audit log. Refused while the Project has Active Runs. | Should |
 
 ### 4.2 Pods
@@ -176,7 +176,7 @@ Priority: **Must** / **Should** / **Could**.
 | TIC-2 | Search by title or key; filter by Project and Ticket status. | Should |
 | TIC-3 | Select several Tickets → **Start** (see RUN-1). | Must |
 | TIC-4 | Ticket detail: issue body from GitHub, every Run of the Ticket, links to their pull requests and Artifacts. | Should |
-| TIC-5 | **Sync** button pulls every open issue of a Project from GitHub, and the current state of every known Ticket (so an issue closed on GitHub shows `Closed`) and of every pull request opened by a Run. Sync never starts a Run. | Must |
+| TIC-5 | **Sync**, in the background after the Tickets page opens, pulls every open issue of a Project from GitHub, and the current state of every known Ticket (so an issue closed on GitHub shows `Closed`) and of every pull request opened by a Run. Sync never starts a Run. | Must |
 | TIC-6 | Ticket status is derived, never stored: `Open` (no Active Run), `Queued`, `In run`, `Needs you` (waiting for human), `Failed`, `Interrupted`, `PR open`, `PR merged`, `Closed` (issue closed on GitHub). Pull request state is read at Sync and whenever a Ticket, Run or Batch page opens. | Must |
 | TIC-7 | A Ticket has at most one Active Run. | Must |
 | TIC-8 | The app never changes issue state or labels and never comments on issues; pull requests reference the issue with `Refs #<n>`. | Must |
@@ -285,7 +285,7 @@ A Run holds a Slot only while Running or Waiting for human.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
-| NFR-1 | Security | The app's GitHub token, the Google OAuth client secret and the Host Agent secret live in the app's configuration, never in the database. Before any log line is stored or streamed, the Host Agent and the app mask known token patterns (GitHub, Anthropic, OAuth) and the values of known secrets. Sign-in sessions use secure, HTTP-only cookies and expire (MEM-1). | Must |
+| NFR-1 | Security | The Google OAuth client secret and the Host Agent secret live in the app's configuration, never in the database; the app's GitHub token is stored only encrypted with a key from the configuration (ADR 0010). Before any log line is stored or streamed, the Host Agent and the app mask known token patterns (GitHub, Anthropic, OAuth) and the values of known secrets. Sign-in sessions use secure, HTTP-only cookies and expire (MEM-1). | Must |
 | NFR-2 | Audit | See RUN-15. | Should |
 | NFR-3 | Resilience | The Host Agent reconnects by itself after a network drop or a Pod Host restart, and resumes from message ids (RUN-12). | Must |
 | NFR-6 | Isolation | Each Pod has its own container, Workspace volume and CPU/RAM limits, so one Member's Runs cannot read another Member's Workspace or starve the Pod Host. | Must |
