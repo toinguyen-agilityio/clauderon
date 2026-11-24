@@ -26,7 +26,7 @@ import {
 import { enableRepository, enableableRepositories, removeRepository, syncAllProjects } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
 import { pullRequestStartDialog, startDialog, startFromInput, startFromPullRequests, startRuns } from "../src/server/start";
-import { viewTickets } from "../src/server/tickets";
+import { ticketViewParam, viewTickets } from "../src/server/tickets";
 
 let test: TestDatabase;
 let db: Db;
@@ -295,6 +295,12 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     expect(commands).toEqual([]);
     expect(await actions()).toEqual([]);
     expect((await viewTickets(deps, {})).rows.find((r) => r.number === 2)?.status).toBe("Closed");
+    // The page shows open issues unless the URL asks for Closed.
+    expect([undefined, "", "Open", "In run", "Closed"].map(ticketViewParam)).toEqual(["Open", "Open", "Open", "Open", "Closed"]);
+    const open = await viewTickets(deps, { view: "Open" });
+    expect(open.rows.map((r) => r.number).sort()).toEqual([1, 3]);
+    expect(open.views).toEqual({ Open: 2, Closed: 1 });
+    expect((await viewTickets(deps, { view: "Closed" })).rows.map((r) => r.number)).toEqual([2]);
   });
 
   it("Sync refreshes the state of recorded pull requests and keeps GitHub errors on the Project", async () => {
