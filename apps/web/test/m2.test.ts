@@ -148,20 +148,22 @@ describe("Flows page (spec M2 §2)", () => {
     expect(await actions()).toEqual(["flow.create", "flow.create"]);
   });
 
-  it("a Flow whose Runs have all ended is kept while it has Runs in its history", async () => {
+  it("a Flow whose Runs have all ended can be deleted, and its Runs stay in the history under its old name", async () => {
     const flowId = await sampleFlowId(db);
     const { ann } = await withRun(flowId);
     await db.update(schema.run).set({ state: "succeeded" });
-    const copy = await cloneMyFlow(deps, ann, flowId);
-    if (!copy.ok) throw new Error("clone failed");
-    // The sample has a Run in its history and is a sample; the clone has none and can go.
     const view = await viewFlows(deps);
-    expect(view.samples.every((f) => f.lock === null)).toBe(true);
-    // The list gets the Run count from the server; the server rule still refuses.
     expect(view.samples.find((f) => f.id === flowId)!.runCount).toBe(1);
-    expect(view.flows.find((f) => f.id === copy.flowId)!.runCount).toBe(0);
-    expect(await deleteMyFlow(deps, ann, flowId)).toMatchObject({ ok: false });
-    expect(await deleteMyFlow(deps, ann, copy.flowId)).toEqual({ ok: true });
+    const name = view.samples.find((f) => f.id === flowId)!.name;
+
+    expect(await deleteMyFlow(deps, ann, flowId)).toEqual({ ok: true });
+    expect((await viewFlows(deps)).samples.some((f) => f.id === flowId)).toBe(false);
+    const runs = await db.select().from(schema.run);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.flowId).toBeNull();
+    expect((await db.select().from(schema.batch))[0]!.flowId).toBeNull();
+    const { listRuns } = await import("@clauderon/db");
+    expect((await listRuns(db, {})).rows.map((r) => r.flowName)).toEqual([name]);
   });
 });
 

@@ -76,7 +76,7 @@ export async function flowLocks(db: Db, flowIds: readonly string[]): Promise<Map
     .from(run)
     .where(and(inArray(run.flowId, [...flowIds]), notInArray(run.state, ["succeeded", "cancelled"])))
     .orderBy(asc(run.queuedAt), asc(run.id));
-  for (const r of rows) if (!locks.has(r.flowId)) locks.set(r.flowId, { runId: r.runId, state: r.state });
+  for (const r of rows) if (r.flowId && !locks.has(r.flowId)) locks.set(r.flowId, { runId: r.runId, state: r.state });
   return locks;
 }
 
@@ -180,21 +180,19 @@ export async function cloneFlow(db: Db, flowId: string, actorEmail: string, now:
 
 export type DeleteFlowResult =
   | { ok: true; name: string }
-  | { ok: false; reason: "not-found" | "has-runs" }
+  | { ok: false; reason: "not-found" }
   | { ok: false; reason: "locked"; lock: FlowLock };
 
 /**
  * Deletes a Flow (FLW-9), samples included, refused for a Flow locked by an
- * Active Run (FLW-7) and for one that has Runs in its history, since each Run
- * keeps its Flow's id. Checked here, not only in the page.
+ * Active Run (FLW-7). Checked here, not only in the page. Ended Runs stay in the
+ * history: their `flow_id` becomes null and they keep their Flow snapshot.
  */
 export async function deleteFlow(db: Db, flowId: string): Promise<DeleteFlowResult> {
   const [row] = await db.select().from(flow).where(eq(flow.id, flowId));
   if (!row) return { ok: false, reason: "not-found" };
   const lock = (await flowLocks(db, [flowId])).get(flowId);
   if (lock) return { ok: false, reason: "locked", lock };
-  const [{ n } = { n: 0 }] = await db.select({ n: sql<number>`count(*)::int` }).from(run).where(eq(run.flowId, flowId));
-  if (n > 0) return { ok: false, reason: "has-runs" };
   await db.delete(flow).where(eq(flow.id, flowId));
   return { ok: true, name: row.name };
 }

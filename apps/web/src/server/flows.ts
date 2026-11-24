@@ -117,7 +117,7 @@ export async function createMyFlow(deps: AppDeps, viewer: Viewer, rawName: strin
 
 export type DeleteFlowOutcome = { ok: true } | { ok: false; error: string };
 
-/** Delete (FLW-9): any Flow, samples included; refused for locked Flows and Flows with Runs. Audit `flow.delete`. */
+/** Delete (FLW-9): any Flow, samples included; refused for locked Flows; ended Runs stay in the history. Audit `flow.delete`. */
 export async function deleteMyFlow(deps: AppDeps, viewer: Viewer, flowId: string): Promise<DeleteFlowOutcome> {
   const result = await deleteFlow(deps.db, flowId);
   if (!result.ok) {
@@ -126,8 +126,6 @@ export async function deleteMyFlow(deps: AppDeps, viewer: Viewer, flowId: string
         return { ok: false, error: "That Flow no longer exists." };
       case "locked":
         return { ok: false, error: `Locked by Run ${result.lock.runId} (${result.lock.state.replaceAll("_", " ")}). It can be deleted when that Run ends.` };
-      case "has-runs":
-        return { ok: false, error: "This Flow has Runs in its history, so it is kept." };
     }
   }
   await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.delete", subjectType: "flow", subjectId: flowId, detail: { name: result.name } });

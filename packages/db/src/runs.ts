@@ -475,7 +475,8 @@ const runListColumns = {
   endedAt: run.endedAt,
   machineId: run.machineId,
   flowId: run.flowId,
-  flowName: flow.name,
+  /** The Flow's current name, or the name it had when the Run started once the Flow was deleted. */
+  flowName: sql<string>`coalesce(${flow.name}, ${run.flowSnapshot}->>'name')`,
   ticketNumber: ticket.number,
   ticketTitle: runTitle,
   projectId: project.id,
@@ -498,7 +499,7 @@ export async function listRuns(db: Db, filters: RunFilters, page = 1) {
     .from(run)
     .leftJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, runProjectId))
-    .innerJoin(flow, eq(flow.id, run.flowId))
+    .leftJoin(flow, eq(flow.id, run.flowId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(where)
     .orderBy(desc(run.queuedAt), desc(run.id))
@@ -518,7 +519,7 @@ export async function listPullRequests(db: Db) {
     .from(run)
     .leftJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, runProjectId))
-    .innerJoin(flow, eq(flow.id, run.flowId))
+    .leftJoin(flow, eq(flow.id, run.flowId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(isNotNull(run.pullRequestNumber))
     .orderBy(desc(run.queuedAt), desc(run.id));

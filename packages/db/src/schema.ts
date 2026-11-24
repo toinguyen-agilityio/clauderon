@@ -273,9 +273,8 @@ export const flowEdge = pgTable("flow_edge", {
 export const batch = pgTable("batch", {
   id: id(),
   createdAt: createdAt(),
-  flowId: uuid("flow_id")
-    .notNull()
-    .references(() => flow.id),
+  /** Null once its Flow was deleted; its Runs keep their Flow snapshot. */
+  flowId: uuid("flow_id").references(() => flow.id, { onDelete: "set null" }),
   starterMemberId: uuid("starter_member_id")
     .notNull()
     .references(() => member.id),
@@ -296,9 +295,8 @@ export const run = pgTable(
     projectId: uuid("project_id").references(() => project.id),
     title: text("title"),
     inputValue: jsonb("input_value").$type<RunInput>(),
-    flowId: uuid("flow_id")
-      .notNull()
-      .references(() => flow.id),
+    /** Null once its Flow was deleted; the Run keeps `flowSnapshot`, which has the Flow's name. */
+    flowId: uuid("flow_id").references(() => flow.id, { onDelete: "set null" }),
     flowSnapshot: jsonb("flow_snapshot").notNull(),
     /** Null once its Machine was removed; only ended Runs can lose their Machine. */
     machineId: uuid("machine_id").references(() => machine.id, { onDelete: "set null" }),
