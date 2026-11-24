@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterFlows, flowSteps, groupFlows, keptReason, problemsLabel, scopeCounts, type FlowRowView } from "../src/app/(app)/flows/flows-view";
+import { filterFlows, flowSteps, groupFlows, deleteRunsNote, problemsLabel, scopeCounts, type FlowRowView } from "../src/app/(app)/flows/flows-view";
 
 const flow = (name: string, over: Partial<FlowRowView> = {}): FlowRowView => ({
   id: name,
@@ -26,11 +26,11 @@ const flows = [
   flow("Basic ticket delivery", { isSample: true }),
 ];
 
-describe("Delete availability (issue #78)", () => {
-  it("explains why a Flow with Runs is kept, and says nothing for one without", () => {
-    expect(keptReason(0)).toBeNull();
-    expect(keptReason(1)).toBe("Has 1 Run in its history, so it is kept");
-    expect(keptReason(3)).toBe("Has 3 Runs in its history, so it is kept");
+describe("Delete dialog note", () => {
+  it("says a Flow's Runs stay in the history, and says nothing for one without", () => {
+    expect(deleteRunsNote(0)).toBeNull();
+    expect(deleteRunsNote(1)).toBe("Its 1 Run stays in the Runs history.");
+    expect(deleteRunsNote(3)).toBe("Its 3 Runs stay in the Runs history.");
   });
 });
 

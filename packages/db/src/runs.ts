@@ -33,7 +33,10 @@ export type StartBatchInput = {
   direct?: { projectId: string; title: string; input: RunInput };
 };
 
-export type StartBatchResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; reason: "active-run"; ticketId: string; runId: string | null };
+export type StartBatchResult =
+  | { ok: true; batchId: string; runIds: string[] }
+  | { ok: false; reason: "active-run"; ticketId: string; runId: string | null }
+  | { ok: false; reason: "flow-deleted" };
 
 /** Postgres' unique violation, wrapped or not by the driver layer. */
 function isUniqueViolation(error: unknown): boolean {
@@ -61,13 +64,16 @@ async function activeRun(db: Db, ticketIds: readonly string[]) {
 /**
  * One Batch and one queued Run per Ticket, in one transaction (RUN-1). A
  * Ticket with an Active Run fails the whole Start (TIC-7); the partial
- * unique index catches one gained meanwhile.
+ * unique index catches one gained meanwhile. A Flow deleted meanwhile fails it too.
  */
 export async function startBatch(db: Db, input: StartBatchInput, now: Date): Promise<StartBatchResult> {
   const active = await activeRun(db, input.ticketIds);
   if (active) return { ok: false, reason: "active-run", ticketId: active.ticketId!, runId: active.id };
   try {
     return await db.transaction(async (tx) => {
+      // Waits for a delete of this Flow in progress (`deleteFlow` locks the row), and holds it off until these Runs exist.
+      const [kept] = await tx.select({ id: flow.id }).from(flow).where(eq(flow.id, input.flowId)).for("key share");
+      if (!kept) return { ok: false, reason: "flow-deleted" } as const;
       const [b] = await tx
         .insert(batch)
         .values({ flowId: input.flowId, starterMemberId: input.starter.id, extraInstructions: input.extraInstructions })
@@ -475,7 +481,8 @@ const runListColumns = {
   endedAt: run.endedAt,
   machineId: run.machineId,
   flowId: run.flowId,
-  flowName: flow.name,
+  /** The Flow's current name, or the name it had when the Run started once the Flow was deleted. */
+  flowName: sql<string>`coalesce(${flow.name}, ${run.flowSnapshot}->>'name')`,
   ticketNumber: ticket.number,
   ticketTitle: runTitle,
   projectId: project.id,
@@ -498,7 +505,7 @@ export async function listRuns(db: Db, filters: RunFilters, page = 1) {
     .from(run)
     .leftJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, runProjectId))
-    .innerJoin(flow, eq(flow.id, run.flowId))
+    .leftJoin(flow, eq(flow.id, run.flowId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(where)
     .orderBy(desc(run.queuedAt), desc(run.id))
@@ -518,7 +525,7 @@ export async function listPullRequests(db: Db) {
     .from(run)
     .leftJoin(ticket, eq(ticket.id, run.ticketId))
     .innerJoin(project, eq(project.id, runProjectId))
-    .innerJoin(flow, eq(flow.id, run.flowId))
+    .leftJoin(flow, eq(flow.id, run.flowId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(isNotNull(run.pullRequestNumber))
     .orderBy(desc(run.queuedAt), desc(run.id));
