@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { isLongText, LONG_TEXT_CHARS, MarkdownBody, MarkdownText, readableText } from "../src/components/markdown-text";
+import { formatForReading, isLongText, LONG_TEXT_CHARS, MarkdownBody, MarkdownText, readableText } from "../src/components/markdown-text";
 
 const render = (text: string) => renderToStaticMarkup(createElement(MarkdownBody, { text }));
 
@@ -66,5 +66,34 @@ describe("Markdown text (issue #85)", () => {
     const html = render("## Plan\\n\\n- one\\n- two");
     expect(html).toContain("<h2>Plan</h2>");
     expect(html).toContain("<li>two</li>");
+  });
+
+  it("makes agent prose easier to scan: labels bold, severity as a badge, paths and names as code", () => {
+    const text = [
+      "1. [major] Deleting a Flow races the lock check",
+      "- File: packages/db/src/flows.ts:194-196, together with schema.ts:277.",
+      "- Problem: deleteFlow reads flowLocks() first and runs db.delete(flow) afterwards; run.flow_id becomes null.",
+      "- Suggested fix: see `already code` and [the docs](https://example.com/a_b.ts).",
+      "```",
+      "- File: untouched.ts in a code block",
+      "```",
+    ].join("\n");
+    expect(formatForReading(text).split("\n")).toEqual([
+      "1. `sev:major` Deleting a Flow races the lock check",
+      "   - **File:** `packages/db/src/flows.ts:194-196`, together with `schema.ts:277`.",
+      "   - **Problem:** deleteFlow reads `flowLocks()` first and runs `db.delete(flow)` afterwards; `run.flow_id` becomes null.",
+      "   - **Suggested fix:** see `already code` and [the docs](https://example.com/a_b.ts).",
+      "```",
+      "- File: untouched.ts in a code block",
+      "```",
+    ]);
+    const html = render("1. [major] Something");
+    expect(html).toContain('<span class="md-sev major">major</span>');
+    expect(html).not.toContain("[major]");
+  });
+
+  it("leaves ordinary prose alone", () => {
+    const prose = "PR #175 review: 1 finding (0 critical, 1 major). Run(s) stay, e.g. on the Runs page.";
+    expect(formatForReading(prose)).toBe(prose);
   });
 });

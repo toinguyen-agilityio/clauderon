@@ -19,6 +19,50 @@ export function readableText(text: string): string {
   return text.replaceAll("\\r\\n", "\n").replaceAll("\\n", "\n").replaceAll("\\t", "\t").replaceAll('\\"', '"');
 }
 
+const SEVERITY = /\[(critical|blocker|major|minor|nit)\]/gi;
+// A short lead-in label ("File:", "Suggested fix:") at the start of a list item or paragraph.
+const LABEL = /^(\s*(?:[-*+]\s+|\d+[.)]\s+)?(?:`sev:\w+`\s*)?)([A-Z][A-Za-z]*(?: [A-Za-z]+){0,2}):(?=\s)/;
+// Spans the formatter leaves alone: inline code, links, bare URLs.
+const KEEP = /(`[^`\n]*`|\[[^\]\n]*\]\([^)\n]*\)|https?:\/\/[^\s)]+)/;
+const CODE_LIKE = new RegExp(
+  [
+    // A path with a folder, or a file with a code extension, with an optional :line or :line-line.
+    String.raw`(?:[\w@.-]+\/)+[\w.-]+\.[A-Za-z]{1,5}(?::\d+(?:-\d+)?)?`,
+    String.raw`\b[\w-]+\.(?:tsx?|jsx?|mjs|json|sql|css|ya?ml|sh|md)(?::\d+(?:-\d+)?)?\b`,
+    // A call: name() or obj.name(args), with no space before the parenthesis.
+    String.raw`\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\((?!s\))[\w$, .]{0,40}\)`,
+    // snake_case names such as run.flow_id.
+    String.raw`\b[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)*_[a-z0-9_]+\b`,
+  ].join("|"),
+  "g",
+);
+
+/**
+ * Agent text written as plain prose, made easier to scan: severity tags become badges, a
+ * short label opening a list item or paragraph is bold, bullets right under a numbered
+ * item nest in it, and file paths, calls and snake_case names are set as code. Code blocks, inline code and links are left as they are.
+ */
+export function formatForReading(text: string): string {
+  let fenced = false;
+  let underNumbered = false;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        fenced = !fenced;
+        return line;
+      }
+      if (fenced || /^( {4}|\t)/.test(line)) return line;
+      // Bullets written flush left right after a numbered item belong to it: indent them so they nest.
+      if (/^\d+[.)]\s/.test(line)) underNumbered = true;
+      else if (underNumbered && /^[-*+]\s/.test(line)) line = `   ${line}`;
+      else if (line.trim() !== "") underNumbered = false;
+      const parts = line.split(KEEP).map((part, i) => (i % 2 === 1 ? part : part.replace(SEVERITY, (_, level: string) => `\`sev:${level.toLowerCase()}\``).replace(CODE_LIKE, (m) => `\`${m}\``)));
+      return parts.join("").replace(LABEL, "$1**$2:**");
+    })
+    .join("\n");
+}
+
 export function isLongText(text: string): boolean {
   return text.length > LONG_TEXT_CHARS || text.split("\n").length > LONG_TEXT_LINES;
 }
@@ -106,7 +150,7 @@ function ExpandedText({ text, title, onClose }: { text: string; title: string; o
 
 /** The rendered Markdown alone; `collapsed` caps its height. Also what tests render. */
 export function MarkdownBody({ text: raw, collapsed = false }: { text: string; collapsed?: boolean }) {
-  const text = readableText(raw);
+  const text = formatForReading(readableText(raw));
   return (
     <div className={collapsed ? "md outv collapsed" : "md outv full"}>
       <Markdown
@@ -119,6 +163,11 @@ export function MarkdownBody({ text: raw, collapsed = false }: { text: string; c
                 {alt || src}
               </a>
             ) : null,
+          // A severity tag from `formatForReading`, shown as a badge.
+          code: ({ className, children }) => {
+            const level = !className && typeof children === "string" ? /^sev:(\w+)$/.exec(children)?.[1] : undefined;
+            return level ? <span className={`md-sev ${level}`}>{level}</span> : <code className={className}>{children}</code>;
+          },
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noreferrer noopener">
               {children}
