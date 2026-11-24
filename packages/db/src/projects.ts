@@ -21,17 +21,15 @@ export async function getProject(db: Db, id: string): Promise<Project | null> {
   return row ?? null;
 }
 
-export type EnableResult = { ok: true; project: Project } | { ok: false; reason: "other-owner" | "exists" };
+export type EnableResult = { ok: true; project: Project } | { ok: false; reason: "exists" };
 
-/** Enables a repository as a Project (PRJ-1); all Projects share one owner (PRJ-2). */
+/** Enables a repository as a Project (PRJ-1), of any owner the app's token reads (PRJ-2). */
 export async function enableProject(
   db: Db,
   actorEmail: string,
   repository: { owner: string; repo: string; baseBranch: string },
 ): Promise<EnableResult> {
   return db.transaction(async (tx) => {
-    const [other] = await tx.select({ owner: project.owner }).from(project).limit(1);
-    if (other && other.owner.toLowerCase() !== repository.owner.toLowerCase()) return { ok: false, reason: "other-owner" } as const;
     const [row] = await tx
       .insert(project)
       .values({ ...repository, enabledByEmail: actorEmail })

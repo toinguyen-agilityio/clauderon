@@ -59,7 +59,7 @@ export function TicketTable({ rows }: { rows: TicketRow[] }) {
                   <td colSpan={5}>
                     <div className="empty">
                       <b>No Tickets match</b>
-                      Clear the search or pick another status. New issues arrive when you Sync their Project.
+                      Clear the search or pick another status. New issues show up within a minute.
                     </div>
                   </td>
                 </tr>

@@ -167,7 +167,7 @@ Fill in at least `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` an
 openssl rand -base64 32
 ```
 
-In the Google OAuth client, add the redirect URI `http://localhost:3000/api/auth/callback/google`. Set `GITHUB_TOKEN` to sync real issues.
+In the Google OAuth client, add the redirect URI `http://localhost:3000/api/auth/callback/google`. To read real issues, sign in as an Operator and save a read-only GitHub token on the Projects page.
 
 **3. Start Postgres and prepare the database**
 
@@ -217,13 +217,12 @@ Secrets live only in the environment, never in the database. Local development r
 | `DATABASE_URL` | web, gateway, db scripts | Yes | Postgres connection string. The template points at the local container on port 54329. |
 | `TEST_DATABASE_URL` | tests | For tests | Postgres server where each test file creates and drops its own database. Defaults to the local container. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | web | Yes | Google OAuth client for sign-in. |
-| `SESSION_SECRET` | web, gateway | Yes | Auth.js cookie signing and Gateway tickets. Rotating it signs everyone out. |
+| `SESSION_SECRET` | web, gateway | Yes | Auth.js cookie signing, Gateway tickets and the key that encrypts the app's GitHub token. Rotating it signs everyone out, and an Operator saves the GitHub token again. |
 | `AUTH_URL` | web, gateway | Yes | Public origin of the web app, e.g. `http://localhost:3000`. |
 | `OPERATOR_EMAILS` | web, gateway | Yes | Comma-separated emails that are always allowed and manage the allowlist. |
 | `GATEWAY_URL` | web | Yes | WebSocket URL of the Gateway as browsers and Agents reach it. Default `ws://localhost:4000`. |
 | `GATEWAY_PORT` | gateway | No | Port the Gateway listens on. Default `4000`. |
 | `WEB_URL` | gateway | No | Public web URL for the approve links Agents open. Defaults to `AUTH_URL`. |
-| `GITHUB_TOKEN` | web, gateway | For Sync | Fine-grained, read-only GitHub token. Also masked in logs. |
 | `AGENT_BUNDLE_DIR` | web | No | Folder with the built `agent.mjs` and `agent.json`. Default `../host-agent/dist`. |
 
 ### Production (`deploy/.env.production`)
@@ -237,7 +236,6 @@ Secrets live only in the environment, never in the database. Local development r
 | `GATEWAY_HOSTNAME` | Public hostname of the Gateway; `wss://<GATEWAY_HOSTNAME>` becomes the web app's `GATEWAY_URL`. |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Token of the Cloudflare Tunnel that publishes both; `deploy/deploy.sh tunnel` fills it in. |
 | `OPERATOR_EMAILS` | As above. |
-| `GITHUB_TOKEN` | As above. |
 | `WEB_HOST_PORT`, `GATEWAY_HOST_PORT` | Ports on `127.0.0.1` for checks on the host. Default `3000` and `4000`. |
 
 <details>

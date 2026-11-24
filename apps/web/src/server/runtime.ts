@@ -4,7 +4,8 @@ import { systemClock, type GitHubReader } from "@clauderon/core";
 import { connect, notifyGatewayCommand, notifyMemberRevoked, parseOperatorEmails, type DbHandle } from "@clauderon/db";
 import { SESSION_COOKIES, memberFromCookies } from "./access";
 import type { AppDeps } from "./deps";
-import { gitHubApi, withCachedPullRequests } from "./github";
+import { appGitHubToken, type GitHubAccessDeps } from "./github-access";
+import { gitHubApi, gitHubLogin, withCachedPullRequests } from "./github";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -17,8 +18,8 @@ const globalForDb = globalThis as unknown as { clauderonDb?: DbHandle; clauderon
 
 export function deps(): AppDeps {
   globalForDb.clauderonDb ??= connect(required("DATABASE_URL"));
-  globalForDb.clauderonGitHub ??= withCachedPullRequests(gitHubApi(process.env.GITHUB_TOKEN ?? ""));
   const { db } = globalForDb.clauderonDb;
+  globalForDb.clauderonGitHub ??= withCachedPullRequests(gitHubApi(() => appGitHubToken(db, sessionSecret())));
   return {
     db,
     operators: parseOperatorEmails(process.env.OPERATOR_EMAILS),
@@ -27,6 +28,11 @@ export function deps(): AppDeps {
     command: notifyGatewayCommand(db),
     github: globalForDb.clauderonGitHub,
   };
+}
+
+/** What saving the app's GitHub token needs on top of `deps()`. */
+export function gitHubAccessDeps(): GitHubAccessDeps {
+  return { ...deps(), sessionSecret: sessionSecret(), gitHubLogin: (token) => gitHubLogin(token) };
 }
 
 /** The web app's public origin (`AUTH_URL`), or the request's own when unset. */

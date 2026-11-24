@@ -60,7 +60,6 @@ openssl rand -base64 32   # once each for POSTGRES_PASSWORD, SESSION_SECRET
 | `GATEWAY_HOSTNAME` | web (`GATEWAY_URL` = `wss://<GATEWAY_HOSTNAME>` for browsers and Agents), cloudflared | e.g. `clauderon-gateway.example.com` |
 | `CLOUDFLARE_TUNNEL_TOKEN` | cloudflared | Filled in by `deploy/deploy.sh tunnel` |
 | `OPERATOR_EMAILS` | web, gateway | Comma-separated Operator emails |
-| `GITHUB_TOKEN` | web, gateway | Read-only token |
 | `WEB_HOST_PORT`, `GATEWAY_HOST_PORT` | compose | Ports on 127.0.0.1 for checks on the host, default 3000 and 4000 |
 
 ## 4. Start the stack
@@ -124,7 +123,7 @@ Log chunks older than 90 days are deleted by the Gateway every day; Runs, Output
 
 For trying Clauderon without a host, [`render.yaml`](../render.yaml) at the repo root is a Render Blueprint: a free Postgres, the Gateway and the web app, in Singapore, deployed from `main` on every push. It is a demo only: free web services sleep after 15 minutes without traffic and take about a minute to wake (an Agent's socket drops and reconnects, and a Run in progress can fail), the free database expires after 30 days with its data, and a workspace's 750 free instance hours a month do not cover two services running all month.
 
-1. In the Render dashboard: **New → Blueprint**, connect the GitHub repository, pick `main`. Render asks for the values marked `sync: false`: `OPERATOR_EMAILS`, `GITHUB_TOKEN` (may stay empty), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Leave `WEB_URL`, `AUTH_URL` and `GATEWAY_URL` empty for now.
+1. In the Render dashboard: **New → Blueprint**, connect the GitHub repository, pick `main`. Render asks for the values marked `sync: false`: `OPERATOR_EMAILS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Leave `WEB_URL`, `AUTH_URL` and `GATEWAY_URL` empty for now.
 2. When both services are created, note their URLs (`https://clauderon-web….onrender.com`, `https://clauderon-gateway….onrender.com`), then set:
    - on `clauderon-gateway`: `WEB_URL` = the web URL;
    - on `clauderon-web`: `AUTH_URL` = the web URL, and `GATEWAY_URL` = the Gateway URL with `wss://` instead of `https://`.
@@ -149,7 +148,8 @@ Migrations run before the new Gateway starts. A Gateway restart is a short drop:
 
 - `SESSION_SECRET`: edit the env file and run `up -d`; everyone signs in again.
 - `POSTGRES_PASSWORD`: change it in Postgres first (`docker compose … exec postgres psql -U clauderon -c "alter user clauderon password '…'"`), then in the env file, then `up -d`.
-- `GOOGLE_CLIENT_SECRET`, `GITHUB_TOKEN`: replace the value and run `up -d`.
+- `GOOGLE_CLIENT_SECRET`: replace the value and run `up -d`.
+- The GitHub token: an Operator replaces it on the Projects page; nothing restarts. After changing `SESSION_SECRET`, save it there again.
 
 ## Troubleshooting
 

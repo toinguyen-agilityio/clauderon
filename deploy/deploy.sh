@@ -55,7 +55,6 @@ preflight() {
     [ -z "$(env_get WEB_HOSTNAME)" ] || printf 'Google OAuth redirect URI: %s/api/auth/callback/google\n' "$(public_url)" >&2
     exit 1
   fi
-  [ -n "$(env_get GITHUB_TOKEN)" ] || warn "GITHUB_TOKEN is empty: Tickets cannot be read from GitHub"
 }
 
 # Create the tunnel (once), point both hostnames at it and store its token.

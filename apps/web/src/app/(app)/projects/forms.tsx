@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import type { Repository } from "@clauderon/core";
 import { Confirm } from "../../../components/confirm";
 import { Icon } from "../../../components/icons";
-import { enableAction, loadBranches, loadRepositories, removeProjectAction, syncAction, type EnableState, type SyncState } from "./actions";
+import { enableAction, loadBranches, loadRepositories, removeProjectAction, removeTokenAction, saveTokenAction, type EnableState, type TokenState } from "./actions";
 
 /** Enable a repository (PRJ-1): pick one the app's token reads, then its base branch. */
 export function EnableForm() {
@@ -33,7 +33,7 @@ export function EnableForm() {
     <form action={action} className="proj-add">
       <div className="proj-add-head">
         <h2>Enable a repository</h2>
-        <p className="hint">Pick one the app&apos;s token can read. Its open issues become Tickets on the first Sync.</p>
+        <p className="hint">Pick one the app&apos;s token can read. Its open issues show up as Tickets within a minute.</p>
       </div>
       <div className="field proj-add-repo">
         <label htmlFor="pj-repo">Repository</label>
@@ -66,19 +66,50 @@ export function EnableForm() {
   );
 }
 
-export function SyncForm({ projectId }: { projectId: string }) {
-  // The row shows the outcome (summary or error) once the page revalidates.
-  const [, action, pending] = useActionState<SyncState, FormData>(syncAction, { message: null, error: null });
+/** Set or replace the app's GitHub token (Operator only). The field never shows the saved token. */
+export function GitHubTokenForm({ replacing }: { replacing: boolean }) {
+  const [state, action, pending] = useActionState<TokenState, FormData>(saveTokenAction, { error: null, saved: null });
+  const ref = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (state.saved) ref.current?.reset();
+  }, [state]);
   return (
-    <form action={action}>
-      <input type="hidden" name="projectId" value={projectId} />
-      <button className="btn sm" type="submit" disabled={pending}>
-        <span className={pending ? "spin" : undefined} style={{ display: "inline-flex" }}>
-          {Icon.sync}
-        </span>
-        {pending ? "Syncing…" : "Sync"}
+    <form ref={ref} action={action} className="gh-token-form">
+      <label htmlFor="gh-token" className="sr-only">
+        GitHub token
+      </label>
+      <input
+        id="gh-token"
+        className="input mono"
+        name="token"
+        type="password"
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={replacing ? "Paste a new token to replace it" : "github_pat_…"}
+        required
+      />
+      <button className="btn primary" type="submit" disabled={pending}>
+        {pending ? "Checking…" : replacing ? "Replace" : "Save token"}
       </button>
+      {state.error && (
+        <p className="err-text" role="alert">
+          {state.error}
+        </p>
+      )}
+      {state.saved && (
+        <p className="ok-text" role="status">
+          Saved. GitHub reads as @{state.saved}.
+        </p>
+      )}
     </form>
+  );
+}
+
+export function RemoveTokenForm() {
+  return (
+    <Confirm trigger="Remove" title="Remove the GitHub token?" confirm="Remove token" pendingLabel="Removing…" action={removeTokenAction} fields={{}}>
+      <p>The app stops reading issues, branches and pull requests until an Operator saves a token again. Runs already started keep going.</p>
+    </Confirm>
   );
 }
 
@@ -96,7 +127,7 @@ export function RemoveProjectForm({ projectId, name }: { projectId: string; name
       <p>
         Its Tickets and their Runs, with logs and Outputs, are deleted from this app. Nothing changes on GitHub, and the clones on Members&apos; Machines stay.
       </p>
-      <p className="small muted">Enable it again to Sync its issues back in. Refused while the Project has Active Runs.</p>
+      <p className="small muted">Enable it again to bring its issues back. Refused while the Project has Active Runs.</p>
     </Confirm>
   );
 }

@@ -18,7 +18,8 @@ const gateway = createGateway({
   clock: systemClock,
   operators: parseOperatorEmails(process.env.OPERATOR_EMAILS),
   sessionSecret,
-  appSecrets: [sessionSecret, process.env.GITHUB_TOKEN ?? ""].filter(Boolean),
+  // GitHub tokens are masked by their pattern; the app's own lives encrypted in the database (ADR 0010).
+  appSecrets: [sessionSecret],
 });
 
 // The boot wait (spec M3 §6): Run state is in the database; each Machine with Running Runs has 30 s to say hello.

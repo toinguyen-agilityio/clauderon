@@ -1,13 +1,11 @@
 import { isActive, type Repository } from "@clauderon/core";
 import {
   enableProject,
-  getProject,
   getRunContext,
   isOperator,
   listTicketsWithRuns,
   listProjects,
   openTicketsMissingFrom,
-  recordAudit,
   recordSync,
   removeProject,
   runsWithPullRequests,
@@ -19,8 +17,8 @@ import {
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
 
-// Projects and Sync (spec M1 §3). Sync never starts a Run and never writes
-// to GitHub (TIC-9).
+// Projects and Sync (spec M1 §3). Sync runs in the background after the
+// Tickets page renders; it never starts a Run and never writes to GitHub (TIC-9).
 
 const PR_REFRESH_MS = 60_000;
 
@@ -38,22 +36,21 @@ export async function viewProjects(deps: AppDeps) {
 }
 
 /**
- * Repositories the app token reads, minus enabled ones, of the Projects' owner once one exists (PRJ-2).
+ * Repositories the app token reads, of any owner, minus enabled ones (PRJ-2).
  * Deliberately not per Member or Machine: the app cannot see a `gh` login's access before a repository
  * is a Project (spec M1 §3.1, issue #89).
  */
 export async function enableableRepositories(deps: AppDeps): Promise<Repository[]> {
   const [repos, projects] = await Promise.all([deps.github.listRepositories(), listProjects(deps.db)]);
   const enabled = new Set(projects.map((p) => `${p.owner}/${p.repo}`.toLowerCase()));
-  const owner = projects[0]?.owner.toLowerCase();
   return repos
-    .filter((r) => !enabled.has(`${r.owner}/${r.repo}`.toLowerCase()) && (!owner || r.owner.toLowerCase() === owner))
+    .filter((r) => !enabled.has(`${r.owner}/${r.repo}`.toLowerCase()))
     .sort((a, b) => `${a.owner}/${a.repo}`.localeCompare(`${b.owner}/${b.repo}`));
 }
 
 export type EnableRepositoryResult = EnableResult | { ok: false; reason: "not-readable" | "no-branch" };
 
-/** Only an Operator enables or removes a Project; every Member reads and Syncs them. */
+/** Only an Operator enables or removes a Project; every Member reads them. */
 export const canManageProjects = (deps: AppDeps, viewer: Viewer) => isOperator(viewer.email, deps.operators);
 
 /** Enable a repository with its base branch (PRJ-1). */
@@ -77,22 +74,7 @@ export async function removeRepository(deps: AppDeps, viewer: Viewer, projectId:
   return removeProject(deps.db, viewer.email, projectId);
 }
 
-export type SyncResult = { ok: true; summary: { added: number; updated: number; closed: number } } | { ok: false; error: string };
-
-/**
- * Sync (TIC-5): upsert every open issue, read the state of every known Ticket
- * that did not come back open, and refresh every recorded pull request that is not merged or closed.
- * GitHub's errors are kept on the Project, not swallowed.
- */
-export async function syncProject(deps: AppDeps, viewer: Viewer, projectId: string): Promise<SyncResult | "not-found"> {
-  const project = await getProject(deps.db, projectId);
-  if (!project) return "not-found";
-  const result = await pullFromGitHub(deps, project);
-  if (result.ok) {
-    await recordAudit(deps.db, { actorEmail: viewer.email, action: "project.sync", subjectType: "project", subjectId: project.id, detail: result.summary });
-  }
-  return result;
-}
+type SyncResult = { ok: true; summary: { added: number; updated: number; closed: number } } | { ok: false; error: string };
 
 const SYNC_THROTTLE_MS = 60_000;
 const PR_LOOKUP_LIMIT = 5;
@@ -100,10 +82,13 @@ const PR_LOOKUP_LIMIT = 5;
 const lastAttempt = new Map<string, number>();
 
 /**
- * Sync every Project that was not synced in the last minute. Called in the
- * background after the Tickets page rendered, never in its render path. Not
- * audited (no one asked for it); a failure stays on its Project and the page
- * keeps showing the last synced Tickets. Returns whether any Project was synced.
+ * Sync (TIC-5) every Project that was not synced in the last minute: upsert
+ * every open issue, read the state of every known Ticket that did not come back
+ * open, and refresh every recorded pull request that is not merged or closed.
+ * Called in the background after the Tickets page rendered, never in its render
+ * path. Not audited (no one asked for it); a failure stays on its Project and
+ * the Tickets page shows it over the last synced Tickets. Returns whether any
+ * Project was synced.
  */
 export async function syncAllProjects(deps: AppDeps): Promise<boolean> {
   const now = deps.clock.now().getTime();
@@ -114,6 +99,11 @@ export async function syncAllProjects(deps: AppDeps): Promise<boolean> {
   for (const p of due) lastAttempt.set(p.id, now);
   await Promise.all(due.map((p) => pullFromGitHub(deps, p)));
   return due.length > 0;
+}
+
+/** Lets every Project be read again at once, as after the GitHub token changed. */
+export function forgetSyncAttempts(): void {
+  lastAttempt.clear();
 }
 
 /** Runs `task` over `items`, at most `limit` at a time. */
