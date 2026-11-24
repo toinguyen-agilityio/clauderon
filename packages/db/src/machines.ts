@@ -197,11 +197,11 @@ async function machineRunsIn(db: Db, machineIds: readonly string[], states: Mach
       ticketNumber: ticket.number,
       ticketTitle: runTitle,
       projectId: runProjectId,
-      flowName: flow.name,
+      flowName: sql<string>`coalesce(${flow.name}, ${run.flowSnapshot}->>'name')`,
     })
     .from(run)
     .leftJoin(ticket, eq(ticket.id, run.ticketId))
-    .innerJoin(flow, eq(flow.id, run.flowId))
+    .leftJoin(flow, eq(flow.id, run.flowId))
     .where(and(inArray(run.machineId, [...machineIds]), inArray(run.state, states)))
     .orderBy(asc(run.queuedAt), asc(run.id));
   for (const { machineId, ...entry } of rows) byMachine.get(machineId!)!.push(entry);

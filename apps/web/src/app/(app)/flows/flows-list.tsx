@@ -2,7 +2,8 @@
 
 import { isEntryKind } from "@clauderon/core";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Icon } from "../../../components/icons";
 import { FlowRowActions } from "./flow-row-actions";
 import { StartFlow } from "./start-flow";
 import { kindIcon } from "./[id]/flow-icons";
@@ -82,17 +83,43 @@ function FlowCard({ flow: f }: { flow: FlowRowView }) {
   );
 }
 
-export function FlowsList({ flows }: { flows: FlowRowView[] }) {
+/**
+ * `tabs` is the Flows area's tab bar: the search box sits at its right end. `actions` (Import, Build, New)
+ * sit at the right of the filter row. Both as in the Node library.
+ */
+export function FlowsList({ flows, tabs, actions }: { flows: FlowRowView[]; tabs: ReactNode; actions: ReactNode }) {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<FlowScope>("all");
   const counts = useMemo(() => scopeCounts(flows), [flows]);
   const shown = useMemo(() => filterFlows(flows, query, scope), [flows, query, scope]);
   const groups = useMemo(() => groupFlows(shown), [shown]);
+  const search = useRef<HTMLInputElement>(null);
+
+  // "/" jumps to the search box, as the hint in it says.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (target?.closest("input, textarea, select, [contenteditable], dialog")) return;
+      e.preventDefault();
+      search.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <>
+      <div className="tabs-bar">
+        {tabs}
+        <label className="lib-search">
+          {Icon.search}
+          <input ref={search} type="search" aria-label="Search Flows" placeholder="Search Flows by name or Node" autoComplete="off" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <kbd aria-hidden="true">/</kbd>
+        </label>
+      </div>
+
       <div className="lib-toolbar">
-        <input className="input lib-search" type="search" aria-label="Search Flows" placeholder="Search Flows by name or Node" autoComplete="off" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="seg lib-groups" role="group" aria-label="Show">
           {SCOPES.filter((s) => s.scope !== "problems" || counts.problems > 0 || scope === "problems").map((s) => (
             <button key={s.scope} type="button" className={scope === s.scope ? "on" : ""} aria-pressed={scope === s.scope} onClick={() => setScope(s.scope)}>
@@ -100,6 +127,8 @@ export function FlowsList({ flows }: { flows: FlowRowView[] }) {
             </button>
           ))}
         </div>
+        <span className="lib-toolbar-gap" aria-hidden="true" />
+        {actions}
       </div>
 
       <div className="flow-list" data-testid="flows-list">

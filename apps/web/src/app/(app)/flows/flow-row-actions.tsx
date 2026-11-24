@@ -4,16 +4,16 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { closeOnBackdrop } from "../../../components/dialog";
 import { Icon } from "../../../components/icons";
-import { keptReason } from "./flows-view";
+import { deleteRunsNote } from "./flows-view";
 import { exportFlowAction, flowActionAction, type FlowFormState } from "./actions";
 
 /**
  * Clone, Export and Delete on one Flow, samples included (FLW-8, FLW-9), as quiet icon buttons whose
  * name shows on hover; the row itself opens the Flow. Delete asks in a dialog first; a Flow that an Active Run locks cannot be deleted,
- * and says why.
+ * and says why. Ended Runs stay in the history.
  */
 export function FlowRowActions({ flowId, name, locked, runCount }: { flowId: string; name: string; locked: boolean; runCount: number }) {
-  const kept = keptReason(runCount);
+  const runsNote = deleteRunsNote(runCount);
   const [state, action, pending] = useActionState<FlowFormState, FormData>(flowActionAction, { error: null, notice: null, openFlowId: null });
   const confirm = useRef<HTMLDialogElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -72,9 +72,9 @@ export function FlowRowActions({ flowId, name, locked, runCount }: { flowId: str
         <button
           type="button"
           className="btn sm icon ghost danger-hover"
-          disabled={pending || locked || kept !== null}
+          disabled={pending || locked}
           aria-label={`Delete ${name}`}
-          data-tip={locked ? "Locked by an Active Run" : (kept ?? "Delete")}
+          data-tip={locked ? "Locked by an Active Run" : "Delete"}
           onClick={() => confirm.current?.showModal()}
         >
           {Icon.trash}
@@ -92,6 +92,11 @@ export function FlowRowActions({ flowId, name, locked, runCount }: { flowId: str
               <p className="small">
                 <b>{name}</b> will be deleted. This cannot be undone.
               </p>
+              {runsNote && (
+                <p className="small faint" data-testid="delete-runs-note">
+                  {runsNote}
+                </p>
+              )}
             </div>
             <div className="modal-f">
               <button type="button" className="btn" disabled={pending} autoFocus onClick={() => confirm.current?.close()}>
@@ -104,11 +109,6 @@ export function FlowRowActions({ flowId, name, locked, runCount }: { flowId: str
           </div>
         </dialog>
       </form>
-      {kept && !locked && (
-        <span className="faint small" data-testid="delete-kept-reason">
-          {kept}
-        </span>
-      )}
       {exportError && (
         <span className="err-text small" role="alert">
           {exportError}

@@ -7,7 +7,9 @@ import {
   extractResultBlock,
   parseGrillQuestions,
   renderRetryContext,
+  resultContract,
   retryLogLines,
+  WRITING,
 } from "../src/index";
 
 describe("Grill results (spec M3 §2.2)", () => {
@@ -98,5 +100,15 @@ describe("Retry context (RUN-7)", () => {
   it("keeps 200 lines for a Command Node", () => {
     expect(retryLogLines("command")).toBe(200);
     expect(retryLogLines("agent")).toBeLessThan(200);
+  });
+});
+
+describe("resultContract: how text Outputs should read", () => {
+  it("asks for scannable Markdown when the Node has a text Output, and not for a branch alone", () => {
+    const contract = resultContract(["summary", "branch"], false);
+    for (const line of WRITING) expect(contract).toContain(line);
+    expect(contract).toContain("never escape it twice");
+    expect(contract.indexOf(WRITING[0]!)).toBeGreaterThan(contract.indexOf("```json"));
+    expect(resultContract(["branch"], false)).not.toContain(WRITING[0]);
   });
 });

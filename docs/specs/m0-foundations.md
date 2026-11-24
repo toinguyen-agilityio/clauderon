@@ -32,7 +32,6 @@ All secrets live in environment variables, never in the database (NFR-1). `.env.
 | `OPERATOR_EMAILS` | web, gateway | Comma-separated; always allowed, see the Allowlist page |
 | `HOST_AGENT_SECRET` | gateway, host-agent | Long-lived shared secret for the Host Agent link |
 | `GATEWAY_URL` | web, host-agent | `wss://…` of the Gateway |
-| `GITHUB_TOKEN` | web, gateway | Fine-grained read-only token (used from M1) |
 | `POD_IMAGE` | gateway | Current image tag, e.g. `ghcr.io/<owner>/clauderon-pod:2026-11-16` (used from M1) |
 | `POD_LIMIT_CEILING` | web | Max Slots, CPU and RAM per Pod, e.g. `slots=4,cpus=4,memoryMb=8192` (used from M1) |
 

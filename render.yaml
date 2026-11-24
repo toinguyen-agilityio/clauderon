@@ -14,8 +14,6 @@ envVarGroups:
         generateValue: true
       - key: OPERATOR_EMAILS
         sync: false
-      - key: GITHUB_TOKEN
-        sync: false
 
 databases:
   - name: clauderon-db

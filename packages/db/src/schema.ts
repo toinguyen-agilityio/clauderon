@@ -17,8 +17,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-// Spec M0 §3. No secrets are stored here (NFR-1): session tokens are hashed
-// and OAuth tokens are never kept.
+// Spec M0 §3. No secret is stored in the clear (NFR-1): session tokens are
+// hashed, OAuth tokens are never kept, and the app's GitHub token is kept
+// only encrypted with a key from the environment (ADR 0010).
 
 const id = () => uuid("id").primaryKey().defaultRandom();
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -167,6 +168,24 @@ export const pairing = pgTable("pairing", {
   approvedByMemberId: uuid("approved_by_member_id").references(() => member.id),
 });
 
+/**
+ * The app's one read-only GitHub token (PRJ-2, ADR 0010), set by an Operator on
+ * the Projects page. One row at most; the token is AES-256-GCM encrypted with a
+ * key derived from `SESSION_SECRET`, and only its last four characters are shown.
+ */
+export const githubAccess = pgTable(
+  "github_access",
+  {
+    singleton: boolean("singleton").primaryKey().default(true),
+    tokenSealed: text("token_sealed").notNull(),
+    tokenLast4: text("token_last4").notNull(),
+    login: text("login").notNull(),
+    setByEmail: text("set_by_email").notNull(),
+    setAt: ts("set_at").notNull().defaultNow(),
+  },
+  (t) => [check("github_access_singleton", sql`${t.singleton}`)],
+);
+
 export const project = pgTable(
   "project",
   {
@@ -273,9 +292,8 @@ export const flowEdge = pgTable("flow_edge", {
 export const batch = pgTable("batch", {
   id: id(),
   createdAt: createdAt(),
-  flowId: uuid("flow_id")
-    .notNull()
-    .references(() => flow.id),
+  /** Null once its Flow was deleted; its Runs keep their Flow snapshot. */
+  flowId: uuid("flow_id").references(() => flow.id, { onDelete: "set null" }),
   starterMemberId: uuid("starter_member_id")
     .notNull()
     .references(() => member.id),
@@ -296,9 +314,8 @@ export const run = pgTable(
     projectId: uuid("project_id").references(() => project.id),
     title: text("title"),
     inputValue: jsonb("input_value").$type<RunInput>(),
-    flowId: uuid("flow_id")
-      .notNull()
-      .references(() => flow.id),
+    /** Null once its Flow was deleted; the Run keeps `flowSnapshot`, which has the Flow's name. */
+    flowId: uuid("flow_id").references(() => flow.id, { onDelete: "set null" }),
     flowSnapshot: jsonb("flow_snapshot").notNull(),
     /** Null once its Machine was removed; only ended Runs can lose their Machine. */
     machineId: uuid("machine_id").references(() => machine.id, { onDelete: "set null" }),

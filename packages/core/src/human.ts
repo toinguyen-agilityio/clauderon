@@ -90,6 +90,17 @@ export function buildGrillAnswerPrompt(questions: readonly GrillQuestion[], answ
   return `${sections.join("\n\n")}\n`;
 }
 
+/** How text Outputs should read: people see them on the Run page, rendered as Markdown. */
+export const WRITING = [
+  "Write each text Output (a plan, a summary, a review) as GitHub Markdown that a person can scan:",
+  "- one numbered item or short heading per point; details go in bullets indented under their point",
+  "- start a detail with a bold label, such as **File:**, **Problem:** or **Fix:**",
+  "- put file paths (with :line), commands and code names in backticks",
+  "- mark a finding's severity as [critical], [major] or [minor] at the start of its item",
+  "- keep paragraphs to two or three sentences",
+  "In the JSON block a line break is \\n, written once: never escape it twice.",
+];
+
 /**
  * The result contract of M0 §6 at the end of an Agent or Grill prompt. A
  * Grill Node may finish with questions instead of its Outputs.
@@ -123,6 +134,7 @@ export function resultContract(outputs: readonly string[], grill: boolean): stri
       `Where you can, suggest 2 to 4 short options per question and mark the one you recommend; set "multiSelect": true only when several options can apply together. The person can always write their own answer instead. Leave "options" out for an open question.`,
     );
   }
+  if (outputs.some((o) => o !== "branch")) lines.push("", ...WRITING);
   if (outputs.includes("branch")) lines.push("", "Commit your work on the current branch before you finish. The branch is reported for you; do not push.");
   return lines.join("\n");
 }

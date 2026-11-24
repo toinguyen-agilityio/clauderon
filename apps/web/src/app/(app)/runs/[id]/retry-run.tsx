@@ -45,7 +45,7 @@ export function RetryFromHere({ runId, nodeId, nodeName, inputs, context }: { ru
               {inputs.map((i) => (
                 <div key={i.name} className="stack" style={{ gap: 4 }}>
                   <OType type={i.type} label={i.name} />
-                  <OutputValue type={i.type} value={i.value} />
+                  <OutputValue type={i.type} value={i.value} name={i.name} />
                 </div>
               ))}
               {context && (

@@ -10,7 +10,7 @@ export type FlowRowView = {
   name: string;
   isSample: boolean;
   nodeCount: number;
-  /** Runs in the Flow's history; a Flow with any cannot be deleted. */
+  /** Runs in the Flow's history; they stay there when the Flow is deleted. */
   runCount: number;
   problems: number;
   /** In run order; `step` groups the Nodes that can run side by side. */
@@ -26,10 +26,10 @@ export type FlowRowView = {
   lock: { runId: string; state: string } | null;
 };
 
-/** Why Delete is unavailable for a Flow with Runs in its history, or null when it is not blocked by that. */
-export function keptReason(runCount: number): string | null {
+/** What the Delete dialog says about the Flow's Runs, or null when it has none. */
+export function deleteRunsNote(runCount: number): string | null {
   if (runCount <= 0) return null;
-  return `Has ${runCount} Run${runCount === 1 ? "" : "s"} in its history, so it is kept`;
+  return `Its ${runCount} Run${runCount === 1 ? "" : "s"} stay${runCount === 1 ? "s" : ""} in the Runs history.`;
 }
 
 export type FlowScope = "all" | "mine" | "samples" | "problems";

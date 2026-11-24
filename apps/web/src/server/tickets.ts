@@ -2,7 +2,13 @@ import { isActive, ticketKeys, ticketStatus, type PullRequestState, type TicketS
 import { listProjects, listTicketsWithRuns } from "@clauderon/db";
 import type { AppDeps } from "./deps";
 
-export type TicketFilters = { projectId?: string; q?: string; status?: TicketStatus | string };
+export type TicketFilters = {
+  projectId?: string;
+  q?: string;
+  status?: TicketStatus | string;
+  /** Open: every Ticket whose issue is open, any Status; Closed: closed on GitHub. */
+  view?: TicketView;
+};
 
 export type TicketRow = {
   id: string;
@@ -22,6 +28,14 @@ export type TicketRow = {
 };
 
 const asPrState = (state: string | null): PullRequestState | null => (state === "open" || state === "merged" || state === "closed" ? state : null);
+
+/** The Tickets page's two views: Open (the issue is open on GitHub, whatever its Runs) or Closed. */
+export type TicketView = "Open" | "Closed";
+
+/** The view a URL picks; Open unless it asks for Closed. */
+export function ticketViewParam(status: string | undefined): TicketView {
+  return status === "Closed" ? "Closed" : "Open";
+}
 
 /**
  * The Tickets page (TIC-1, TIC-2, TIC-3, TIC-6): key, title, labels and the
@@ -60,5 +74,7 @@ export async function viewTickets(deps: AppDeps, filters: TicketFilters) {
   const counts: Record<string, number> = {};
   for (const r of matching) counts[r.status] = (counts[r.status] ?? 0) + 1;
 
-  return { projects, all: rows, counts, total: matching.length, rows: matching.filter((r) => !filters.status || r.status === filters.status) };
+  const inView = (r: TicketRow) => !filters.view || (filters.view === "Closed") === (r.status === "Closed");
+  const views: Record<TicketView, number> = { Open: matching.filter((r) => r.status !== "Closed").length, Closed: counts.Closed ?? 0 };
+  return { projects, all: rows, counts, views, total: matching.length, rows: matching.filter((r) => inView(r) && (!filters.status || r.status === filters.status)) };
 }

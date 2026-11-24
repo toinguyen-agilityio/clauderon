@@ -12,7 +12,7 @@ const RUN: Record<string, [tone: string, label: string]> = {
 };
 
 const TICKET: Record<string, string> = {
-  Open: "plain",
+  Open: "ok",
   Queued: "wait",
   "In run": "run",
   "Needs you": "acc",

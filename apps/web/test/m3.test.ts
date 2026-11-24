@@ -250,9 +250,10 @@ describe("Retry (RUN-7, RUN-9, spec M3 §4)", () => {
     const f = await fixture();
     const { runId } = await failedRun(f);
     const run = (await getRun(db, runId))!;
+    const flowId = run.flowId!;
     expect((await machineRunCounts(db, [f.machine.id])).get(f.machine.id)!.inUse).toBe(0);
-    expect((await flowLocks(db, [run.flowId])).get(run.flowId)).toMatchObject({ runId, state: "failed" });
-    const again = await startRuns(deps, f.ann, { flowId: run.flowId, ticketIds: [f.tickets[0]!.id], extraInstructions: "" });
+    expect((await flowLocks(db, [flowId])).get(flowId)).toMatchObject({ runId, state: "failed" });
+    const again = await startRuns(deps, f.ann, { flowId, ticketIds: [f.tickets[0]!.id], extraInstructions: "" });
     expect(again).toMatchObject({ ok: false, error: expect.stringContaining("already has an Active Run (failed)") });
   });
 
@@ -380,7 +381,7 @@ describe("Audit (T3-12, RUN-15, spec M3 §7)", () => {
   it("flow.create, flow.update, flow.delete", async () => {
     const f = await fixture();
     const run = await planRun(f);
-    const sampleId = (await getRun(db, run.runId))!.flowId;
+    const sampleId = (await getRun(db, run.runId))!.flowId!;
     const copy = await cloneMyFlow(deps, f.bo, sampleId);
     if (!copy.ok) throw new Error("clone failed");
     const data = (await editorData(deps, copy.flowId))!;

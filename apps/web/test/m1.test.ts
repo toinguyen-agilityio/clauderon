@@ -23,10 +23,10 @@ import {
   viewMachine,
   viewMachines,
 } from "../src/server/machines";
-import { enableRepository, enableableRepositories, removeRepository, syncAllProjects, syncProject } from "../src/server/projects";
+import { enableRepository, enableableRepositories, removeRepository, syncAllProjects } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
-import { startDialog, startFromInput, startRuns } from "../src/server/start";
-import { viewTickets } from "../src/server/tickets";
+import { pullRequestStartDialog, startDialog, startFromInput, startFromPullRequests, startRuns } from "../src/server/start";
+import { ticketViewParam, viewTickets } from "../src/server/tickets";
 
 let test: TestDatabase;
 let db: Db;
@@ -189,7 +189,7 @@ describe("Machines (ADR 0006)", () => {
 });
 
 describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
-  it("lists readable repositories minus enabled ones, then only the first owner's", async () => {
+  it("lists readable repositories of any owner, minus enabled ones", async () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main", branches: ["main", "dev"] });
     github.addRepository({ owner: "acme", repo: "api", defaultBranch: "trunk" });
     github.addRepository({ owner: "other", repo: "web", defaultBranch: "main" });
@@ -199,9 +199,12 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(["acme/api", "acme/web", "other/web"]);
     expect(await enableRepository(deps, ann, { owner: "acme", repo: "web", baseBranch: "nope" })).toEqual({ ok: false, reason: "no-branch" });
     expect(await enableRepository(deps, ann, { owner: "acme", repo: "web", baseBranch: "dev" })).toMatchObject({ ok: true });
+    expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(["acme/api", "other/web"]);
+    // Projects may belong to different owners.
+    expect(await enableRepository(deps, ann, { owner: "other", repo: "web", baseBranch: "main" })).toMatchObject({ ok: true });
+    expect(await enableRepository(deps, ann, { owner: "other", repo: "web", baseBranch: "main" })).toEqual({ ok: false, reason: "exists" });
     expect((await enableableRepositories(deps)).map((r) => `${r.owner}/${r.repo}`)).toEqual(["acme/api"]);
-    expect(await enableRepository(deps, ann, { owner: "other", repo: "web", baseBranch: "main" })).toEqual({ ok: false, reason: "other-owner" });
-    expect(await actions()).toEqual(["project.enable"]);
+    expect(await actions()).toEqual(["project.enable", "project.enable"]);
   });
 
   it("the list is the app token's, the same whichever Members have Machines and whatever their gh logins reach", async () => {
@@ -271,15 +274,19 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
     github.addIssue("acme", "web", { number: 1, title: "One", authorAssociation: "OWNER", labels: ["bug"] });
     github.addIssue("acme", "web", { number: 2, title: "Two", authorAssociation: "NONE" });
-    const ann = await memberRow(db, "ann@example.com");
     const project = await projectRow(db);
+    const clock = new FakeClock(new Date("2026-11-23T10:00:00Z"));
+    deps.clock = clock;
 
-    expect(await syncProject(deps, ann, project.id)).toEqual({ ok: true, summary: { added: 2, updated: 0, closed: 0 } });
+    expect(await syncAllProjects(deps)).toBe(true);
+    expect((await db.select().from(schema.project))[0]!.syncSummary).toEqual({ added: 2, updated: 0, closed: 0 });
 
     // Issue 2 is closed on GitHub, issue 3 is new.
     (await github.getIssue("acme", "web", 2))!.state = "closed";
     github.addIssue("acme", "web", { number: 3, title: "Three" });
-    expect(await syncProject(deps, ann, project.id)).toEqual({ ok: true, summary: { added: 1, updated: 1, closed: 1 } });
+    await clock.advance(61_000);
+    expect(await syncAllProjects(deps)).toBe(true);
+    expect((await db.select().from(schema.project).where(sql`id = ${project.id}`))[0]!.syncSummary).toEqual({ added: 1, updated: 1, closed: 1 });
 
     const tickets = await db.select().from(schema.ticket).orderBy(schema.ticket.number);
     expect(tickets.map((t) => [t.number, t.issueState, t.authorAssociation])).toEqual([
@@ -289,11 +296,17 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     ]);
     expect(await db.select().from(schema.run)).toEqual([]);
     expect(commands).toEqual([]);
-    expect(await actions()).toEqual(["project.sync", "project.sync"]);
+    expect(await actions()).toEqual([]);
     expect((await viewTickets(deps, {})).rows.find((r) => r.number === 2)?.status).toBe("Closed");
+    // The page shows open issues unless the URL asks for Closed.
+    expect([undefined, "", "Open", "In run", "Closed"].map(ticketViewParam)).toEqual(["Open", "Open", "Open", "Open", "Closed"]);
+    const open = await viewTickets(deps, { view: "Open" });
+    expect(open.rows.map((r) => r.number).sort()).toEqual([1, 3]);
+    expect(open.views).toEqual({ Open: 2, Closed: 1 });
+    expect((await viewTickets(deps, { view: "Closed" })).rows.map((r) => r.number)).toEqual([2]);
   });
 
-  it("Sync refreshes the state of recorded pull requests and shows GitHub errors on the Project", async () => {
+  it("Sync refreshes the state of recorded pull requests and keeps GitHub errors on the Project", async () => {
     github.addRepository({ owner: "acme", repo: "web", defaultBranch: "main" });
     github.addIssue("acme", "web", { number: 5, title: "Five" });
     const ann = await memberRow(db, "ann@example.com");
@@ -304,12 +317,9 @@ describe("Projects and Sync (PRJ-1, PRJ-2, TIC-5)", () => {
     await db.update(schema.run).set({ state: "succeeded", branch: "clauderon/5-x-abc", pullRequestNumber: 9, pullRequestState: "open" });
     github.addPullRequest("acme", "web", { number: 9, branch: "clauderon/5-x-abc", state: "merged", url: "u" });
 
-    await syncProject(deps, ann, project.id);
+    await projectRow(db, "acme", "gone");
+    await syncAllProjects(deps);
     expect((await viewTickets(deps, {})).rows[0]!.status).toBe("PR merged");
-
-    const broken = await projectRow(db, "acme", "gone");
-    const result = await syncProject(deps, ann, broken.id);
-    expect(result).toEqual({ ok: false, error: expect.stringContaining("acme/gone") });
     const [stored] = await db.select().from(schema.project).where(sql`repo = 'gone'`);
     expect(stored!.syncError).toContain("acme/gone");
   });
@@ -364,7 +374,7 @@ describe("Tickets page Sync", () => {
     const find = github.findPullRequest.bind(github);
     vi.spyOn(github, "findPullRequest").mockImplementation(async (o, r, branch) => (lookups.push(branch), find(o, r, branch)));
 
-    await syncProject(deps, ann, project.id);
+    await syncAllProjects(deps);
 
     expect(lookups).toEqual(["b2"]);
   });
@@ -542,6 +552,51 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     if (!started.ok) throw new Error(started.error);
     const [run] = await db.select().from(schema.run).where(sql`${schema.run.id} = ${started.runIds[0]!}`);
     expect(run).toMatchObject({ ticketId: null, projectId: project!.id, title: `From a branch on ${branch}`, inputValue: { type: "branch", value: { branch } } });
+  });
+
+  it("starts one Run per picked pull request as one Batch, only with a pull-request Flow and only while each is open", async () => {
+    const { ann, machine, flowId: ticketFlowId } = await ready();
+    const [project] = await db.select().from(schema.project);
+    const nodes = await db.select().from(schema.node);
+    const [flow] = await db.insert(schema.flow).values({ name: "Review a PR", updatedByEmail: ann.email }).returning();
+    const [from] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "input-pull-request")!.id }).returning();
+    const [to] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "approve-the-pull-request")!.id, x: 200 }).returning();
+    await db.insert(schema.flowEdge).values({ flowId: flow!.id, fromFlowNodeId: from!.id, fromOutput: "pull-request", toFlowNodeId: to!.id, toInput: "pull-request" });
+    const url = (n: number) => `https://github.com/${project!.owner}/${project!.repo}/pull/${n}`;
+    github.addRepository({
+      owner: project!.owner,
+      repo: project!.repo,
+      defaultBranch: "main",
+      pullRequests: [7, 8].map((number) => ({ number, url: url(number), state: "open" as const, branch: `feat/${number}` })),
+    });
+    const pick = (...numbers: number[]) => numbers.map((number) => ({ projectId: project!.id, number }));
+
+    const dialog = await pullRequestStartDialog(deps, ann, 2);
+    expect(dialog.flows.map((f) => f.name)).toEqual(["Review a PR"]);
+    expect(dialog.positions).toEqual([0, 0]);
+
+    expect(await startFromPullRequests(deps, ann, { flowId: flow!.id, pullRequests: [], extraInstructions: "" })).toEqual({ ok: false, error: "Select at least one pull request." });
+    expect(await startFromPullRequests(deps, ann, { flowId: ticketFlowId, pullRequests: pick(7), extraInstructions: "" })).toEqual({ ok: false, error: "Pick a Flow without problems." });
+    expect(await startFromPullRequests(deps, ann, { flowId: flow!.id, pullRequests: pick(7, 9), extraInstructions: "" })).toEqual({ ok: false, error: `${project!.repo}#9 is no longer open.` });
+    expect(await db.select().from(schema.run)).toEqual([]);
+
+    const started = await startFromPullRequests(deps, ann, { flowId: flow!.id, pullRequests: pick(7, 8, 7), extraInstructions: " Be brief. " });
+    if (!started.ok) throw new Error(started.error);
+    expect(started.runIds).toHaveLength(2);
+    const runs = await db.select().from(schema.run).orderBy(schema.run.queuedAt);
+    expect(runs.map((r) => ({ batchId: r.batchId, ticketId: r.ticketId, projectId: r.projectId, title: r.title, inputValue: r.inputValue, state: r.state }))).toEqual(
+      [7, 8].map((number) => ({
+        batchId: started.batchId,
+        ticketId: null,
+        projectId: project!.id,
+        title: `Review a PR on PR #${number}`,
+        inputValue: { type: "pull-request", value: { number, url: url(number) } },
+        state: "queued",
+      })),
+    );
+    const [b] = await db.select().from(schema.batch);
+    expect(b!.extraInstructions).toBe("Be brief.");
+    expect(commands).toEqual([{ type: "schedule", machineId: machine.id }]);
   });
 
   it("T1-5: Start in Real mode is refused when gh is not logged in, with a link to the Machine", async () => {

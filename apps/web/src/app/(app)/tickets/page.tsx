@@ -1,28 +1,31 @@
 import Link from "next/link";
 import { getMachineOfMember } from "@clauderon/db";
-import { Icon } from "../../../components/icons";
 import { deps, requireMember } from "../../../server/runtime";
-import { viewTickets } from "../../../server/tickets";
+import { ticketViewParam, viewTickets, type TicketView } from "../../../server/tickets";
 import { FilterLink, FilterResults, TicketFilters, TicketSearch } from "./ticket-filters";
 import { TicketTable } from "./ticket-table";
 import { TicketsSync } from "./tickets-sync";
 
 export const dynamic = "force-dynamic";
 
-const STATUSES = ["Open", "Queued", "In run", "Needs you", "Failed", "Interrupted", "PR open", "PR merged", "Closed"];
+const VIEWS: TicketView[] = ["Open", "Closed"];
 
 type Search = { project?: string; q?: string; status?: string };
 
 export default async function TicketsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const member = await requireMember();
   const search = await searchParams;
+  // Open Tickets by default: every issue still open on GitHub, whatever its Runs.
+  const view = ticketViewParam(search.status);
   // Render from the database; TicketsSync pulls GitHub afterwards (at most once a minute per Project).
-  const [{ projects, all, counts, total, rows }, machine] = await Promise.all([
-    viewTickets(deps(), { projectId: search.project, q: search.q, status: search.status }),
+  const [{ projects, all, views, rows }, machine] = await Promise.all([
+    viewTickets(deps(), { projectId: search.project, q: search.q, view }),
     getMachineOfMember(deps().db, member.id),
   ]);
   const href = (change: Search) => {
     const next = { ...search, ...change };
+    // Open is the default, so its link carries no status.
+    if (next.status === "Open") next.status = undefined;
     const query = new URLSearchParams(Object.entries(next).filter(([, v]) => v) as [string, string][]);
     return `/tickets${query.size ? `?${query}` : ""}`;
   };
@@ -35,12 +38,8 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
       <div className="page-head">
         <div>
           <h1>Tickets</h1>
-          <p className="sub">Open GitHub issues of every Project, synced from GitHub in the background, at most once a minute. Status comes from their Runs and pull requests.</p>
+          <p className="sub">GitHub issues of every Project, synced from GitHub in the background, at most once a minute. Status comes from their Runs and pull requests. Shows open issues by default; pick Closed for the closed ones.</p>
         </div>
-        <Link className="btn" href="/projects">
-          {Icon.sync}
-          Sync on Projects
-        </Link>
       </div>
 
       {!(machine?.tokenHash && machine.claudeLoggedIn && machine.ghLoggedIn) && (
@@ -66,7 +65,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
       {projects.length === 0 ? (
         <div className="card empty">
           <b>No Project yet</b>
-          Enable a repository on the <Link href="/projects">Projects</Link> page, then Sync to pull its issues.
+          Enable a repository on the <Link href="/projects">Projects</Link> page; its open issues show up here.
         </div>
       ) : (
         <TicketFilters>
@@ -81,16 +80,13 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
                 </FilterLink>
               ))}
             </nav>
-            <TicketSearch project={search.project} status={search.status} q={search.q} />
+            <TicketSearch project={search.project} status={view === "Closed" ? view : undefined} q={search.q} />
           </div>
 
           <nav className="chips" aria-label="Ticket Status">
-            <FilterLink className={`fchip ${!search.status ? "on" : ""}`} href={href({ status: undefined })}>
-              All <span className="n">{total}</span>
-            </FilterLink>
-            {STATUSES.map((s) => (
-              <FilterLink key={s} className={`fchip ${search.status === s ? "on" : ""}`} href={href({ status: s })}>
-                {s} <span className="n">{counts[s] ?? 0}</span>
+            {VIEWS.map((v) => (
+              <FilterLink key={v} className={`fchip ${view === v ? "on" : ""}`} href={href({ status: v })}>
+                {v} <span className="n">{views[v]}</span>
               </FilterLink>
             ))}
           </nav>

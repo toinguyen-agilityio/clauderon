@@ -103,7 +103,7 @@ Acceptance checks:
 ### In scope
 
 - **People:** one team on one shared web app with its own database. A member signs in with their Google account; only email addresses on the app's allowlist get in. Every member sees the team on a Members page; the Operator adds and removes members there.
-- **Projects:** each Project is one GitHub repository and its base branch. Several Projects can be enabled, all owned by one GitHub owner (an organisation or a user).
+- **Projects:** each Project is one GitHub repository and its base branch. Several Projects can be enabled, of any owners the app's token reads (organisations or users).
 - **Pod Host:** exactly one team machine running Docker (for example Docker Desktop on an ARM64 Mac), always on, with one Host Agent that connects out to the Gateway.
 - **Pods:** one Docker container per Member on the Pod Host, created, started, stopped, recreated and deleted from the app; one standard Ubuntu image; a Workspace volume per Pod; Slots and CPU/RAM limits; a web terminal for the owner to log in to Claude Code and gh; measured CPU, RAM and disk use.
 - **Tickets:** open GitHub issues pulled in with a manual **Sync**, with a list, search, filter, a detail view and multi-select to start Runs.
@@ -115,7 +115,6 @@ Acceptance checks:
 
 - Sign-in methods other than Google (password, GitHub OAuth, other SSO), roles and permissions other than the Operator, multiple teams, billing.
 - Ticket sources other than GitHub Issues, and code hosts other than GitHub.
-- Projects owned by more than one GitHub owner (they would need a token per owner or a GitHub App).
 - Agents other than Claude Code.
 - More than one Pod Host; Pods on machines other than the Pod Host; VMs.
 - Pods shared by several Members, or running a Run on someone else's Pod; moving a Run to another Pod.
@@ -146,7 +145,7 @@ Priority: **Must** / **Should** / **Could**.
 | MEM-4 | **Members page**, readable by every Member: each allowed email with the Member's name and picture, status (Active once signed in, Invited until then, Removed while a removed Member's Machine is left), Operator tag, last sign-in, Machine status and Active Runs. Only the Operator adds an email, removes one (behind a confirm that warns the Machine is removed too, with a link to the blocking Runs when refused), and removes another Member's Machine. Every change is recorded in the audit log. The old Allowlist address redirects here. | Must |
 | MEM-2 | Every member can approve, reject, answer, cancel and retry any Run. Starting a Run and opening a Pod's terminal are tied to the Member's own Pod (POD-3, POD-9). | Must |
 | PRJ-1 | The **Operator** enables a GitHub repository as a Project by picking it from the repositories the app's token can read, then choosing its base branch from the repository's branches. Every Member reads and Syncs the Projects. | Must |
-| PRJ-2 | One fine-grained personal access token for the app, with Issues: read and Pull requests: read on the Projects' repositories, kept in the app's configuration and never stored in the database. One token reads the repositories of one owner, so every Project belongs to that owner. | Must |
+| PRJ-2 | One fine-grained personal access token for the app, with Issues: read and Pull requests: read on the Projects' repositories, set by an Operator on the Projects page and stored only encrypted (ADR 0010). Projects may belong to any owner the token reads; a fine-grained token reads one owner's repositories, so Projects of several owners need a token that reads them all. | Must |
 | PRJ-3 | The **Operator** removes a Project behind a confirm: its Tickets and their Runs (logs and Outputs included) are deleted from the app, nothing changes on GitHub, and the removal is recorded in the audit log. Refused while the Project has Active Runs. | Should |
 
 ### 4.2 Pods
@@ -176,7 +175,7 @@ Priority: **Must** / **Should** / **Could**.
 | TIC-2 | Search by title or key; filter by Project and Ticket status. | Should |
 | TIC-3 | Select several Tickets → **Start** (see RUN-1). | Must |
 | TIC-4 | Ticket detail: issue body from GitHub, every Run of the Ticket, links to their pull requests and Artifacts. | Should |
-| TIC-5 | **Sync** button pulls every open issue of a Project from GitHub, and the current state of every known Ticket (so an issue closed on GitHub shows `Closed`) and of every pull request opened by a Run. Sync never starts a Run. | Must |
+| TIC-5 | **Sync**, in the background after the Tickets page opens, pulls every open issue of a Project from GitHub, and the current state of every known Ticket (so an issue closed on GitHub shows `Closed`) and of every pull request opened by a Run. Sync never starts a Run. | Must |
 | TIC-6 | Ticket status is derived, never stored: `Open` (no Active Run), `Queued`, `In run`, `Needs you` (waiting for human), `Failed`, `Interrupted`, `PR open`, `PR merged`, `Closed` (issue closed on GitHub). Pull request state is read at Sync and whenever a Ticket, Run or Batch page opens. | Must |
 | TIC-7 | A Ticket has at most one Active Run. | Must |
 | TIC-8 | The app never changes issue state or labels and never comments on issues; pull requests reference the issue with `Refs #<n>`. | Must |
@@ -285,7 +284,7 @@ A Run holds a Slot only while Running or Waiting for human.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
-| NFR-1 | Security | The app's GitHub token, the Google OAuth client secret and the Host Agent secret live in the app's configuration, never in the database. Before any log line is stored or streamed, the Host Agent and the app mask known token patterns (GitHub, Anthropic, OAuth) and the values of known secrets. Sign-in sessions use secure, HTTP-only cookies and expire (MEM-1). | Must |
+| NFR-1 | Security | The Google OAuth client secret and the Host Agent secret live in the app's configuration, never in the database; the app's GitHub token is stored only encrypted with a key from the configuration (ADR 0010). Before any log line is stored or streamed, the Host Agent and the app mask known token patterns (GitHub, Anthropic, OAuth) and the values of known secrets. Sign-in sessions use secure, HTTP-only cookies and expire (MEM-1). | Must |
 | NFR-2 | Audit | See RUN-15. | Should |
 | NFR-3 | Resilience | The Host Agent reconnects by itself after a network drop or a Pod Host restart, and resumes from message ids (RUN-12). | Must |
 | NFR-6 | Isolation | Each Pod has its own container, Workspace volume and CPU/RAM limits, so one Member's Runs cannot read another Member's Workspace or starve the Pod Host. | Must |
@@ -319,7 +318,6 @@ A Run holds a Slot only while Running or Waiting for human.
 - Exactly one Pod Host. Its CPU, RAM and disk cap how many Pods and concurrent Runs the team can have.
 - Claude Code in each Pod runs under its owner's own subscription, so each Member's Runs are limited by that Member's quota.
 - Company repositories may be used; see risk R1.
-- Every Project belongs to one GitHub owner, because one fine-grained token reads one owner's repositories (PRJ-2).
 
 ### Assumptions
 
@@ -474,7 +472,7 @@ The answers to the 47 questions in [PR #3](https://github.com/toinguyen-agilityi
 | Q35 | Pull request state | Read at Sync and when pages open (TIC-6) | Rec. |
 | Q36 | Artifact in the pull request | Written from the Pod as a last system step (TRK-5) | Rec. |
 | Q37 | Ticket keys | Repository name, `owner/repo#n` on a clash (TIC-1) | Rec. |
-| Q38 | GitHub token | One fine-grained read-only token; every Project belongs to one owner (PRJ-2) | Rec., **assumption added in review** |
+| Q38 | GitHub token | One read-only token; Projects may belong to several owners (PRJ-2, ADR 0010) | Rec., **assumption added in review**, owner rule dropped later |
 | Q39 | Enabling a Project | Pick from the repositories the token can read (PRJ-1) | Differs from Rec. |
 | Q40 | Locked Flows | Viewed and cloned, not edited or deleted (FLW-7) | Rec. |
 | Q41 | Who edits Flows and Nodes | Any Member, audited (FLW-9) | Rec. |

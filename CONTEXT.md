@@ -11,7 +11,7 @@ A person who signs in with a Google account whose email is on the app's allowlis
 _Avoid_: User, account, admin, username
 
 **Operator**:
-Whoever runs the app: holds its configuration and secrets, and is the only one who manages the allowlist on the Members page, where they can also remove any Member's Machine; removing a Member's email removes their Machine too. Operator emails are set in the app's configuration and are always allowed.
+Whoever runs the app: holds its configuration and secrets, sets the app's GitHub token on the Projects page, and is the only one who manages the allowlist on the Members page, where they can also remove any Member's Machine; removing a Member's email removes their Machine too. Operator emails are set in the app's configuration and are always allowed.
 _Avoid_: Admin, superuser, owner
 
 **Starter**:

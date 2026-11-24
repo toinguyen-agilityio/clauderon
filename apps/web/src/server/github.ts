@@ -1,7 +1,7 @@
 import type { GitHubReader, Issue, OpenPullRequest, PullRequest, Repository } from "@clauderon/core";
 
-// The GitHub reader over the REST API with the app's read-only token
-// (`GITHUB_TOKEN`, PRJ-2). Sync never writes to GitHub (TIC-9).
+// The GitHub reader over the REST API with the app's read-only token, which an
+// Operator sets on the Projects page (PRJ-2, ADR 0010). Sync never writes to GitHub (TIC-9).
 
 const API = "https://api.github.com";
 
@@ -66,20 +66,33 @@ export function withCachedPullRequests(reader: GitHubReader, ttlMs = OPEN_PULL_R
   };
 }
 
-export function gitHubApi(token: string, fetcher: typeof fetch = fetch): GitHubReader {
+async function fetchJson<T>(fetcher: typeof fetch, token: string, path: string): Promise<{ data: T; next: string | null }> {
+  const res = await fetcher(path.startsWith("http") ? path : `${API}${path}`, {
+    headers: { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "x-github-api-version": "2022-11-28" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const remaining = res.headers.get("x-ratelimit-remaining");
+    const reason =
+      res.status === 401 ? "the token was revoked or is invalid" : remaining === "0" ? "the rate limit is used up" : `GitHub answered ${res.status}`;
+    throw new GitHubError(`GitHub: ${reason}`, res.status);
+  }
+  const next = /<([^>]+)>;\s*rel="next"/.exec(res.headers.get("link") ?? "")?.[1] ?? null;
+  return { data: (await res.json()) as T, next };
+}
+
+/** The GitHub login a token belongs to; checks a token before it is saved. */
+export async function gitHubLogin(token: string, fetcher: typeof fetch = fetch): Promise<string> {
+  return (await fetchJson<{ login: string }>(fetcher, token, "/user")).data.login;
+}
+
+/**
+ * `token` is read on every request, so a token an Operator saves or removes
+ * applies at once; it throws when there is none.
+ */
+export function gitHubApi(token: () => Promise<string>, fetcher: typeof fetch = fetch): GitHubReader {
   async function request<T>(path: string): Promise<{ data: T; next: string | null }> {
-    const res = await fetcher(path.startsWith("http") ? path : `${API}${path}`, {
-      headers: { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "x-github-api-version": "2022-11-28" },
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      const remaining = res.headers.get("x-ratelimit-remaining");
-      const reason =
-        res.status === 401 ? "the token was revoked or is invalid" : remaining === "0" ? "the rate limit is used up" : `GitHub answered ${res.status}`;
-      throw new GitHubError(`GitHub: ${reason}`, res.status);
-    }
-    const next = /<([^>]+)>;\s*rel="next"/.exec(res.headers.get("link") ?? "")?.[1] ?? null;
-    return { data: (await res.json()) as T, next };
+    return fetchJson<T>(fetcher, await token(), path);
   }
 
   async function all<T>(path: string): Promise<T[]> {
