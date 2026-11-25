@@ -42,5 +42,7 @@ export function runInputTitle(flowName: string, input: RunInput): string {
   if (input.type === "branch") return `${flowName} on ${input.value.branch}`;
   if (input.type === "pull-request") return `${flowName} on PR #${input.value.number}`;
   const line = input.value.split("\n")[0]!.trim();
+  // Only links or files, no text of the Member's own: the section header says nothing.
+  if (/^(Sources|Attachments) \(/.test(line)) return flowName;
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 }
