@@ -158,10 +158,10 @@ export class RunEngine {
     if (!ctx?.run.machineId) return;
     const attachments = await attachmentsOfRun(this.opts.db, runId);
     if (attachments.length > 0) {
-      // ADR 0011: an older Agent would make the worktree without the files.
+      // ADR 0011: an older Agent would make the worktree without the files. They stay stored, so a Retry after updating works.
       const machine = await getMachine(this.opts.db, ctx.run.machineId);
       if (!agentSupportsAttachments(machine?.agentVersion)) {
-        return this.fail(runId, `This Run has attached files, which need Agent ${ATTACHMENTS_MIN_AGENT} or later. Update the Agent on your Machine, then start a new Run.`);
+        return this.fail(runId, `This Run has attached files, which need Agent ${ATTACHMENTS_MIN_AGENT} or later. Update the Agent on your Machine (restart it, or run its installer again), then Retry the Run.`);
       }
       // Their contents went once delivered; a worktree made again cannot have them.
       if (attachments.some((a) => a.delivered)) return this.fail(runId, "The attached files are gone from your Machine. Start a new Run with them.");

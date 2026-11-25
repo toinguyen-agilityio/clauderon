@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ticketStatus, type OutputType, type RunInput } from "@clauderon/core";
-import { appendAttemptTurns, attachmentsOfRun, attemptsOfRun, buildFlowSnapshot, sealAttachment, cancelRun, clearTurnTargetsBefore, getRun, listTicketsWithRuns, logChunksOf, nodeAttemptHistory, schema, sql, startBatch, type Db } from "@clauderon/db";
+import { appendAttemptTurns, attachmentsOfRun, retryRun, attemptsOfRun, buildFlowSnapshot, sealAttachment, cancelRun, clearTurnTargetsBefore, getRun, listTicketsWithRuns, logChunksOf, nodeAttemptHistory, schema, sql, startBatch, type Db } from "@clauderon/db";
 import type { FakeAgent } from "@clauderon/testing";
 import {
   createTestDatabase,
@@ -179,9 +179,19 @@ describe("Run engine", () => {
         await agentVersion("0.5.0+abc");
         succeedEverything(ctx.agent);
         const run = await startWithInput(ctx, plan, planOutput, "plan", files);
-        expect(run).toMatchObject({ state: "failed", failureReason: expect.stringContaining("Update the Agent on your Machine") });
+        expect(run).toMatchObject({ state: "failed", failureReason: expect.stringContaining("then Retry the Run") });
         expect(ctx.agent.of("workspace.prepare")).toHaveLength(0);
         expect((await attachmentsOfRun(db, run.id))[0]!.delivered).toBe(false);
+
+        // Updated, a Retry gets the files: they were never delivered.
+        await agentVersion("0.6.0+abc");
+        ctx.agent.respond("workspace.prepare", ({ runId, attachments }, a) => a.send("workspace.ready", { runId, worktreePath: `/w/${runId}`, attachments: attachments?.length }));
+        const entry = (run.flowSnapshot as { nodes: { id: string; kind: string }[] }).nodes.find((n) => n.kind === "input")!;
+        expect(await retryRun(db, run.id, entry.id, "", ctx.member.email, ctx.clock.now())).toMatchObject({ ok: true });
+        await ctx.gateway.engine.schedule(ctx.machine.id);
+        await ctx.flush();
+        expect(await getRun(db, run.id)).toMatchObject({ state: "succeeded" });
+        expect((await attachmentsOfRun(db, run.id))[0]!.delivered).toBe(true);
       });
 
       it("fails the Run when the Agent did not write every file", async () => {
