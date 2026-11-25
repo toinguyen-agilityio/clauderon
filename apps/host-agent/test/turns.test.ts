@@ -41,9 +41,23 @@ describe("TurnRecorder (#105)", () => {
     expect(JSON.stringify(turns)).not.toContain("abcdefg");
   });
 
-  it("masks secrets in a target and truncates a long one", () => {
+  it("keeps only the first two words of a command, so arguments with secrets are never recorded", () => {
     const turns = record([
-      { type: "assistant", message: { id: "m1", usage: usage(), content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: `curl -H ghp_SECRET ${"x".repeat(300)}` } }] } },
+      { type: "assistant", message: { id: "m1", usage: usage(), content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "curl -H ghp_SECRET https://x.test" } }] } },
+    ]);
+    expect(turns[0]!.target).toBe("curl -H");
+  });
+
+  it("drops a URL's credentials and query", () => {
+    const turns = record([
+      { type: "assistant", message: { id: "m1", usage: usage(), content: [{ type: "tool_use", id: "t1", name: "WebFetch", input: { url: "https://user:pw@docs.test/a/b?token=abc#frag" } }] } },
+    ]);
+    expect(turns[0]!.target).toBe("https://docs.test/a/b");
+  });
+
+  it("masks secrets in a path and truncates a long one", () => {
+    const turns = record([
+      { type: "assistant", message: { id: "m1", usage: usage(), content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: `/tmp/ghp_SECRET/${"x".repeat(300)}` } }] } },
     ]);
     expect(turns[0]!.target).not.toContain("ghp_SECRET");
     expect(turns[0]!.target!.length).toBeLessThanOrEqual(121);

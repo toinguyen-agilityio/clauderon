@@ -457,18 +457,41 @@ export async function setAttemptUsage(
   await db.update(attempt).set(usage).where(eq(attempt.id, attemptId));
 }
 
+/** A Claude session this long is not a real one; further turns are dropped. */
+export const MAX_TURNS_PER_ATTEMPT = 5000;
+
 /**
  * Adds the turns of one Claude call to an Attempt (#105). A Grill Attempt resumes its
- * session each round, so the rounds' turns follow one another as one list.
+ * session each round, so the rounds' turns follow one another as one list. Only the Machine
+ * the Attempt's Run is on can add to it, and only while the Attempt is running.
  */
-export async function appendAttemptTurns(db: Db, attemptId: string, turns: readonly Turn[]): Promise<void> {
-  await db.transaction(async (tx) => {
-    const [row] = await tx.select({ turns: attempt.turns }).from(attempt).where(eq(attempt.id, attemptId)).for("update");
-    if (!row) return;
+export async function appendAttemptTurns(db: Db, attemptId: string, machineId: string, turns: readonly Turn[]): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ turns: attempt.turns })
+      .from(attempt)
+      .innerJoin(run, eq(run.id, attempt.runId))
+      .where(and(eq(attempt.id, attemptId), eq(run.machineId, machineId), eq(attempt.state, "running")))
+      .for("update", { of: attempt });
+    if (!row) return false;
     const before = row.turns ?? [];
-    const next = turns.map((t, i) => ({ ...t, index: before.length + i }));
+    const next = turns.slice(0, Math.max(0, MAX_TURNS_PER_ATTEMPT - before.length)).map((t, i) => ({ ...t, index: before.length + i }));
     await tx.update(attempt).set({ turns: [...before, ...next] }).where(eq(attempt.id, attemptId));
+    return true;
   });
+}
+
+/**
+ * Clears what the turns of old Attempts point at (NFR-5): the tool and sizes stay, so the history
+ * rows still add up, but the targets, which can carry paths and command words, go with the logs.
+ */
+export async function clearTurnTargetsBefore(db: Db, cutoff: Date): Promise<number> {
+  const rows = await db
+    .update(attempt)
+    .set({ turns: sql`(select jsonb_agg(jsonb_set(t, '{target}', 'null'::jsonb)) from jsonb_array_elements(${attempt.turns}) t)` })
+    .where(and(isNotNull(attempt.turns), lt(attempt.startedAt, cutoff), sql`${attempt.turns}::text like '%"target": "%'`))
+    .returning({ id: attempt.id });
+  return rows.length;
 }
 
 /**

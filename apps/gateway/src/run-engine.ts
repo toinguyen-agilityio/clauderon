@@ -361,8 +361,10 @@ export class RunEngine {
   }
 
   /** The per-turn summary of an Agent Node (#105). */
-  async nodeTurns(payload: Payload<"node.turns">): Promise<void> {
-    await appendAttemptTurns(this.opts.db, payload.attemptId, payload.turns);
+  async nodeTurns(payload: Payload<"node.turns">, machineId: string): Promise<void> {
+    // Masked again here with the app's secrets, as a log line is (NFR-1).
+    const turns = payload.turns.map((t) => ({ ...t, tool: t.tool && this.hide(t.tool), target: t.target && this.hide(t.target) }));
+    await appendAttemptTurns(this.opts.db, payload.attemptId, machineId, turns);
   }
 
   /** Stores the Outputs and moves on, or fails the Attempt and the Run with its reason. */

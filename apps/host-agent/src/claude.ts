@@ -223,7 +223,7 @@ export class TurnRecorder {
       const first = m.tools[0];
       if (first && turn.tool === null) {
         turn.tool = first.name;
-        turn.target = first.target === null ? null : this.target(first.target);
+        turn.target = first.target === null ? null : this.target(first.name, first.target);
       }
       for (const tool of m.tools) this.byTool.set(tool.id, turn);
     }
@@ -238,11 +238,21 @@ export class TurnRecorder {
     return this.turnList.map((t) => ({ ...t }));
   }
 
-  private target(raw: string): string {
-    const line = (raw.split("\n")[0] ?? "").replaceAll("\\", "/");
-    const root = this.worktreePath.replaceAll("\\", "/").replace(/\/+$/, "");
-    const relative = root && line.startsWith(`${root}/`) ? line.slice(root.length + 1) : line;
-    const masked = this.hide(relative);
+  /**
+   * Paths stay (relative to the worktree); a command keeps only its first two words and a URL loses
+   * its credentials and query, since arguments are where secrets end up. Then masked and truncated.
+   */
+  private target(tool: string, raw: string): string {
+    const line = (raw.split("\n")[0] ?? "").trim();
+    let kept = line;
+    if (tool === "Bash") kept = line.split(/\s+/).slice(0, 2).join(" ");
+    else if (/^https?:\/\//i.test(line)) kept = line.replace(/^(https?:\/\/)[^/@]*@/i, "$1").replace(/[?#].*$/, "");
+    else {
+      const path = kept.replaceAll("\\", "/");
+      const root = this.worktreePath.replaceAll("\\", "/").replace(/\/+$/, "");
+      kept = root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path;
+    }
+    const masked = this.hide(kept);
     return masked.length > MAX_TARGET_LENGTH ? `${masked.slice(0, MAX_TARGET_LENGTH)}…` : masked;
   }
 }

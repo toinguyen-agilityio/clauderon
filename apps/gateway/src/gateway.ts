@@ -47,7 +47,7 @@ export function createGateway(opts: GatewayOptions) {
   links.on("workspace.cleaned", (p) => engine.workspaceCleaned(p));
   links.on("node.log", (p) => engine.nodeLog(p));
   links.on("node.usage", (p) => engine.nodeUsage(p));
-  links.on("node.turns", (p) => engine.nodeTurns(p));
+  links.on("node.turns", (p, machineId) => engine.nodeTurns(p, machineId));
   links.on("node.result", (p) => engine.nodeResult(p));
   links.on("flow.drafted", (p, machineId) => drafts.drafted(p, machineId));
   // A new Agent process, e.g. right after Pairing: its logins are unknown until checked (POD-5).

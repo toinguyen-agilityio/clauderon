@@ -95,8 +95,9 @@ export const messageSchemas = {
       .array(
         z.object({
           index: z.number().int().nonnegative(),
-          tool: z.string().nullable(),
-          target: z.string().nullable(),
+          tool: z.string().max(64).nullable(),
+          // MAX_TARGET_LENGTH (120) plus the ellipsis; the Gateway keeps nothing longer.
+          target: z.string().max(121).nullable(),
           resultBytes: z.number().int().nonnegative().nullable(),
           newInput: z.number().int().nonnegative(),
           cacheCreated: z.number().int().nonnegative(),
