@@ -776,7 +776,7 @@ dialog.modal.narrow { width: min(440px, calc(100vw - 32px)); }
 .main:has(.flow-fill) { padding: 0; }
 .main:has(.flow-fill) .view { max-width: none; gap: 0; }
 .flow-fill { height: 100dvh; min-height: 480px; }
-.fe {
+.fe, .run-diagram {
   --fe-canvas: color-mix(in srgb, var(--bg) 72%, var(--panel-solid));
   --fe-dot: color-mix(in srgb, var(--fg3) 30%, transparent);
   --fe-edge: color-mix(in srgb, var(--fg3) 50%, var(--panel-solid));
@@ -786,12 +786,13 @@ dialog.modal.narrow { width: min(440px, calc(100vw - 32px)); }
   --fe-ink: #14232c; --fe-ink-fg: #eef4f2;
   --fe-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-:root[data-theme="dark"] .fe { --fe-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.32); --fe-ink: #0b151b; --fe-dot: color-mix(in srgb, var(--fg3) 22%, transparent); }
+:root[data-theme="dark"] .fe, :root[data-theme="dark"] .run-diagram { --fe-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.32); --fe-ink: #0b151b; --fe-dot: color-mix(in srgb, var(--fg3) 22%, transparent); }
 .flow-canvas { position: relative; height: 100%; overflow: hidden; background: var(--fe-canvas); }
 .flow-canvas.dropping::after { content: ""; position: absolute; inset: 8px; border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 14px; pointer-events: none; z-index: 30; }
 
 /* the surface */
 .fc { position: absolute; inset: 0; overflow: hidden; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; outline: none; background-image: radial-gradient(circle, var(--fe-dot) 1px, transparent 1.2px); }
+.fc.fixed { cursor: default; touch-action: auto; }
 .fc.panning, .fc.panning * { cursor: grabbing !important; }
 .fc.dragging .fc-node.on { cursor: grabbing; }
 .fc:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }

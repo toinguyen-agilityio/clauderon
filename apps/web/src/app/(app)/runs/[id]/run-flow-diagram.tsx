@@ -71,6 +71,7 @@ export function RunDiagram({ snapshot, timeline, selectedId, onSelect }: { snaps
         nodes={nodes}
         edges={edges}
         readOnly
+        fixed
         onSelect={(next) => {
           const [first] = next.nodes;
           if (first) onSelect(first);
