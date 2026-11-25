@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Avatar } from "../../../components/brand";
 import { duration } from "../../../components/format";
 import { HumanForm } from "../../../components/human-form";
+import { KeepOpen, NeedsYouRefresh } from "../../../components/needs-you-live";
 import { OutputValue } from "../../../components/output-value";
 import { OType } from "../../../components/state-pill";
 import { viewNeedsYou } from "../../../server/runs";
@@ -19,6 +20,7 @@ export default async function NeedsYouPage() {
 
   return (
     <>
+      <NeedsYouRefresh />
       <div className="page-head">
         <div>
           <h1>Needs you</h1>
@@ -55,7 +57,7 @@ export default async function NeedsYouPage() {
                   <span>started by {item.starter.name ?? item.starter.email}</span>
                 </div>
               </div>
-              <details className="card-pad" open={items.length <= 3}>
+              <KeepOpen className="card-pad" initialOpen={items.length <= 3}>
                 <summary className="small">
                   {item.kind === "grill" ? "Answer the questions" : "Review and decide"}
                 </summary>
@@ -77,7 +79,7 @@ export default async function NeedsYouPage() {
                 ) : (
                   <HumanForm request={{ id: item.id, kind: "grill", round: item.round, questions: item.questions }} runId={item.runId} />
                 )}
-              </details>
+              </KeepOpen>
             </div>
           ))}
         </div>

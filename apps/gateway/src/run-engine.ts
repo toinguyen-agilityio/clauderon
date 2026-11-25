@@ -257,8 +257,9 @@ export class RunEngine {
     if (node.kind === "approve") {
       // Waits for a person with the input it passes through (spec M3 §2.1); no timeout.
       const input = inputs[0] ?? null;
-      await askHuman(this.opts.db, { runId, attemptId: attempt.id, kind: "approve", questions: { input }, now: this.now() });
+      const round = await askHuman(this.opts.db, { runId, attemptId: attempt.id, kind: "approve", questions: { input }, now: this.now() });
       this.opts.live.runChanged(runId);
+      if (round !== null) this.opts.live.needsChanged();
       return;
     }
 
@@ -422,8 +423,9 @@ export class RunEngine {
         const asked = parseGrillQuestions(result.result);
         if (asked && !asked.ok) return this.failAttempt(ctx, attempt.id, asked.reason, end);
         if (asked?.ok) {
-          await askHuman(this.opts.db, { runId: ctx.run.id, attemptId: attempt.id, kind: "grill", questions: asked.questions, claudeSessionId: end.claudeSessionId, now: this.now() });
+          const round = await askHuman(this.opts.db, { runId: ctx.run.id, attemptId: attempt.id, kind: "grill", questions: asked.questions, claudeSessionId: end.claudeSessionId, now: this.now() });
           this.opts.live.runChanged(ctx.run.id);
+          if (round !== null) this.opts.live.needsChanged();
           return;
         }
       }

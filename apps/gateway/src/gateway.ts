@@ -37,7 +37,7 @@ export function createGateway(opts: GatewayOptions) {
     log,
   });
   const watch = new MachineWatch({ db, links, engine, clock, timeoutMs: opts.heartbeatTimeoutMs });
-  const machines = new MachineService({ db, links, engine, log });
+  const machines = new MachineService({ db, links, engine, live, log });
   const retention = new LogRetention({ db, clock, log });
 
   links.on("machine.logins", (p, machineId) => machines.logins(p, machineId));

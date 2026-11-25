@@ -18,11 +18,13 @@ export type GatewayCommand =
   /** A Run was cancelled: kill its cancelled Attempts on the Machine, then schedule (RUN-8). */
   | { type: "run.cancel"; machineId: string; runId: string; attemptIds: string[] }
   /** A person approved or answered (spec M3 §2): continue the Run or resume its Grill session. */
-  | { type: "run.resume"; machineId: string; runId: string };
+  | { type: "run.resume"; machineId: string; runId: string }
+  /** A Run left `waiting_for_human` in the web app: tell open Needs you pages. Needs no Machine. */
+  | { type: "needs.changed" };
 
 export type CommandPublish = (command: GatewayCommand) => Promise<void>;
 
-const TYPES = new Set(["machine.checkLogins", "machine.repaired", "schedule", "run.cancel", "run.resume"]);
+const TYPES = new Set(["machine.checkLogins", "machine.repaired", "schedule", "run.cancel", "run.resume", "needs.changed"]);
 
 export function notifyGatewayCommand(db: Db): CommandPublish {
   return async (command) => {
@@ -33,7 +35,9 @@ export function notifyGatewayCommand(db: Db): CommandPublish {
 export function parseGatewayCommand(payload: string): GatewayCommand | null {
   try {
     const value = JSON.parse(payload) as { type?: unknown; machineId?: unknown; runId?: unknown; attemptIds?: unknown };
-    if (typeof value.type !== "string" || !TYPES.has(value.type) || typeof value.machineId !== "string") return null;
+    if (typeof value.type !== "string" || !TYPES.has(value.type)) return null;
+    if (value.type === "needs.changed") return { type: "needs.changed" };
+    if (typeof value.machineId !== "string") return null;
     if (value.type === "run.cancel") {
       const { runId, attemptIds } = value;
       if (typeof runId !== "string" || !Array.isArray(attemptIds) || !attemptIds.every((a) => typeof a === "string")) return null;

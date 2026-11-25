@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { FEEDBACK_HEADING, type FlowSnapshot } from "@clauderon/core";
 import {
   attemptsOfRun,
@@ -484,5 +484,57 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     await clock.advance(2_000);
     await booted.engine.idle();
     expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "Machine unreachable" });
+  });
+});
+
+describe("Needs you updates live (#197)", () => {
+  it("needs.changed goes out when a Run reaches Grill or Approve, not when other Nodes start and finish", async () => {
+    const { ann, gateway, agent, flush, start } = await setup();
+    const needsChanged = vi.spyOn(gateway.live, "needsChanged");
+    const runChanged = vi.spyOn(gateway.live, "runChanged");
+    scriptPlanAndDeliver(agent, { grillRounds: 1 });
+    const [runId] = await start();
+    // Grill asked a round.
+    expect(needsChanged).toHaveBeenCalledTimes(1);
+
+    const grill = await openRequest(runId!);
+    await respondToHuman(db, grill.request.id, ann.email, { decision: "answer", answers: { q1: "Use the ledger" } }, new Date());
+    await gateway.engine.resume(runId!);
+    await flush();
+    // The plan reached Approve a plan.
+    expect(needsChanged).toHaveBeenCalledTimes(2);
+
+    const approve = await openRequest(runId!);
+    await respondToHuman(db, approve.request.id, ann.email, { decision: "approve" }, new Date());
+    runChanged.mockClear();
+    await gateway.engine.resume(runId!);
+    await flush();
+    // Code, tests, screenshots and the pull request changed the Run many times; only Approve the pull request counts.
+    expect(runChanged.mock.calls.length).toBeGreaterThan(3);
+    expect(needsChanged).toHaveBeenCalledTimes(3);
+  });
+
+  it("a lost Machine interrupts its running Run without needs.changed and leaves its waiting Run on Needs you", async () => {
+    const { agent, clock, flush, gateway, start } = await setup(2, 2);
+    // Code a change never answers, so its Run stays running.
+    scriptPlanAndDeliver(agent, { hold: (run) => run.kind === "agent" && !run.prompt?.includes('"questions"') });
+    const [running] = await start([0], "basic-ticket-delivery");
+    const [waiting] = await start([1], "plan-and-deliver");
+    expect((await getRun(db, waiting!))!.state).toBe("waiting_for_human");
+    const needsChanged = vi.spyOn(gateway.live, "needsChanged");
+
+    agent.stopBeating();
+    await clock.advance(31_000);
+    await flush();
+    expect((await getRun(db, running!))!.state).toBe("interrupted");
+    expect((await getRun(db, waiting!))!.state).toBe("waiting_for_human");
+    expect(needsChanged).not.toHaveBeenCalled();
+  });
+
+  it("the web app's needs.changed command reaches every subscribed browser", async () => {
+    const { gateway } = await setup();
+    const needsChanged = vi.spyOn(gateway.live, "needsChanged");
+    await gateway.machines.command({ type: "needs.changed" });
+    expect(needsChanged).toHaveBeenCalledTimes(1);
   });
 });

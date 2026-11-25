@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ResumeBuffer, controlMessage, createGatewayTicket, parseEnvelope, serialize, verifyGatewayTicket } from "../src/index";
+import { ResumeBuffer, browserRequest, controlMessage, createGatewayTicket, parseBrowserMessage, parseEnvelope, serialize, verifyGatewayTicket } from "../src/index";
 
 describe("gateway ticket", () => {
   const now = new Date("2026-11-16T09:00:00Z");
@@ -105,5 +105,12 @@ describe("heartbeat usage", () => {
     expect(parse({ at: "now", usage: { memoryUsedMb: 1, diskFreeGb: 65, cpuPercent: 3 } }).ok).toBe(true);
     expect(parse({ at: "now", usage: { memoryUsedMb: 1, cpuPercent: 3 } }).ok).toBe(true);
     expect(parse({ at: "now" }).ok).toBe(true);
+  });
+});
+
+describe("browser requests (#197)", () => {
+  it("accepts subscribe.needs and still refuses an unknown type", () => {
+    expect(parseBrowserMessage(browserRequest, JSON.stringify({ type: "subscribe.needs" }))).toEqual({ type: "subscribe.needs" });
+    expect(parseBrowserMessage(browserRequest, JSON.stringify({ type: "subscribe.everything" }))).toBeNull();
   });
 });
