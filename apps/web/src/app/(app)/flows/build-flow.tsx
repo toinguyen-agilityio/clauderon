@@ -212,6 +212,7 @@ export function BuildFlow({ gatewayUrl, availability }: { gatewayUrl: string; av
         disabled={!availability.ok}
         title={availability.ok ? `Claude Code drafts a Flow on ${availability.machine}` : availability.reason}
       >
+        {Icon.sparkle}
         Build with Agent
       </button>
       <dialog ref={ref} {...closeOnBackdrop} onClose={() => setOpen(false)} className="modal wide" aria-labelledby="build-flow-title">

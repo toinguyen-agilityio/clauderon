@@ -36,6 +36,7 @@ export function ImportFlow() {
   return (
     <>
       <button type="button" className="btn" onClick={open}>
+        {Icon.upload}
         Import Flow
       </button>
       <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby="import-flow-title">
