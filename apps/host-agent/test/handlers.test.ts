@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Payload } from "@clauderon/protocol";
@@ -114,6 +115,64 @@ describe("workspace.prepare (T1-16, POD-10, RUN-3)", () => {
     await link.deliver("workspace.prepare", { ...prepare("run-1", "x; rm -rf /"), branch: "x; rm -rf /" });
     expect(link.of("workspace.failed")).toHaveLength(1);
     expect(system.execs).toHaveLength(0);
+  });
+});
+
+describe("a Run's attached files (ADR 0011)", () => {
+  const hex = (data: Uint8Array) => createHash("sha256").update(data).digest("hex");
+  const pdf = new TextEncoder().encode("%PDF-1.7");
+  const file = { id: "att-a", name: "spec v2.pdf", size: pdf.length, sha256: hex(pdf) };
+  const prepare = (attachments: Payload<"workspace.prepare">["attachments"]) => ({ runId: "run-1", owner: "acme", repo: "web", baseBranch: "main", branch: "clauderon/run-1", attachments });
+  const inWorktree = (name: string) => join(run("run-1"), ".clauderon", "inputs", name);
+  const EXCLUDE = join(CLONE, ".git", "info", "exclude");
+
+  function agentWith(download?: (id: string) => Promise<Uint8Array>) {
+    const sys = new FakeSystem();
+    const lnk = new FakeLink();
+    registerWorkspaceHandlers(lnk, sys, { home: HOME, log: () => {}, download });
+    return { sys, lnk };
+  }
+
+  it("downloads each file into the worktree, checked, keeps .clauderon/ out of git once, and says how many it wrote", async () => {
+    const asked: string[] = [];
+    const { sys, lnk } = agentWith(async (id) => (asked.push(id), pdf));
+    sys.files.set(EXCLUDE, "# git ls-files --others --exclude-from=.git/info/exclude");
+    await lnk.deliver("workspace.prepare", prepare([file]));
+    await lnk.deliver("workspace.prepare", { ...prepare([]), runId: "run-2", branch: "clauderon/run-2" });
+
+    expect(asked).toEqual(["att-a"]);
+    expect(sys.bytes.get(inWorktree("spec v2.pdf"))).toEqual(pdf);
+    expect(sys.files.get(EXCLUDE)).toBe("# git ls-files --others --exclude-from=.git/info/exclude\n.clauderon/\n");
+    expect(lnk.of("workspace.ready")).toEqual([
+      { runId: "run-1", worktreePath: run("run-1"), attachments: 1 },
+      { runId: "run-2", worktreePath: run("run-2") },
+    ]);
+  });
+
+  it("fails the Workspace on a damaged file, an unsafe name, or an Agent that cannot download", async () => {
+    const damaged = agentWith(async () => new TextEncoder().encode("%PDF-1.6"));
+    await damaged.lnk.deliver("workspace.prepare", prepare([file]));
+    expect(damaged.lnk.of("workspace.failed")).toEqual([{ runId: "run-1", error: "spec v2.pdf arrived damaged" }]);
+    expect(damaged.lnk.of("workspace.ready")).toEqual([]);
+
+    const unsafe = agentWith(async () => pdf);
+    await unsafe.lnk.deliver("workspace.prepare", prepare([{ ...file, name: "../../.bashrc" }]));
+    expect(unsafe.lnk.of("workspace.failed")[0]!.error).toContain("unsafe file name");
+    expect(unsafe.sys.bytes.size).toBe(0);
+
+    const old = agentWith();
+    await old.lnk.deliver("workspace.prepare", prepare([file]));
+    expect(old.lnk.of("workspace.failed")[0]!.error).toBe("This Agent cannot download attached files");
+  });
+
+  it("a Node checks the files are still in the worktree, and fails with what to do when one is gone", async () => {
+    await link.deliver("node.run", nodeRun({ kind: "command", command: "true", attachments: [{ name: file.name, sha256: file.sha256 }] }));
+    expect(link.of("node.result")).toEqual([{ attemptId: "att-1", exitCode: -1, error: "The attached file spec v2.pdf is no longer in the worktree. Start a new Run with it." }]);
+
+    scriptGit(["h1", "h1"]);
+    await system.writeBytes(join("/home/ann/.clauderon/runs/run-1", ".clauderon", "inputs", file.name), pdf);
+    await link.deliver("node.run", nodeRun({ kind: "command", command: "true", attachments: [{ name: file.name, sha256: file.sha256 }] }));
+    expect(link.of("node.result")[1]).toMatchObject({ exitCode: 0 });
   });
 });
 

@@ -12,6 +12,8 @@ type Script = (call: ExecCall) => ExecReply | undefined;
 /** The Machine in memory: files, scripted processes and the signals they got. */
 export class FakeSystem implements System {
   files = new Map<string, string>();
+  /** Files written as bytes, e.g. a Run's attachments. */
+  bytes = new Map<string, Uint8Array>();
   /** Paths that exist besides files, e.g. a clone's `.git`. */
   paths = new Set<string>();
   execs: ExecCall[] = [];
@@ -56,14 +58,21 @@ export class FakeSystem implements System {
   async readFile(path: string) {
     return this.files.get(path) ?? null;
   }
+  async writeBytes(path: string, data: Uint8Array) {
+    this.bytes.set(path, data);
+  }
+  async readBytes(path: string) {
+    return this.bytes.get(path) ?? null;
+  }
   async exists(path: string) {
-    return this.files.has(path) || this.paths.has(path);
+    return this.files.has(path) || this.bytes.has(path) || this.paths.has(path);
   }
   async list(dir: string) {
     return [...this.files.keys()].filter((p) => dirname(p) === dir).map((p) => basename(p));
   }
   async remove(path: string) {
     this.files.delete(path);
+    this.bytes.delete(path);
   }
   bootTime() {
     return this.boot;
