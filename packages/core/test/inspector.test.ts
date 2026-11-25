@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contextSize, findWaste, historyEntry, rereads, splitTokens, suggest, summarizeTurns, type Turn } from "../src";
+import { contextSize, findWaste, historyEntry, rereads, scrubTarget, splitTokens, suggest, summarizeTurns, type Turn } from "../src";
 
 const turn = (index: number, over: Partial<Turn> = {}): Turn => ({
   index,
@@ -79,5 +79,32 @@ describe("suggestions and history", () => {
   it("totals an attempt for the history row", () => {
     const at = new Date("2026-01-01T00:00:00Z");
     expect(historyEntry({ runId: "r1", at, turns: [turn(0), turn(1)] })).toEqual({ runId: "r1", at, turns: 2, fresh: 220, total: 2320 });
+  });
+});
+
+describe("scrubTarget", () => {
+  it("keeps a command's program and a plain subcommand, nothing else", () => {
+    expect(scrubTarget("Bash", "pnpm test --filter x")).toBe("pnpm test");
+    expect(scrubTarget("Bash", "git diff HEAD~1")).toBe("git diff");
+    expect(scrubTarget("Bash", "ls")).toBe("ls");
+  });
+
+  it("skips leading VAR=value assignments and never keeps an option, URL or value as the second word", () => {
+    expect(scrubTarget("Bash", "TOKEN=abc123 API_KEY=x curl https://user:pw@h.test")).toBe("curl");
+    expect(scrubTarget("Bash", "curl -H 'Authorization: Bearer abc'")).toBe("curl");
+    expect(scrubTarget("Bash", "curl https://user:pw@h.test/a")).toBe("curl");
+    expect(scrubTarget("Bash", "TOKEN=abc")).toBe("");
+  });
+
+  it("drops credentials, query and fragment from a URL of any scheme", () => {
+    expect(scrubTarget("WebFetch", "https://user:pw@docs.test/a/b?token=abc#frag")).toBe("https://docs.test/a/b");
+    expect(scrubTarget("WebFetch", "ftp://user:pw@files.test/x?y=1")).toBe("ftp://files.test/x");
+    expect(scrubTarget("WebFetch", "postgres://u:p@db.test:5432/app")).not.toContain("p@");
+  });
+
+  it("leaves a path alone and is safe to apply twice", () => {
+    expect(scrubTarget("Read", "src/a.ts")).toBe("src/a.ts");
+    const once = scrubTarget("Bash", "FOO=1 pnpm test");
+    expect(scrubTarget("Bash", once)).toBe(once);
   });
 });

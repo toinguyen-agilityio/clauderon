@@ -45,7 +45,7 @@ describe("TurnRecorder (#105)", () => {
     const turns = record([
       { type: "assistant", message: { id: "m1", usage: usage(), content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "curl -H ghp_SECRET https://x.test" } }] } },
     ]);
-    expect(turns[0]!.target).toBe("curl -H");
+    expect(turns[0]!.target).toBe("curl");
   });
 
   it("drops a URL's credentials and query", () => {

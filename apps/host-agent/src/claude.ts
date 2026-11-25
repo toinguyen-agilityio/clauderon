@@ -1,4 +1,4 @@
-import { extractResultBlock, MAX_TARGET_LENGTH, type Turn } from "@clauderon/core";
+import { extractResultBlock, MAX_TARGET_LENGTH, scrubTarget, type Turn } from "@clauderon/core";
 
 /**
  * Headless Claude Code (spec M0 §6). These are the expected flags; the M0
@@ -243,11 +243,8 @@ export class TurnRecorder {
    * its credentials and query, since arguments are where secrets end up. Then masked and truncated.
    */
   private target(tool: string, raw: string): string {
-    const line = (raw.split("\n")[0] ?? "").trim();
-    let kept = line;
-    if (tool === "Bash") kept = line.split(/\s+/).slice(0, 2).join(" ");
-    else if (/^https?:\/\//i.test(line)) kept = line.replace(/^(https?:\/\/)[^/@]*@/i, "$1").replace(/[?#].*$/, "");
-    else {
+    let kept = scrubTarget(tool, raw);
+    if (tool !== "Bash" && !/^[a-z][a-z0-9+.-]*:\/\//i.test(kept)) {
       const path = kept.replaceAll("\\", "/");
       const root = this.worktreePath.replaceAll("\\", "/").replace(/\/+$/, "");
       kept = root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path;

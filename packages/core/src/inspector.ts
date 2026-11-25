@@ -156,3 +156,33 @@ export function historyEntry(attempt: { runId: string; at: Date; turns: readonly
   const s = summarizeTurns(attempt.turns);
   return { runId: attempt.runId, at: attempt.at, turns: s.turns, fresh: s.fresh, total: s.total };
 }
+
+/**
+ * Drops what a target could carry a secret in (#105): a command keeps only its program name and,
+ * when the next word is a plain word, its subcommand (`pnpm test`, `git diff`), never leading
+ * `VAR=value` assignments or arguments; a URL of any scheme loses its credentials, query and fragment.
+ * Safe to apply twice, so the Agent and the Gateway both do.
+ */
+export function scrubTarget(tool: string | null, raw: string): string {
+  const line = (raw.split("\n")[0] ?? "").trim();
+  if (tool === "Bash") {
+    const words = line.split(/\s+/).filter(Boolean);
+    while (words.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!)) words.shift();
+    const [program, next] = words;
+    if (!program) return "";
+    return next && /^[A-Za-z][A-Za-z0-9_.-]*$/.test(next) && !/^[a-z][a-z0-9+.-]*:\/\//i.test(next) ? `${program} ${next}` : program;
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(line)) {
+    try {
+      const url = new URL(line);
+      url.username = "";
+      url.password = "";
+      url.search = "";
+      url.hash = "";
+      return url.toString();
+    } catch {
+      return line.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/i, "$1").replace(/[?#].*$/, "");
+    }
+  }
+  return line;
+}
