@@ -332,7 +332,10 @@ a.pod-tile.mine:hover { border-color: var(--ok); box-shadow: var(--shadow); }
 .pod-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* Run page */
-.run-grid { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; padding: 16px; }
+.run-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; padding: 16px; }
+.run-diagram { position: relative; height: 260px; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; background: var(--bg); }
+.fnode-caption { font-size: 11px; line-height: 16px; color: var(--fg3); white-space: nowrap; }
+.fnode-caption::before { content: "·"; margin-right: 6px; }
 .nodes { display: flex; flex-direction: column; overflow: hidden; }
 .node-row { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; text-align: left; background: transparent; width: 100%; color: inherit; }
 .node-row:last-child { border-bottom: 0; }
@@ -909,11 +912,17 @@ dialog.modal.narrow { width: min(440px, calc(100vw - 32px)); }
 .fnode[data-state="running"] { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); animation: fe-node-run 1.4s ease-in-out infinite; }
 .fnode[data-state="waiting"] { border-color: var(--wait); box-shadow: 0 0 0 3px var(--wait-bg); }
 .fnode[data-state="succeeded"] { border-color: color-mix(in srgb, var(--ok) 55%, var(--panel-solid)); }
+.fnode[data-state="failed"] { border-color: var(--fail); box-shadow: 0 0 0 3px var(--fail-bg); }
+.fnode[data-state="interrupted"] { border-color: var(--intr); box-shadow: 0 0 0 3px var(--intr-bg); }
+.fnode[data-state="cancelled"], .fnode[data-state="not reached"] { opacity: 0.45; }
 @keyframes fe-node-run { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent); } }
 .fnode-state { flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; }
 .fnode-state svg { width: 11px; height: 11px; stroke-width: 2.2; }
 .fnode-state.succeeded { background: var(--ok); color: var(--panel-solid); animation: fe-grow 240ms var(--fe-ease); }
 .fnode-state.waiting { background: var(--wait-bg); color: var(--wait); }
+.fnode-state.failed { background: var(--fail); color: var(--panel-solid); }
+.fnode-state.interrupted { background: var(--intr-bg); color: var(--intr); }
+.fnode-state.cancelled { background: var(--mute-bg); color: var(--mute); }
 .fnode-spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); animation: fe-spin 0.8s linear infinite; }
 @keyframes fe-spin { to { rotate: 360deg; } }
 @keyframes fe-grow { from { scale: 0; } }
