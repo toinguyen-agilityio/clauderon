@@ -16,6 +16,11 @@ const MAX_BODY = ATTACHMENT_LIMITS.runBytes + 1024 * 1024;
  * request (ADR 0011): a server action takes 1 MB, attachments up to 25 MB.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Server actions check the Origin themselves; a route handler must, so another site cannot start Runs with the Member's cookie.
+  const origin = request.headers.get("origin");
+  if (!origin || new URL(origin).host !== (request.headers.get("x-forwarded-host") ?? request.headers.get("host"))) {
+    return NextResponse.json({ ok: false, error: "Start the Run from the app." }, { status: 403 });
+  }
   const store = await cookies();
   const live = await memberFromCookies(deps(), (name) => store.get(name)?.value);
   if (!live) return NextResponse.json({ ok: false, error: "Sign in again." }, { status: 401 });
