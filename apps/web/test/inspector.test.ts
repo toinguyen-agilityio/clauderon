@@ -25,6 +25,20 @@ describe("Node inspector view (#105)", () => {
     expect(view.findings).toEqual([]);
   });
 
+  it("reads turns stored before calls were kept as one call each", () => {
+    const legacy = [
+      { index: 0, tool: "Read", target: "a.ts", resultBytes: 100, newInput: 5, cacheCreated: 50, cacheRead: 500, output: 10 },
+      { index: 1, tool: "Read", target: "a.ts", resultBytes: 100, newInput: 5, cacheCreated: 50, cacheRead: 500, output: 10 },
+      { index: 2, newInput: 5, cacheCreated: 50, cacheRead: 500, output: 10 },
+    ] as unknown as Turn[];
+    const view = inspectorOf({ ...base, turns: legacy }, []);
+    expect(view.summary).toMatchObject({ turns: 3, toolCalls: 2 });
+    expect(view.turns[0]!.calls).toEqual([call("Read", "a.ts", 100)]);
+    expect(view.turns[0]).not.toHaveProperty("tool");
+    expect(view.turns[2]!.calls).toEqual([]);
+    expect(view.findings.map((f) => f.kind)).toEqual(["repeated-read"]);
+  });
+
   it("has no totals while an Attempt has not reported any", () => {
     const view = inspectorOf({ inputTokens: null, outputTokens: null, cacheCreationTokens: null, cacheReadTokens: null, turns: null }, []);
     expect(view.totalsOnly).toBeNull();
