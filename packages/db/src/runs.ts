@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, lt, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, ne, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import {
   retryLogLines,
   snapshotFlow,
@@ -10,6 +10,7 @@ import {
   type RetryContext,
   type RunInput,
   type RunState,
+  type Turn,
 } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
@@ -448,8 +449,40 @@ export async function finishAttempt(db: Db, attemptId: string, end: AttemptEnd):
   });
 }
 
-export async function setAttemptUsage(db: Db, attemptId: string, usage: { inputTokens: number; outputTokens: number }): Promise<void> {
+export async function setAttemptUsage(
+  db: Db,
+  attemptId: string,
+  usage: { inputTokens: number; outputTokens: number; cacheCreationTokens?: number; cacheReadTokens?: number },
+): Promise<void> {
   await db.update(attempt).set(usage).where(eq(attempt.id, attemptId));
+}
+
+/**
+ * Adds the turns of one Claude call to an Attempt (#105). A Grill Attempt resumes its
+ * session each round, so the rounds' turns follow one another as one list.
+ */
+export async function appendAttemptTurns(db: Db, attemptId: string, turns: readonly Turn[]): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [row] = await tx.select({ turns: attempt.turns }).from(attempt).where(eq(attempt.id, attemptId)).for("update");
+    if (!row) return;
+    const before = row.turns ?? [];
+    const next = turns.map((t, i) => ({ ...t, index: before.length + i }));
+    await tx.update(attempt).set({ turns: [...before, ...next] }).where(eq(attempt.id, attemptId));
+  });
+}
+
+/**
+ * The finished Agent Attempts of one Node in earlier Runs, newest first (#105): what its
+ * history row shows, so a Member can see whether a change to the Node helped.
+ */
+export async function nodeAttemptHistory(db: Db, flowId: string, flowNodeId: string, exceptRunId: string, limit = 10) {
+  return db
+    .select({ runId: attempt.runId, at: attempt.startedAt, inputTokens: attempt.inputTokens, outputTokens: attempt.outputTokens, cacheReadTokens: attempt.cacheReadTokens, turns: attempt.turns })
+    .from(attempt)
+    .innerJoin(run, eq(run.id, attempt.runId))
+    .where(and(eq(run.flowId, flowId), eq(attempt.flowNodeId, flowNodeId), ne(attempt.runId, exceptRunId), eq(attempt.superseded, false), isNotNull(attempt.endedAt)))
+    .orderBy(desc(attempt.startedAt))
+    .limit(limit);
 }
 
 export async function appendLogChunk(db: Db, chunk: { attemptId: string; seq: number; stream: LogStream; text: string; at: Date }): Promise<void> {

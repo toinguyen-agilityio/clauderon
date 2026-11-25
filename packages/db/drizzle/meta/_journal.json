@@ -113,6 +113,13 @@
       "when": 1795519259261,
       "tag": "0015_github_access",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795590080792,
+      "tag": "0016_node_inspector",
+      "breakpoints": true
     }
   ]
 }

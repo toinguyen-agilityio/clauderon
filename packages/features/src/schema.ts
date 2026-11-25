@@ -11,7 +11,7 @@ export const featureSchema = z
     name: z.string().min(1),
     summary: z.string().min(1).max(200),
     status: z.enum(STATUSES),
-    milestone: z.enum(["M0", "M1", "M2", "M3", "M4"]),
+    milestone: z.enum(["M0", "M1", "M2", "M3", "M4", "M6"]),
     paths: z.array(z.string().min(1)),
     docs: z.array(z.string().min(1)),
     reason: z.string().min(1).optional(),
