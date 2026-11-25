@@ -8,7 +8,7 @@ import { needsYouAction } from "./actions";
 import { MobileShell } from "../../components/mobile-shell";
 import { SideNav } from "../../components/side-nav";
 import { needsYouCount } from "../../server/runs";
-import { deps, requireMember } from "../../server/runtime";
+import { deps, gatewayUrl, requireMember } from "../../server/runtime";
 
 /** The signed-in shell of the prototype: left rail, work area on the right. */
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="shell">
-      <NeedsYouProvider initial={needsYou} load={needsYouAction}>
+      <NeedsYouProvider initial={needsYou} load={needsYouAction} gatewayUrl={gatewayUrl()}>
       <MobileShell needsYou={needsYou}>
         <Brand />
         <SideNav needsYou={needsYou} />

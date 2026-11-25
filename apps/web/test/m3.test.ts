@@ -110,7 +110,7 @@ describe("Approve and Reject (spec M3 §2.1)", () => {
     expect(a).toMatchObject({ state: "succeeded" });
     const outputs = await db.select().from(schema.output);
     expect(outputs).toEqual([expect.objectContaining({ attemptId: attempt.id, name: "plan", type: "plan", value: "1. Fix totals" })]);
-    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }]);
+    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }, { type: "needs.changed" }]);
     expect((await audit()).find((e) => e.action === "run.approve")).toMatchObject({ actorEmail: "bo@example.com", subjectId: runId });
   });
 
@@ -125,7 +125,7 @@ describe("Approve and Reject (spec M3 §2.1)", () => {
     expect(await getRun(db, runId)).toMatchObject({ state: "failed", failureReason: "Rejected at “Approve a plan”: Too broad." });
     const [stored] = await db.select().from(schema.humanRequest);
     expect(stored).toMatchObject({ response: { decision: "reject", feedback: "Too broad." }, respondedByEmail: "bo@example.com" });
-    expect(commands).toEqual([{ type: "schedule", machineId: f.machine.id }]);
+    expect(commands).toEqual([{ type: "schedule", machineId: f.machine.id }, { type: "needs.changed" }]);
     expect((await machineRunCounts(db, [f.machine.id])).get(f.machine.id)!.inUse).toBe(0);
   });
 
@@ -151,7 +151,7 @@ describe("Grill answers (spec M3 §2.2)", () => {
     expect((await getRun(db, runId))!.state).toBe("running");
     const [a] = await db.select().from(schema.attempt).where(sql`${schema.attempt.id} = ${attempt.id}`);
     expect(a).toMatchObject({ state: "running", claudeSessionId: "sess-1" });
-    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }]);
+    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }, { type: "needs.changed" }]);
     expect((await audit()).map((e) => e.action)).toContain("run.answer");
 
     // The Run page shows the round, its answers and who answered.
@@ -237,6 +237,31 @@ describe("Needs you (RUN-5, spec M3 §3)", () => {
   });
 });
 
+describe("Needs you updates live (#197)", () => {
+  const decisions = [
+    ["approve", "Approve a plan", { decision: "approve" }],
+    ["reject", "Approve a plan", { decision: "reject", feedback: "No" }],
+    ["answer", "Grill a plan", { decision: "answer", answers: { q1: "a", q2: "b" } }],
+  ] as const;
+
+  it.each(decisions)("%s with the Run's Machine removed still tells open Needs you pages", async (_, node, action) => {
+    const f = await fixture();
+    const { runId, nodeId } = await planRun(f);
+    const { request } = await waitAt(runId, nodeId(node), node === "Grill a plan" ? "grill" : "approve");
+    await db.update(schema.run).set({ machineId: null }).where(sql`${schema.run.id} = ${runId}`);
+    expect(await respondAs(deps, f.bo, request.id, action)).toEqual({ ok: true });
+    expect(commands).toEqual([{ type: "needs.changed" }]);
+  });
+
+  it("a refused response tells nobody: the request is still open", async () => {
+    const f = await fixture();
+    const { runId, nodeId } = await planRun(f);
+    const { request } = await waitAt(runId, nodeId("Approve a plan"), "approve");
+    expect(await respondAs(deps, f.bo, request.id, { decision: "reject", feedback: " " })).toMatchObject({ ok: false });
+    expect(commands).toEqual([]);
+  });
+});
+
 describe("Retry (RUN-7, RUN-9, spec M3 §4)", () => {
   async function failedRun(f: Awaited<ReturnType<typeof fixture>>) {
     const run = await planRun(f);
@@ -317,7 +342,11 @@ describe("Cancel from every Active state (T3-8, RUN-8)", () => {
     }
     expect(await cancelRunAs(deps, f.bo, runId)).toEqual({ ok: true });
     expect((await getRun(db, runId))!.state).toBe("cancelled");
-    expect(commands).toEqual([{ type: "run.cancel", machineId: f.machine.id, runId, attemptIds: attemptId ? [attemptId] : [] }]);
+    // Only a Run that was waiting leaves the Needs you list.
+    expect(commands).toEqual([
+      { type: "run.cancel", machineId: f.machine.id, runId, attemptIds: attemptId ? [attemptId] : [] },
+      ...(from === "waiting_for_human" ? [{ type: "needs.changed" }] : []),
+    ]);
     if (from === "waiting_for_human") {
       const [request] = await db.select().from(schema.humanRequest);
       expect(request).toMatchObject({ response: { cancelled: true }, respondedByEmail: "bo@example.com" });

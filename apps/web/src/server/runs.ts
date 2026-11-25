@@ -221,6 +221,7 @@ export async function cancelRunAs(deps: AppDeps, viewer: Viewer, runId: string):
   const result = await cancelRun(deps.db, runId, viewer.email, deps.clock.now());
   if (!result.ok) return result.reason === "not-found" ? "not-found" : { ok: false, reason: "ended" };
   if (result.machineId) await deps.command({ type: "run.cancel", machineId: result.machineId, runId, attemptIds: result.cancelledAttemptIds });
+  if (result.from === "waiting_for_human") await deps.command({ type: "needs.changed" });
   return { ok: true };
 }
 
@@ -243,6 +244,8 @@ export async function respondAs(deps: AppDeps, viewer: Viewer, requestId: string
       result.decision === "reject" ? { type: "schedule", machineId: result.machineId } : { type: "run.resume", machineId: result.machineId, runId: result.runId },
     );
   }
+  // The request left every open Needs you page, whatever the decision and even without a Machine.
+  await deps.command({ type: "needs.changed" });
   return { ok: true };
 }
 
