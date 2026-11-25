@@ -1,0 +1,39 @@
+name: Ticket on merge
+
+# Mechanical half of docs/agents/ticket-status-after-merge.md, for every merge
+# (web UI, CLI, Claude). Judgement calls (what is left of a partly met ticket,
+# blocked-by links) stay with a person or Claude's after-pr-merge hook.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [staging]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  comment:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+    steps:
+      - name: Comment the pull request on each linked ticket
+        run: |
+          set -euo pipefail
+          url="https://github.com/$REPO/pull/$PR"
+
+          # `Closes #N` closes the ticket by itself on this merge: say which PR did it.
+          for n in $(gh pr view "$PR" --repo "$REPO" --json closingIssuesReferences --jq '.closingIssuesReferences[].number'); do
+            gh issue comment "$n" --repo "$REPO" --body "Done in $url."
+          done
+
+          # `Refs #N` means only part of the ticket is met: it stays open.
+          for n in $(printf '%s' "$PR_BODY" | grep -oiE '(^|[^A-Za-z])refs +#[0-9]+' | grep -oE '[0-9]+' | sort -u); do
+            gh issue comment "$n" --repo "$REPO" --body "Merged $url, which meets part of this ticket. It stays open; what is left is not decided by this comment."
+          done
