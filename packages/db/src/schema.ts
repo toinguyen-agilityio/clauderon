@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -24,6 +25,7 @@ import {
 const id = () => uuid("id").primaryKey().defaultRandom();
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const ts = (name: string) => timestamp(name, { withTimezone: true });
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 export const nodeKind = pgEnum("node_kind", ["ticket", "input", "agent", "command", "approve", "grill"]);
 export const runState = pgEnum("run_state", [
@@ -421,3 +423,26 @@ export const artifact = pgTable("artifact", {
   createdAt: createdAt(),
   content: jsonb("content").notNull(),
 });
+
+/**
+ * A file a Member attached when starting a plan or summary Run (ADR 0011). Its contents
+ * are sealed with a key from `SESSION_SECRET` and cleared once the Agent has them;
+ * the name and SHA-256 stay so the Agent can check the worktree still has the file.
+ */
+export const runAttachment = pgTable(
+  "run_attachment",
+  {
+    id: id(),
+    createdAt: createdAt(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => run.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    size: integer("size").notNull(),
+    sha256: text("sha256").notNull(),
+    /** Null once delivered. */
+    sealed: bytea("sealed"),
+    deliveredAt: ts("delivered_at"),
+  },
+  (t) => [uniqueIndex("run_attachment_run_name_idx").on(t.runId, t.name)],
+);
