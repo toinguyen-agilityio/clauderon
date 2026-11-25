@@ -33,4 +33,4 @@ await listenGatewayCommands(databaseUrl, (command) => {
 const port = Number(process.env.GATEWAY_PORT ?? 4000);
 // The web app's URL, so a pairing Agent can open the page that approves its code.
 const webUrl = process.env.WEB_URL ?? process.env.AUTH_URL;
-createGatewayServer({ db, clock: systemClock, links: gateway.links, hub: gateway.hub, webUrl }).listen(port, () => console.log(`gateway listening on ${port}`));
+createGatewayServer({ db, clock: systemClock, links: gateway.links, hub: gateway.hub, sessionSecret, webUrl }).listen(port, () => console.log(`gateway listening on ${port}`));

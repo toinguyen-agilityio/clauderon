@@ -5,16 +5,17 @@ import type { Db } from "@clauderon/db";
 import { fromWebSocket } from "@clauderon/protocol";
 import type { BrowserHub } from "./browser-hub";
 import type { MachineLinks } from "./machine-link";
+import { handleAttachments } from "./attachments-http";
 import { handlePairing } from "./pairing";
 
-export type GatewayServerOptions = { db: Db; clock: Clock; links: MachineLinks; hub: BrowserHub; webUrl?: string; log?: (message: string) => void };
+export type GatewayServerOptions = { db: Db; clock: Clock; links: MachineLinks; hub: BrowserHub; sessionSecret: string; webUrl?: string; log?: (message: string) => void };
 
 /**
  * HTTP and WebSocket front of the Gateway: `/agent` for Agents, `/pair` for
- * Pairing, `/browser` for browser sockets, `/health` for the hosting's
- * health check.
+ * Pairing, `/agent/attachments` for a Run's files (ADR 0011), `/browser` for
+ * browser sockets, `/health` for the hosting's health check.
  */
-export function createGatewayServer({ db, clock, links, hub, webUrl, log }: GatewayServerOptions): Server {
+export function createGatewayServer({ db, clock, links, hub, sessionSecret, webUrl, log }: GatewayServerOptions): Server {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
 
   const server = createServer((req, res) => {
@@ -23,12 +24,13 @@ export function createGatewayServer({ db, clock, links, hub, webUrl, log }: Gate
       res.end(JSON.stringify({ ok: true }));
       return;
     }
-    handlePairing(req, res, { db, clock, webUrl })
+    handleAttachments(req, res, { db, sessionSecret })
+      .then((handled) => handled || handlePairing(req, res, { db, clock, webUrl }))
       .then((handled) => {
         if (!handled) res.writeHead(404).end();
       })
       .catch((error: unknown) => {
-        (log ?? console.warn)(`pairing: ${String(error)}`);
+        (log ?? console.warn)(`http ${req.url ?? ""}: ${String(error)}`);
         if (!res.headersSent) res.writeHead(500).end();
       });
   });

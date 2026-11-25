@@ -1,5 +1,7 @@
 import {
   activeOutputs,
+  agentSupportsAttachments,
+  ATTACHMENTS_MIN_AGENT,
   isEntryKind,
   branchName,
   buildAgentPrompt,
@@ -24,6 +26,8 @@ import {
 } from "@clauderon/core";
 import {
   appendLogChunk,
+  attachmentsOfRun,
+  markAttachmentsDelivered,
   askHuman,
   attemptsOfRun,
   createAttempt,
@@ -152,6 +156,16 @@ export class RunEngine {
     const ctx = await getRunContext(this.opts.db, runId);
     // Only an ended Run can have lost its Machine; nothing drives it any more.
     if (!ctx?.run.machineId) return;
+    const attachments = await attachmentsOfRun(this.opts.db, runId);
+    if (attachments.length > 0) {
+      // ADR 0011: an older Agent would make the worktree without the files.
+      const machine = await getMachine(this.opts.db, ctx.run.machineId);
+      if (!agentSupportsAttachments(machine?.agentVersion)) {
+        return this.fail(runId, `This Run has attached files, which need Agent ${ATTACHMENTS_MIN_AGENT} or later. Update the Agent on your Machine, then start a new Run.`);
+      }
+      // Their contents went once delivered; a worktree made again cannot have them.
+      if (attachments.some((a) => a.delivered)) return this.fail(runId, "The attached files are gone from your Machine. Start a new Run with them.");
+    }
     const branch = branchName(ctx.ticket?.number ?? null, ctx.title, runId);
     await updateRun(this.opts.db, runId, { branch });
     this.opts.links.send(ctx.run.machineId, "workspace.prepare", {
@@ -161,11 +175,21 @@ export class RunEngine {
       // A branch Input is where the Run starts from; it still gets a branch of its own.
       baseBranch: ctx.run.inputValue?.type === "branch" ? ctx.run.inputValue.value.branch : ctx.project.baseBranch,
       branch,
+      ...(attachments.length > 0 ? { attachments: attachments.map(({ id, name, size, sha256 }) => ({ id, name, size, sha256 })) } : {}),
     });
   }
 
-  workspaceReady({ runId, worktreePath }: Payload<"workspace.ready">): Promise<void> {
+  workspaceReady({ runId, worktreePath, attachments: delivered }: Payload<"workspace.ready">): Promise<void> {
     return this.serial(async () => {
+      const waiting = (await attachmentsOfRun(this.opts.db, runId)).filter((a) => !a.delivered).length;
+      if (waiting > 0) {
+        if (delivered !== waiting) {
+          await updateRun(this.opts.db, runId, { worktreePath });
+          await this.fail(runId, "Workspace: the attached files did not reach your Machine.");
+          return this.cleanUp(runId);
+        }
+        await markAttachmentsDelivered(this.opts.db, runId, this.now());
+      }
       await updateRun(this.opts.db, runId, { worktreePath });
       await this.advance(runId);
       // Cancelled while its Workspace was being prepared: the worktree is no use to anyone.
@@ -239,7 +263,7 @@ export class RunEngine {
     }
 
     const retryContext = attempt.retryContext as RetryContext | null;
-    const base = { attemptId: attempt.id, runId, worktreePath: ctx.run.worktreePath ?? "" };
+    const base = { attemptId: attempt.id, runId, worktreePath: ctx.run.worktreePath ?? "", ...(await this.attachmentsToCheck(runId)) };
     if (node.kind === "agent" || node.kind === "grill") {
       const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs);
       const prompt = buildAgentPrompt({
@@ -270,6 +294,12 @@ export class RunEngine {
     const given = ctx.run.inputValue;
     if (given?.type !== type) return undefined;
     return type === "branch" ? { branch: ctx.run.branch ?? "", headCommit: null } : given.value;
+  }
+
+  /** The files the Agent checks are still in the worktree before a Node (ADR 0011). */
+  private async attachmentsToCheck(runId: string): Promise<{ attachments?: { name: string; sha256: string }[] }> {
+    const attachments = await attachmentsOfRun(this.opts.db, runId);
+    return attachments.length > 0 ? { attachments: attachments.map(({ name, sha256 }) => ({ name, sha256 })) } : {};
   }
 
   private agentEnv(node: SnapshotNode): Record<string, string> {
@@ -308,6 +338,7 @@ export class RunEngine {
         prompt: buildGrillAnswerPrompt((round.questions ?? []) as GrillQuestion[], answers, outputs),
         resumeSessionId: attempt.claudeSessionId,
         env: this.agentEnv(node),
+        ...(await this.attachmentsToCheck(runId)),
       });
       this.opts.live.runChanged(runId);
     });
