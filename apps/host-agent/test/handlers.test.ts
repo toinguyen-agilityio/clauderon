@@ -296,7 +296,7 @@ describe("Agent Nodes (RUN-10, POD-12)", () => {
     expect(claude.argv[2]).toBe('claude -p --output-format stream-json --verbose --dangerously-skip-permissions < "$CLAUDERON_PROMPT_FILE"');
     expect(claude.options.cwd).toBe("/home/ann/.clauderon/runs/run-1");
 
-    expect(link.of("node.usage")).toEqual([{ attemptId: "att-1", inputTokens: 15, outputTokens: 7 }]);
+    expect(link.of("node.usage")).toEqual([{ attemptId: "att-1", inputTokens: 15, outputTokens: 7, cacheCreated: 0, cacheRead: 5 }]);
     expect(link.of("node.result")).toEqual([
       { attemptId: "att-1", exitCode: 0, result: { outputs: { summary: "Fixed totals" } }, sessionId: "sess-1", headCommit: "h2" },
     ]);
@@ -333,6 +333,38 @@ describe("Agent Nodes (RUN-10, POD-12)", () => {
     expect(link.of("node.result")[0]!.error).toBe("Claude Code exited 1: API Error: 401 invalid key •••");
   });
 
+  it("sends the per-turn summary before the result, sizes only (#105)", async () => {
+    scriptGit(["h1", "h2"]);
+    const events = [
+      { type: "assistant", message: { id: "m1", usage: { input_tokens: 2, cache_creation_input_tokens: 10, cache_read_input_tokens: 100, output_tokens: 5 }, content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: "/home/ann/.clauderon/runs/run-1/a.ts" } }] } },
+      { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "secret file contents" }] } },
+      { type: "result", subtype: "success", result: "ok", usage: { input_tokens: 2, output_tokens: 5 } },
+    ]
+      .map((e) => JSON.stringify(e))
+      .join("\n");
+    system.script(({ argv }) => (argv[2]?.startsWith("claude ") ? { stdout: `${events}\n` } : undefined));
+    await link.deliver("node.run", nodeRun({ kind: "agent", prompt: "p" }));
+
+    const [sent] = link.of("node.turns");
+    expect(sent).toEqual({
+      attemptId: "att-1",
+      turns: [{ index: 0, calls: [{ tool: "Read", target: "a.ts", resultBytes: 20 }], newInput: 2, cacheCreated: 10, cacheRead: 100, output: 5 }],
+    });
+    expect(JSON.stringify(sent)).not.toContain("secret file contents");
+  });
+
+  it("sends a session longer than one message holds in several, without losing a turn (#105)", async () => {
+    scriptGit(["h1", "h2"]);
+    const events = Array.from({ length: 2001 }, (_, i) =>
+      JSON.stringify({ type: "assistant", message: { id: `m${i}`, usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "." }] } }),
+    ).join("\n");
+    system.script(({ argv }) => (argv[2]?.startsWith("claude ") ? { stdout: `${events}\n` } : undefined));
+    await link.deliver("node.run", nodeRun({ kind: "agent", prompt: "p" }));
+
+    const sent = link.of("node.turns");
+    expect(sent.map((m) => m.turns.length)).toEqual([2000, 1]);
+  });
+
   it("a failed Claude Code run with nothing to say falls back to the exit code", async () => {
     scriptGit(["h1", "h1"]);
     system.script(({ argv }) => (argv[2]?.startsWith("claude ") ? { exitCode: 2, stdout: '{"type":"system","subtype":"init"}\nWorking on it\n' } : undefined));
@@ -354,6 +386,6 @@ describe("Agent Nodes (RUN-10, POD-12)", () => {
         },
       }),
     );
-    expect(withModels.usage).toEqual({ inputTokens: 66, outputTokens: 44 });
+    expect(withModels.usage).toEqual({ inputTokens: 66, outputTokens: 44, cacheCreated: 22, cacheRead: 33 });
   });
 });

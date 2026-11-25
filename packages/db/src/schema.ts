@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { RunInput } from "@clauderon/core";
+import type { RunInput, Turn } from "@clauderon/core";
 import {
   bigint,
   boolean,
@@ -362,6 +362,11 @@ export const attempt = pgTable("attempt", {
   error: text("error"),
   inputTokens: integer("input_tokens"),
   outputTokens: integer("output_tokens"),
+  /** The split of `inputTokens` (#105); null when the Agent did not send it. */
+  cacheCreationTokens: integer("cache_creation_tokens"),
+  cacheReadTokens: integer("cache_read_tokens"),
+  /** One summary per turn of the Claude session (#105): sizes and names, never contents. Null when the Agent did not send it. */
+  turns: jsonb("turns").$type<Turn[]>(),
   claudeSessionId: text("claude_session_id"),
   retryContext: jsonb("retry_context"),
   /** Left out of the current pass by a later Retry (RUN-7); still shown on the Run page. */

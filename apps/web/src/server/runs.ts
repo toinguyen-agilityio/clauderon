@@ -1,6 +1,13 @@
 import {
   RUN_STATES,
+  contextSize,
+  findWaste,
+  historyEntry,
+  rereads,
+  resultBytesOf,
   renderRetryContext,
+  suggest,
+  summarizeTurns,
   snapshotFlow,
   ticketKeys,
   topologicalOrder,
@@ -23,6 +30,7 @@ import {
   listProjects,
   listPullRequests,
   listRuns,
+  nodeAttemptHistory,
   RUNS_PAGE_SIZE,
   listMembers,
   nodesFrom,
@@ -312,6 +320,17 @@ export async function viewRun(deps: AppDeps, runId: string) {
   const current = run.attempts.filter((a) => !a.superseded);
 
   const order = topologicalOrder(snapshotFlow(run.snapshot).flow);
+  // The same Node in earlier Runs of this Flow (#105), for the Inspector's history.
+  const claudeNodes = order.filter((id) => ["agent", "grill"].includes(run.snapshot.nodes.find((n) => n.id === id)?.kind ?? ""));
+  const histories = new Map(
+    await Promise.all(
+      claudeNodes.map(async (id) => {
+        // A deleted Flow leaves its Runs without one: no earlier Runs to compare.
+        const earlier = run.run.flowId ? await nodeAttemptHistory(deps.db, run.run.flowId, id, runId) : [];
+        return [id, earlier.map((h) => historyEntry({ runId: h.runId, at: h.at, turns: h.turns ?? [] }))] as const;
+      }),
+    ),
+  );
   const canRetryFrom = new Set(retryable ? retryableNodes(run.snapshot, current) : []);
   const timeline = order.map((id) => {
     const node = run.snapshot.nodes.find((n) => n.id === id)!;
@@ -362,6 +381,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
         exitCode: a.exitCode,
         inputTokens: a.inputTokens,
         outputTokens: a.outputTokens,
+        inspector: inspectorOf(a, histories.get(id) ?? []),
         retryContext: a.retryContext ? renderRetryContext(a.retryContext as RetryContext) : null,
         outputs: a.outputs.map((o) => ({ name: o.name, type: o.type, value: o.value })),
         rounds: requests
@@ -391,5 +411,27 @@ export async function viewRun(deps: AppDeps, runId: string) {
     retryable,
     retryContext: retryContext && (retryContext.feedback || retryContext.failure) ? retryContext : null,
     history: history.map((h) => ({ id: h.id, at: h.at, actorEmail: h.actorEmail, action: h.action, detail: h.detail as Record<string, unknown> })),
+  };
+}
+
+type InspectedAttempt = { inputTokens: number | null; outputTokens: number | null; cacheCreationTokens: number | null; cacheReadTokens: number | null; turns: import("@clauderon/core").Turn[] | null };
+
+/**
+ * What the Node inspector shows for one Attempt (#105). An Attempt without turns (an older Agent,
+ * or a Node that is not a Claude session) has totals only; the turn list, findings and
+ * suggestions come from the per-turn summary.
+ */
+export function inspectorOf(a: InspectedAttempt, history: ReturnType<typeof historyEntry>[]) {
+  const turns = a.turns ?? [];
+  const findings = findWaste(turns);
+  const totalsOnly = a.inputTokens !== null || a.outputTokens !== null ? { input: a.inputTokens ?? 0, output: a.outputTokens ?? 0, cacheCreated: a.cacheCreationTokens, cacheRead: a.cacheReadTokens } : null;
+  return {
+    hasTurns: turns.length > 0,
+    totalsOnly,
+    summary: summarizeTurns(turns),
+    turns: turns.map((t) => ({ ...t, calls: t.calls ?? [], context: contextSize(t), resultBytes: resultBytesOf({ ...t, calls: t.calls ?? [] }), rereads: rereads(turns, t) })),
+    findings,
+    suggestions: suggest(findings),
+    history,
   };
 }

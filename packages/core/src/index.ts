@@ -6,6 +6,7 @@ export * from "./node-file";
 export * from "./flow-draft";
 export * from "./github";
 export * from "./human";
+export * from "./inspector";
 export * from "./library";
 export * from "./limits";
 export * from "./mask";

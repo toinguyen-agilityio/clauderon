@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { mask, tailLines } from "@clauderon/core";
+import { MAX_TURNS_PER_MESSAGE, mask, tailLines } from "@clauderon/core";
 import type { Payload } from "@clauderon/protocol";
-import { ClaudeErrorWatch, claudeCommand, claudeResult, parseClaudeLine } from "./claude";
+import { ClaudeErrorWatch, TurnRecorder, claudeCommand, claudeResult, parseClaudeLine } from "./claude";
 import { errorText, type AgentLink, type Log } from "./link";
 import { runText, type ProcessHandle, type System } from "./system";
 
@@ -221,6 +221,7 @@ export async function runNode(
       let finalText: string | undefined;
       let unknownSession: string | undefined;
       const errors = new ClaudeErrorWatch();
+      const recorder = new TurnRecorder(hide, run.worktreePath);
       const watch = (line: string) => {
         if (run.resumeSessionId && !unknownSession && UNKNOWN_SESSION.test(line)) unknownSession = line.trim();
       };
@@ -230,6 +231,7 @@ export async function runNode(
         if (!line.trimStart().startsWith("{")) watch(line);
         const event = parseClaudeLine(line);
         errors.event(event);
+        recorder.event(event);
         if (event.sessionId) sessionId = event.sessionId;
         if (event.usage) link.send("node.usage", { attemptId: run.attemptId, ...event.usage });
         if (event.finalText !== undefined) finalText = event.finalText;
@@ -245,6 +247,11 @@ export async function runNode(
       );
       stdout.flush();
       stderr.flush();
+      const turns = recorder.turns();
+      // A session longer than one message holds is sent in several; the Gateway appends and renumbers them.
+      for (let at = 0; at < turns.length; at += MAX_TURNS_PER_MESSAGE) {
+        link.send("node.turns", { attemptId: run.attemptId, turns: turns.slice(at, at + MAX_TURNS_PER_MESSAGE) });
+      }
       result = claudeResult(finalText);
       if (exitCode !== 0) error = hide(errors.reason(exitCode));
       // A Grill round whose session Claude no longer knows (spec M3 §2.2).

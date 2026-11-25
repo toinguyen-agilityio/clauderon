@@ -1188,3 +1188,18 @@ a.proj-count:hover span { color: var(--accent-text); text-decoration: underline;
 .composer-kbd kbd { font-family: var(--font-mono); font-size: 11px; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--sunk); color: var(--fg2); }
 @media (pointer: coarse) { .composer-kbd { display: none; } }
 .build-examples { align-items: center; margin-top: 2px; }
+
+/* Node inspector (#105) */
+.legend { display: flex; flex-wrap: wrap; gap: 14px; }
+.swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; }
+.turns { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.turn { display: grid; grid-template-columns: 28px minmax(0, 1.2fr) minmax(0, 1fr); gap: 10px; align-items: center; width: 100%; padding: 5px 8px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.turn:hover { background: var(--hover); }
+.turn.on { background: var(--accent-weak); border-color: var(--line-strong); }
+.turn.hl { background: var(--wait-bg); }
+.turn .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.turn .flag { color: var(--saffron); }
+.turn .bar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; background: var(--sunk); }
+.turn .bar i { display: block; height: 100%; }
+.finding { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; cursor: pointer; font: inherit; color: var(--fg); }
+.finding:hover { background: var(--hover); }

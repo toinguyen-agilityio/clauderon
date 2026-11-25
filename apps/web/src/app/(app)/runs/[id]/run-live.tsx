@@ -11,6 +11,7 @@ import { OutputValue } from "../../../../components/output-value";
 import { MarkdownBody, MarkdownText } from "../../../../components/markdown-text";
 import { OType, StatePill } from "../../../../components/state-pill";
 import type { viewRun } from "../../../../server/runs";
+import { NodeInspector } from "./node-inspector";
 import { RetryFromHere } from "./retry-run";
 
 type Timeline = Exclude<Awaited<ReturnType<typeof viewRun>>, "not-found">["timeline"];
@@ -69,6 +70,7 @@ export function RunLive({
 
   const [lines, setLines] = useState<Line[]>([]);
   const [follow, setFollow] = useState(true);
+  const [view, setView] = useState<"log" | "inspector">("log");
   const logBox = useRef<HTMLPreElement>(null);
 
   // Run changes refresh the server-rendered page.
@@ -216,6 +218,28 @@ export function RunLive({
             )}
 
             {!isEntryKind(node.kind) && (
+              <div className="att-tabs" role="tablist" aria-label="Node view">
+                <button type="button" role="tab" aria-selected={view === "log"} className={view === "log" ? "on" : ""} onClick={() => setView("log")}>
+                  Log
+                </button>
+                <button type="button" role="tab" aria-selected={view === "inspector"} className={view === "inspector" ? "on" : ""} onClick={() => setView("inspector")}>
+                  Inspector
+                </button>
+              </div>
+            )}
+
+            {!isEntryKind(node.kind) &&
+              view === "inspector" &&
+              (node.kind === "agent" || node.kind === "grill" ? (
+                <NodeInspector key={attempt.id} inspector={attempt.inspector} attemptState={attempt.state} />
+              ) : (
+                <div className="empty card">
+                  <b>No Claude session to inspect</b>
+                  This Node does not run Claude. Its output is in the Log.
+                </div>
+              ))}
+
+            {!isEntryKind(node.kind) && view === "log" && (
               <div className="stack" style={{ gap: 8 }}>
                 <div className="log-head">
                   <span className="eyebrow">

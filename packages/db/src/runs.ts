@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, lt, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, ne, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import {
   retryLogLines,
   snapshotFlow,
@@ -10,6 +10,7 @@ import {
   type RetryContext,
   type RunInput,
   type RunState,
+  type Turn,
 } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
@@ -448,8 +449,65 @@ export async function finishAttempt(db: Db, attemptId: string, end: AttemptEnd):
   });
 }
 
-export async function setAttemptUsage(db: Db, attemptId: string, usage: { inputTokens: number; outputTokens: number }): Promise<void> {
+export async function setAttemptUsage(
+  db: Db,
+  attemptId: string,
+  usage: { inputTokens: number; outputTokens: number; cacheCreationTokens?: number; cacheReadTokens?: number },
+): Promise<void> {
   await db.update(attempt).set(usage).where(eq(attempt.id, attemptId));
+}
+
+/** A Claude session this long is not a real one; further turns are dropped. */
+export const MAX_TURNS_PER_ATTEMPT = 5000;
+
+/**
+ * Adds the turns of one Claude call to an Attempt (#105). A Grill Attempt resumes its
+ * session each round, so the rounds' turns follow one another as one list. Only the Machine
+ * the Attempt's Run is on can add to it, and only while the Attempt is running.
+ */
+export async function appendAttemptTurns(db: Db, attemptId: string, machineId: string, turns: readonly Turn[]): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ turns: attempt.turns })
+      .from(attempt)
+      .innerJoin(run, eq(run.id, attempt.runId))
+      .where(and(eq(attempt.id, attemptId), eq(run.machineId, machineId), eq(attempt.state, "running")))
+      .for("update", { of: attempt });
+    if (!row) return false;
+    const before = row.turns ?? [];
+    const next = turns.slice(0, Math.max(0, MAX_TURNS_PER_ATTEMPT - before.length)).map((t, i) => ({ ...t, index: before.length + i }));
+    await tx.update(attempt).set({ turns: [...before, ...next] }).where(eq(attempt.id, attemptId));
+    return true;
+  });
+}
+
+/**
+ * Clears what the tool calls of old Attempts point at (NFR-5): the tools and sizes stay, so the
+ * history rows still add up, but the targets, which can carry paths and command words, go with the logs.
+ */
+export async function clearTurnTargetsBefore(db: Db, cutoff: Date): Promise<number> {
+  const rows = await db
+    .update(attempt)
+    .set({
+      turns: sql`(select jsonb_agg(jsonb_set(t, '{calls}', coalesce((select jsonb_agg(jsonb_set(c, '{target}', 'null'::jsonb)) from jsonb_array_elements(t->'calls') c), '[]'::jsonb))) from jsonb_array_elements(${attempt.turns}) t)`,
+    })
+    .where(and(isNotNull(attempt.turns), lt(attempt.startedAt, cutoff), sql`${attempt.turns}::text like '%"target": "%'`))
+    .returning({ id: attempt.id });
+  return rows.length;
+}
+
+/**
+ * The finished Agent Attempts of one Node in earlier Runs, newest first (#105): what its
+ * history row shows, so a Member can see whether a change to the Node helped.
+ */
+export async function nodeAttemptHistory(db: Db, flowId: string, flowNodeId: string, exceptRunId: string, limit = 10) {
+  return db
+    .select({ runId: attempt.runId, at: attempt.startedAt, turns: attempt.turns })
+    .from(attempt)
+    .innerJoin(run, eq(run.id, attempt.runId))
+    .where(and(eq(run.flowId, flowId), eq(attempt.flowNodeId, flowNodeId), ne(attempt.runId, exceptRunId), eq(attempt.superseded, false), isNotNull(attempt.endedAt), isNotNull(attempt.turns)))
+    .orderBy(desc(attempt.startedAt))
+    .limit(limit);
 }
 
 export async function appendLogChunk(db: Db, chunk: { attemptId: string; seq: number; stream: LogStream; text: string; at: Date }): Promise<void> {
