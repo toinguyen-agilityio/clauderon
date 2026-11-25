@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterFlows, flowSteps, groupFlows, deleteRunsNote, problemsLabel, scopeCounts, type FlowRowView } from "../src/app/(app)/flows/flows-view";
+import { filterFlows, flowStart, flowSteps, groupFlows, deleteRunsNote, problemsLabel, scopeCounts, type FlowRowView } from "../src/app/(app)/flows/flows-view";
 
 const flow = (name: string, over: Partial<FlowRowView> = {}): FlowRowView => ({
   id: name,
@@ -15,6 +15,7 @@ const flow = (name: string, over: Partial<FlowRowView> = {}): FlowRowView => ({
   updatedBy: "ann@example.com",
   updatedLabel: "1 h ago",
   updatedTitle: "2026-11-18 10:00 UTC",
+  inputType: "issue",
   lock: null,
   ...over,
 });
@@ -71,5 +72,22 @@ describe("Flows list (ticket: Flows UI)", () => {
   it("words the problem count", () => {
     expect(problemsLabel(1)).toBe("1 problem");
     expect(problemsLabel(3)).toBe("3 problems");
+  });
+});
+
+describe("Starting a Flow from the Flows list and the editor", () => {
+  it("opens the Start Run dialog for a non-Ticket Input and points a Ticket Input to the Tickets page", () => {
+    expect(flowStart("branch", 0)).toBe("dialog");
+    expect(flowStart("pull-request", 0)).toBe("dialog");
+    expect(flowStart("plan", 0)).toBe("dialog");
+    expect(flowStart("issue", 0)).toBe("tickets");
+  });
+
+  it("offers nothing while the Flow has problems, has no Input, or starts from a type no Input gives", () => {
+    expect(flowStart("branch", 1)).toBeNull();
+    expect(flowStart("issue", 2)).toBeNull();
+    expect(flowStart(null, 0)).toBeNull();
+    expect(flowStart(undefined, 0)).toBeNull();
+    expect(flowStart("test-result", 0)).toBeNull();
   });
 });

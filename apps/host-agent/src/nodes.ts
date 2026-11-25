@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { MAX_TURNS_PER_MESSAGE, mask, tailLines } from "@clauderon/core";
+import { createHash } from "node:crypto";
+import { ATTACHMENTS_DIR, MAX_TURNS_PER_MESSAGE, mask, tailLines } from "@clauderon/core";
 import type { Payload } from "@clauderon/protocol";
 import { ClaudeErrorWatch, TurnRecorder, claudeCommand, claudeResult, parseClaudeLine } from "./claude";
 import { errorText, type AgentLink, type Log } from "./link";
@@ -160,6 +161,14 @@ export async function runNode(
     link.send("node.log", { attemptId: run.attemptId, seq: counter.next++, stream, text: hide(text) });
 
   try {
+    // A retry relies on the attached files still being in the worktree: their contents left the app once delivered (ADR 0011).
+    for (const file of run.attachments ?? []) {
+      const data = await system.readBytes(join(run.worktreePath, ATTACHMENTS_DIR, file.name));
+      if (!data || createHash("sha256").update(data).digest("hex") !== file.sha256) {
+        throw new Error(`The attached file ${file.name} is no longer in the worktree. Start a new Run with it.`);
+      }
+    }
+
     // The owner's own gh token is a secret too (NFR-1).
     const token = (await runText(system, ["gh", "auth", "token"]).catch(() => "")).trim();
     if (token) secrets.push(token);

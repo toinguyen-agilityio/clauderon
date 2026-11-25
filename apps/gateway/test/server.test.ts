@@ -3,9 +3,9 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import { approvePairing, getMachineOfMember, type Db } from "@clauderon/db";
+import { approvePairing, attachmentsOfRun, getMachineOfMember, markAttachmentsDelivered, sealAttachment, startBatch, type Db } from "@clauderon/db";
 import { CloseCode, controlMessage, serialize, type PairResponse } from "@clauderon/protocol";
-import { FakeClock, createTestDatabase, memberRow, type TestDatabase } from "@clauderon/testing";
+import { FakeClock, createTestDatabase, machineRow, memberRow, projectRow, sampleFlowId, type TestDatabase } from "@clauderon/testing";
 import { BrowserHub } from "../src/browser-hub";
 import { MachineLinks } from "../src/machine-link";
 import { createGatewayServer } from "../src/server";
@@ -16,6 +16,7 @@ let clock: FakeClock;
 let server: Server;
 let http: string;
 let ws: string;
+const SECRET = "attachments-secret";
 
 beforeAll(async () => {
   test = await createTestDatabase();
@@ -24,7 +25,7 @@ beforeAll(async () => {
   const links = new MachineLinks({ db, clock, log: () => {} });
   await links.start();
   const hub = new BrowserHub({ db, operators: [], sessionSecret: "x", clock });
-  server = createGatewayServer({ db, clock, links, hub, webUrl: "https://app.test/", log: () => {} });
+  server = createGatewayServer({ db, clock, links, hub, sessionSecret: SECRET, webUrl: "https://app.test/", log: () => {} });
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const port = (server.address() as AddressInfo).port;
   http = `http://127.0.0.1:${port}`;
@@ -119,6 +120,40 @@ describe("Gateway server over real HTTP and WebSockets", () => {
     const socket = new WebSocket(`${ws}/browser`);
     const code = await new Promise<number>((resolve) => socket.once("close", resolve));
     expect(code).toBe(CloseCode.Unauthorized);
+  });
+
+  it("serves a Run's attached file only to its own Machine, and only until it was delivered (ADR 0011)", async () => {
+    const ann = await memberRow(db, "files-ann@example.com");
+    const bob = await memberRow(db, "files-bob@example.com");
+    const mine = await machineRow(db, ann.id, { token: "ann-files-token" });
+    await machineRow(db, bob.id, { token: "bob-files-token" });
+    const project = await projectRow(db, "acme", "files");
+    const flowId = await sampleFlowId(db);
+    const started = await startBatch(
+      db,
+      {
+        flowId,
+        flowSnapshot: { name: "x", nodes: [], edges: [] } as never,
+        starter: ann,
+        machineId: mine.id,
+        extraInstructions: "",
+        ticketIds: [],
+        direct: [{ projectId: project.id, title: "Plan", input: { type: "plan", value: "x" }, attachments: [sealAttachment({ name: "spec.pdf", data: Buffer.from("%PDF-1.7") }, SECRET)] }],
+      },
+      clock.now(),
+    );
+    if (!started.ok) throw new Error("not started");
+    const [file] = await attachmentsOfRun(db, started.runIds[0]!);
+    const get = (token?: string) => fetch(`${http}/agent/attachments/${file!.id}`, token ? { headers: { authorization: `Bearer ${token}` } } : {});
+
+    expect((await get()).status).toBe(401);
+    expect((await get("bob-files-token")).status).toBe(404);
+    const res = await get("ann-files-token");
+    expect(res.status).toBe(200);
+    expect(Buffer.from(await res.arrayBuffer()).toString()).toBe("%PDF-1.7");
+
+    await markAttachmentsDelivered(db, started.runIds[0]!, clock.now());
+    expect((await get("ann-files-token")).status).toBe(404);
   });
 
   it("answers the health check", async () => {

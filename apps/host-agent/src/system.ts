@@ -30,6 +30,10 @@ export interface System {
   killGroup(pid: number, signal: Signal): void;
   writeFile(path: string, content: string): Promise<void>;
   readFile(path: string): Promise<string | null>;
+  /** Writes bytes as they are, making the folders it needs, e.g. a Run's attached files. */
+  writeBytes(path: string, data: Uint8Array): Promise<void>;
+  /** The file's bytes, or null when it does not exist. */
+  readBytes(path: string): Promise<Uint8Array | null>;
   exists(path: string): Promise<boolean>;
   /** File names in a directory; none when it does not exist. */
   list(dir: string): Promise<string[]>;

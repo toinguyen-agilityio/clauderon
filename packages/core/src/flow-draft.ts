@@ -2,6 +2,7 @@ import { OUTPUT_TYPES, isEntryKind, type NodeInput, type NodeOutput } from "./fl
 import { FLOW_FILE_FORMAT, FLOW_FILE_MAX_BYTES, FLOW_FILE_VERSION, parseFlowFile, type FlowFile, type ParsedFlow } from "./flow-file";
 import type { NodeDefinition } from "./library";
 import { extractResultBlock } from "./runner";
+import { agentAtLeast } from "./run-attachment";
 
 // Flow Drafts (ADR 0008): Claude Code on the Member's own Machine writes a Flow file from a
 // description; the Member previews it and creates it through the ordinary import. Pure: the
@@ -15,15 +16,7 @@ export const FLOW_DRAFT_MAX_DESCRIPTION = 4_000;
 
 /** Whether an Agent reporting `version` (e.g. `0.5.0+abc`, `0.5.0-dev`) can write Flow Drafts. */
 export function agentSupportsFlowDrafts(version: string | null | undefined): boolean {
-  const have = /^(\d+)\.(\d+)\.(\d+)/.exec(version ?? "");
-  const want = /^(\d+)\.(\d+)\.(\d+)/.exec(FLOW_DRAFT_MIN_AGENT)!;
-  if (!have) return false;
-  for (let i = 1; i <= 3; i++) {
-    const a = Number(have[i]);
-    const b = Number(want[i]);
-    if (a !== b) return a > b;
-  }
-  return true;
+  return agentAtLeast(version, FLOW_DRAFT_MIN_AGENT);
 }
 
 /** A library Node as the prompt shows it and as a draft may reuse it. */

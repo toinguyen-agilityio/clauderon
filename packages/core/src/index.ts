@@ -12,6 +12,7 @@ export * from "./limits";
 export * from "./mask";
 export * from "./run";
 export * from "./run-input";
+export * from "./run-attachment";
 export * from "./ticket-status";
 export * from "./runner";
 export * from "./simulate";

@@ -1,4 +1,4 @@
-import type { NodeKind, OutputType } from "@clauderon/core";
+import { INPUT_TYPES, type NodeKind, type OutputType } from "@clauderon/core";
 
 // What the Flows page shows and decides, apart from React: one row per Flow,
 // the search and scope filters, and the short preview of a Flow's Nodes. Pure,
@@ -16,7 +16,7 @@ export type FlowRowView = {
   /** In run order; `step` groups the Nodes that can run side by side. */
   nodes: { name: string; kind: NodeKind; step: number }[];
   /** What the Flow starts from; an `issue` Flow starts from the Tickets page. */
-  inputType?: OutputType | null;
+  inputType: OutputType | null;
   /** The Member's name, or their email when they have none. Null for a sample nobody has changed since the seed. */
   updatedBy: string | null;
   /** "5 h ago", worked out on the server. */
@@ -68,3 +68,12 @@ export function flowSteps<T extends { step: number }>(nodes: readonly T[]): T[][
 }
 
 export const problemsLabel = (n: number) => `${n} problem${n === 1 ? "" : "s"}`;
+
+/**
+ * How a Flow without problems is started from the Flows list and the editor: the Start Run
+ * dialog for its Input, or the Tickets page for a Ticket Input. Null while it has problems.
+ */
+export function flowStart(inputType: OutputType | null | undefined, problems: number): "dialog" | "tickets" | null {
+  if (problems > 0 || !inputType || !(INPUT_TYPES as readonly string[]).includes(inputType)) return null;
+  return inputType === "issue" ? "tickets" : "dialog";
+}

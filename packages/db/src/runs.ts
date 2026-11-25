@@ -14,7 +14,8 @@ import {
 } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
-import { attempt, batch, flow, humanRequest, logChunk, member, output, machine, project, run, ticket } from "./schema";
+import type { SealedAttachment } from "./attachments";
+import { attempt, batch, flow, humanRequest, logChunk, member, output, machine, project, run, runAttachment, ticket } from "./schema";
 
 // Batches, Runs, Attempts, Outputs and logs (spec M1 §4, §5). The Gateway's
 // Run engine writes them; the web app reads them.
@@ -31,7 +32,7 @@ export type StartBatchInput = {
   extraInstructions: string;
   ticketIds: readonly string[];
   /** Runs without a Ticket, one per value of a Flow's non-issue Input; `ticketIds` is then empty. */
-  direct?: readonly { projectId: string; title: string; input: RunInput }[];
+  direct?: readonly { projectId: string; title: string; input: RunInput; attachments?: readonly SealedAttachment[] }[];
 };
 
 export type StartBatchResult =
@@ -115,7 +116,14 @@ export async function startBatch(db: Db, input: StartBatchInput, now: Date): Pro
           })
           .returning({ id: run.id });
         runIds.push(r!.id);
-        await recordAudit(tx, { actorEmail: input.starter.email, action: "run.start", subjectType: "run", subjectId: r!.id, detail: { projectId: direct.projectId, inputType: direct.input.type, batchId: b!.id } });
+        if (direct.attachments?.length) await tx.insert(runAttachment).values(direct.attachments.map((a) => ({ runId: r!.id, ...a })));
+        await recordAudit(tx, {
+          actorEmail: input.starter.email,
+          action: "run.start",
+          subjectType: "run",
+          subjectId: r!.id,
+          detail: { projectId: direct.projectId, inputType: direct.input.type, batchId: b!.id, ...(direct.attachments?.length ? { attachments: direct.attachments.map((a) => a.name) } : {}) },
+        });
       }
       return { ok: true, batchId: b!.id, runIds } as const;
     });
