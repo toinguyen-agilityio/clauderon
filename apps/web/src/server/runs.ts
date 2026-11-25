@@ -327,7 +327,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
       claudeNodes.map(async (id) => {
         // A deleted Flow leaves its Runs without one: no earlier Runs to compare.
         const earlier = run.run.flowId ? await nodeAttemptHistory(deps.db, run.run.flowId, id, runId) : [];
-        return [id, earlier.map((h) => historyEntry({ runId: h.runId, at: h.at, turns: h.turns ?? [] }))] as const;
+        return [id, earlier.map((h) => historyEntry({ runId: h.runId, at: h.at, turns: (h.turns ?? []).map(withCalls) }))] as const;
       }),
     ),
   );
