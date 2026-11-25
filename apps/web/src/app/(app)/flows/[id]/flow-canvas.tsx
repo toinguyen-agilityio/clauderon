@@ -80,6 +80,8 @@ type Props = {
   nodes: readonly CanvasNode[];
   edges: readonly CanvasEdge[];
   readOnly: boolean;
+  /** A fixed view (the Run page): the Flow is fitted to the canvas, at most at 100%, and cannot be panned or zoomed. */
+  fixed?: boolean;
   onSelect: (selection: Selection) => void;
   /** A drag of Nodes begins (once per gesture, before the first move). */
   onMoveStart?: () => void;
@@ -165,7 +167,7 @@ function sameMeasure(a: Measured | undefined, b: Measured) {
 export const isTyping = (target: EventTarget | null) => target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
 export function FlowCanvas(props: Props) {
-  const { nodes, edges, readOnly, ref } = props;
+  const { nodes, edges, readOnly, fixed = false, ref } = props;
   const uid = useId().replace(/:/g, "");
   const rootRef = useRef<HTMLDivElement>(null);
   const nodeEls = useRef(new Map<string, HTMLElement>());
@@ -226,13 +228,13 @@ export function FlowCanvas(props: Props) {
   }, []);
   const nodeRects = useCallback((): Rect[] => propsRef.current.nodes.flatMap((n) => nodeRect(n) ?? []), [nodeRect]);
 
-  // Fit the Flow into view once, when the Nodes have been measured.
+  // Fit the Flow into view once, when the Nodes have been measured; a fixed view fits again whenever it changes size.
   useEffect(() => {
-    if (fitted.current || size.w === 0) return;
+    if ((fitted.current && !fixed) || size.w === 0) return;
     if (nodes.length > 0 && measured.size < nodes.length) return;
     fitted.current = true;
-    setVp(fitBounds(boundsOf(nodeRects()), size));
-  }, [size, measured, nodes.length, nodeRects]);
+    setVp(fitBounds(boundsOf(nodeRects()), size, fixed ? 0.06 : undefined, fixed ? 1 : undefined));
+  }, [size, measured, nodes.length, nodeRects, fixed]);
 
   // Where the running animation ends, so quick repeated zooms add up instead of cancelling.
   const animTarget = useRef<Viewport | null>(null);
@@ -293,7 +295,7 @@ export function FlowCanvas(props: Props) {
   // --- the wheel: pinch or Ctrl/⌘ + wheel zooms, a plain wheel or two-finger scroll pans ---
   useEffect(() => {
     const el = rootRef.current;
-    if (!el) return;
+    if (!el || fixed) return;
     const onWheel = (event: WheelEvent) => {
       if ((event.target as HTMLElement).closest(".fc-overlay")) return;
       event.preventDefault();
@@ -312,7 +314,7 @@ export function FlowCanvas(props: Props) {
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [fixed]);
 
   const selectedIds = () => ({ nodes: new Set(propsRef.current.nodes.filter((n) => n.selected).map((n) => n.id)), edges: new Set(propsRef.current.edges.filter((e) => e.selected).map((e) => e.id)) });
 
@@ -346,7 +348,7 @@ export function FlowCanvas(props: Props) {
 
   const onBackgroundDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 && event.button !== 1) return;
-    if ((event.target as HTMLElement).closest(".fc-overlay")) return;
+    if ((event.target as HTMLElement).closest(".fc-overlay") || fixed) return;
     stopAnimation();
     rootRef.current?.focus({ preventScroll: true });
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -570,7 +572,7 @@ export function FlowCanvas(props: Props) {
 
   const far = vp.k < FAR_ZOOM;
   const dots = DOT_GAP * vp.k;
-  const rootClass = ["fc", far ? "far" : "", connecting ? "wiring" : "", gesture === "pan" ? "panning" : "", gesture === "drag" ? "dragging" : ""].filter(Boolean).join(" ");
+  const rootClass = ["fc", fixed ? "fixed" : "", far ? "far" : "", connecting ? "wiring" : "", gesture === "pan" ? "panning" : "", gesture === "drag" ? "dragging" : ""].filter(Boolean).join(" ");
 
   return (
     <HandleContext.Provider value={startConnect}>
@@ -579,7 +581,7 @@ export function FlowCanvas(props: Props) {
         className={rootClass}
         tabIndex={0}
         role="application"
-        aria-label="Flow canvas. Drag to pan, pinch or Ctrl and scroll to zoom, Shift and drag to select several Nodes."
+        aria-label={fixed ? "Flow canvas" : "Flow canvas. Drag to pan, pinch or Ctrl and scroll to zoom, Shift and drag to select several Nodes."}
         data-testid="flow-canvas-surface"
         style={{ backgroundSize: `${dots}px ${dots}px`, backgroundPosition: `${vp.x}px ${vp.y}px` } as CSSProperties}
         onPointerDown={onBackgroundDown}
@@ -701,6 +703,7 @@ export function FlowCanvas(props: Props) {
           {marquee && <div className="fc-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />}
         </div>
 
+        {!fixed && (
         <div className="fc-overlay fc-zoombar" role="toolbar" aria-label="Zoom" onPointerDown={(event) => event.stopPropagation()}>
           <button type="button" className="fc-ibtn" aria-label="Zoom out" title="Zoom out (−)" disabled={vp.k <= MIN_ZOOM + 1e-6} onClick={() => zoomBy(1 / 1.25)}>
             {FIcon.minus}
@@ -717,6 +720,7 @@ export function FlowCanvas(props: Props) {
           </button>
           {props.zoomBarExtra}
         </div>
+        )}
       </div>
     </HandleContext.Provider>
   );

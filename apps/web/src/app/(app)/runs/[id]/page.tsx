@@ -191,6 +191,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
         <RunLive
           gatewayUrl={gatewayUrl()}
           runId={r.id}
+          snapshot={run.snapshot}
           timeline={run.timeline}
           runEnded={r.endedAt !== null}
           retryable={run.retryable}
