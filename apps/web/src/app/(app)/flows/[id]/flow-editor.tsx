@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import {
   activeOutputs,
   canConnect as typesConnect,
+  isEntryKind,
   simulatedDelayMs,
   simulatedOutputs,
   validateFlow,
@@ -25,6 +26,8 @@ import { NODE_DRAG_TYPE, NodeLibrary } from "./node-library";
 import { NodePanel, type PlacementPatch } from "./node-panel";
 import { describeProblems, type ProblemFix, type ProblemView } from "./problem-hints";
 import { hasUnsavedChanges } from "./unsaved";
+import { flowStart } from "../flows-view";
+import { StartFlow } from "../start-flow";
 import { LeaveDialog } from "./leave-dialog";
 import { useLeaveGuard } from "./use-leave-guard";
 import { advanceTestRun, edgeStates, nodeStates, startTestRun, type TestRun } from "./test-run";
@@ -473,6 +476,9 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
 
   // Leaving with unsaved changes asks first.
   const unsaved = hasUnsavedChanges({ readOnly, graphChanged: dirty, name, savedName });
+  // Real Runs use the Flow as saved, so it starts only once saved without problems.
+  const inputType = doc.placements.map((p) => libById.get(p.nodeId)).find((l) => l && isEntryKind(l.kind))?.outputs[0]?.type;
+  const start = flowStart(inputType, problems.length);
   const leaveGuard = useLeaveGuard(unsaved);
 
   // --- keyboard shortcuts ---
@@ -690,6 +696,22 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
               {FIcon.play}
               <span>Test run</span>
             </button>
+          )}
+          {start === "dialog" && (
+            <StartFlow
+              flowId={data.flow.id}
+              name={savedName}
+              className="fe-btn"
+              icon={FIcon.play}
+              disabled={unsaved || running}
+              title={unsaved ? "Save first: a Run uses the Flow as saved." : "Start a real Run on your Machine."}
+            />
+          )}
+          {start === "tickets" && (
+            <Link className="fe-btn" href="/tickets" title="This Flow starts from Tickets: pick them on the Tickets page.">
+              {FIcon.play}
+              <span>Start from Tickets</span>
+            </Link>
           )}
           {!readOnly && (
             <button type="button" className="fe-btn primary" disabled={!canSave} onClick={() => void save()} title={`Save (${mod}S)`}>
