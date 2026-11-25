@@ -231,7 +231,7 @@ export function RunLive({
             {!isEntryKind(node.kind) &&
               view === "inspector" &&
               (node.kind === "agent" || node.kind === "grill" ? (
-                <NodeInspector inspector={attempt.inspector} />
+                <NodeInspector key={attempt.id} inspector={attempt.inspector} attemptState={attempt.state} />
               ) : (
                 <div className="empty card">
                   <b>No Claude session to inspect</b>

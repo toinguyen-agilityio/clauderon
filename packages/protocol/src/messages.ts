@@ -91,14 +91,21 @@ export const messageSchemas = {
   /** What an Agent Node did, one entry per turn (#105): sizes and names only. Older Agents never send it. */
   "node.turns": z.object({
     attemptId: z.string(),
+    // At most MAX_TURNS_PER_MESSAGE of @clauderon/core; a longer session is sent in several messages.
     turns: z
       .array(
         z.object({
           index: z.number().int().nonnegative(),
-          tool: z.string().max(64).nullable(),
-          // MAX_TARGET_LENGTH (120) plus the ellipsis; the Gateway keeps nothing longer.
-          target: z.string().max(121).nullable(),
-          resultBytes: z.number().int().nonnegative().nullable(),
+          calls: z
+            .array(
+              z.object({
+                tool: z.string().max(64),
+                // MAX_TARGET_LENGTH (120) plus the ellipsis; the Gateway keeps nothing longer.
+                target: z.string().max(121).nullable(),
+                resultBytes: z.number().int().nonnegative().nullable(),
+              }),
+            )
+            .max(64),
           newInput: z.number().int().nonnegative(),
           cacheCreated: z.number().int().nonnegative(),
           cacheRead: z.number().int().nonnegative(),

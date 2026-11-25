@@ -364,7 +364,10 @@ export class RunEngine {
   /** The per-turn summary of an Agent Node (#105). */
   async nodeTurns(payload: Payload<"node.turns">, machineId: string): Promise<void> {
     // Masked again here with the app's secrets, as a log line is (NFR-1).
-    const turns = payload.turns.map((t) => ({ ...t, tool: t.tool && this.hide(t.tool), target: t.target && this.hide(scrubTarget(t.tool, t.target)) }));
+    const turns = payload.turns.map((t) => ({
+      ...t,
+      calls: t.calls.map((c) => ({ ...c, tool: this.hide(c.tool), target: c.target && this.hide(scrubTarget(c.tool, c.target)) })),
+    }));
     await appendAttemptTurns(this.opts.db, payload.attemptId, machineId, turns);
   }
 

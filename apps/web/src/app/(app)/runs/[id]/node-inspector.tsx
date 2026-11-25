@@ -14,16 +14,32 @@ const SEGMENTS = [
   ["output", "Output", "var(--ok)"],
 ] as const;
 
+/** A turn's row label: its first call, and how many others it made at the same time. */
+function callLabel(calls: { tool: string; target: string | null }[]): string {
+  const [first] = calls;
+  if (!first) return "Answered";
+  return `${first.tool}${first.target ? ` ${first.target}` : ""}${calls.length > 1 ? ` +${calls.length - 1} more` : ""}`;
+}
+
 const bytes = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)} KB` : `${n} B`);
 
 /**
  * The Node inspector (#105): what an Agent or Grill Node did turn by turn and where its
  * tokens went, viewed after it finishes. Nothing here is applied by itself.
  */
-export function NodeInspector({ inspector }: { inspector: Inspected }) {
+export function NodeInspector({ inspector, attemptState }: { inspector: Inspected; attemptState: string }) {
   const [picked, setPicked] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const { summary, turns, findings, suggestions, history } = inspector;
+
+  if (!inspector.hasTurns && (attemptState === "running" || attemptState === "waiting_for_human")) {
+    return (
+      <div className="empty card">
+        <b>Available when this Node finishes</b>
+        Turns and tokens are reported once Claude has finished, not while it runs.
+      </div>
+    );
+  }
 
   if (!inspector.hasTurns) {
     const t = inspector.totalsOnly;
@@ -73,7 +89,7 @@ export function NodeInspector({ inspector }: { inspector: Inspected }) {
               <button type="button" className={`turn ${picked === t.index ? "on" : ""} ${highlighted.has(t.index) ? "hl" : ""}`} aria-pressed={picked === t.index} onClick={() => setPicked(picked === t.index ? null : t.index)}>
                 <span className="num faint">{t.index + 1}</span>
                 <span className="what mono">
-                  {t.tool ? `${t.tool}${t.target ? ` ${t.target}` : ""}` : "Answered"}
+                  {callLabel(t.calls)}
                   {flagged.has(t.index) && <span className="flag" title="Flagged below"> ●</span>}
                 </span>
                 <span className="bar" aria-hidden="true">
@@ -93,7 +109,18 @@ export function NodeInspector({ inspector }: { inspector: Inspected }) {
             </dd>
             <dt>Context at start</dt>
             <dd className="num">{tokens(turn.context)}</dd>
-            <dt>Tool result</dt>
+            <dt>Tool calls</dt>
+            <dd>
+              {turn.calls.length === 0 && <span className="faint">none</span>}
+              {turn.calls.map((c, i) => (
+                <div key={i} className="mono small">
+                  {c.tool}
+                  {c.target ? ` ${c.target}` : ""}
+                  <span className="faint"> · {c.resultBytes === null ? "no result" : bytes(c.resultBytes)}</span>
+                </div>
+              ))}
+            </dd>
+            <dt>Tool results</dt>
             <dd className="num">{turn.resultBytes === null ? "none" : bytes(turn.resultBytes)}</dd>
             <dt>Re-read by</dt>
             <dd className="num">{turn.resultBytes === null ? "—" : `${turn.rereads} later ${turn.rereads === 1 ? "turn" : "turns"}`}</dd>

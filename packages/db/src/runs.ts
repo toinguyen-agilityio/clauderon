@@ -482,13 +482,15 @@ export async function appendAttemptTurns(db: Db, attemptId: string, machineId: s
 }
 
 /**
- * Clears what the turns of old Attempts point at (NFR-5): the tool and sizes stay, so the history
- * rows still add up, but the targets, which can carry paths and command words, go with the logs.
+ * Clears what the tool calls of old Attempts point at (NFR-5): the tools and sizes stay, so the
+ * history rows still add up, but the targets, which can carry paths and command words, go with the logs.
  */
 export async function clearTurnTargetsBefore(db: Db, cutoff: Date): Promise<number> {
   const rows = await db
     .update(attempt)
-    .set({ turns: sql`(select jsonb_agg(jsonb_set(t, '{target}', 'null'::jsonb)) from jsonb_array_elements(${attempt.turns}) t)` })
+    .set({
+      turns: sql`(select jsonb_agg(jsonb_set(t, '{calls}', coalesce((select jsonb_agg(jsonb_set(c, '{target}', 'null'::jsonb)) from jsonb_array_elements(t->'calls') c), '[]'::jsonb))) from jsonb_array_elements(${attempt.turns}) t)`,
+    })
     .where(and(isNotNull(attempt.turns), lt(attempt.startedAt, cutoff), sql`${attempt.turns}::text like '%"target": "%'`))
     .returning({ id: attempt.id });
   return rows.length;
@@ -500,10 +502,10 @@ export async function clearTurnTargetsBefore(db: Db, cutoff: Date): Promise<numb
  */
 export async function nodeAttemptHistory(db: Db, flowId: string, flowNodeId: string, exceptRunId: string, limit = 10) {
   return db
-    .select({ runId: attempt.runId, at: attempt.startedAt, inputTokens: attempt.inputTokens, outputTokens: attempt.outputTokens, cacheReadTokens: attempt.cacheReadTokens, turns: attempt.turns })
+    .select({ runId: attempt.runId, at: attempt.startedAt, turns: attempt.turns })
     .from(attempt)
     .innerJoin(run, eq(run.id, attempt.runId))
-    .where(and(eq(run.flowId, flowId), eq(attempt.flowNodeId, flowNodeId), ne(attempt.runId, exceptRunId), eq(attempt.superseded, false), isNotNull(attempt.endedAt)))
+    .where(and(eq(run.flowId, flowId), eq(attempt.flowNodeId, flowNodeId), ne(attempt.runId, exceptRunId), eq(attempt.superseded, false), isNotNull(attempt.endedAt), isNotNull(attempt.turns)))
     .orderBy(desc(attempt.startedAt))
     .limit(limit);
 }

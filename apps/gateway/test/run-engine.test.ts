@@ -40,7 +40,7 @@ function succeedEverything(agent: FakeAgent, options: { pullRequest?: boolean; h
       a.send("node.log", { attemptId: run.attemptId, seq: 0, stream: "stdout", text: `running ${run.kind}` });
       if (run.kind === "agent") {
         a.send("node.usage", { attemptId: run.attemptId, inputTokens: 100, outputTokens: 20, cacheCreated: 30, cacheRead: 60 });
-        a.send("node.turns", { attemptId: run.attemptId, turns: [{ index: 0, tool: "Read", target: "a.ts", resultBytes: 400, newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }] });
+        a.send("node.turns", { attemptId: run.attemptId, turns: [{ index: 0, calls: [{ tool: "Read", target: "a.ts", resultBytes: 400 }], newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }] });
         a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { outputs: { summary: "Fixed it" } }, sessionId: "s1", headCommit: "c0ffee" });
       } else if (run.command === "clauderon-open-pr") {
         const result = options.pullRequest === false ? { tail: "no changes" } : { tail: "ok", pullRequest: { number: 77, url: "https://github.com/acme/web/pull/77" } };
@@ -87,7 +87,7 @@ describe("Run engine", () => {
     expect(attempts.map((a) => a.state)).toEqual(["succeeded", "succeeded", "succeeded", "succeeded"]);
     expect(attempts[0]!.outputs).toEqual([expect.objectContaining({ name: "issue", value: expect.objectContaining({ number: 411 }) })]);
     expect(attempts[1]).toMatchObject({ inputTokens: 100, outputTokens: 20, cacheCreationTokens: 30, cacheReadTokens: 60, claudeSessionId: "s1" });
-    expect(attempts[1]!.turns).toEqual([{ index: 0, tool: "Read", target: "a.ts", resultBytes: 400, newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }]);
+    expect(attempts[1]!.turns).toEqual([{ index: 0, calls: [{ tool: "Read", target: "a.ts", resultBytes: 400 }], newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }]);
     // Nodes that are not a Claude session have no turns.
     expect(attempts[2]!.turns).toBeNull();
 
@@ -477,7 +477,7 @@ describe("Node inspector data (#105)", () => {
       await flush();
     }
     const running = (await attemptsOfRun(db, start.runIds[0]!)).find((a) => a.state === "running")!;
-    const one = { index: 0, tool: "Read", target: "a.ts", resultBytes: null, newInput: 1, cacheCreated: 2, cacheRead: 3, output: 4 };
+    const one = { index: 0, calls: [{ tool: "Read", target: "a.ts", resultBytes: null }], newInput: 1, cacheCreated: 2, cacheRead: 3, output: 4 };
 
     expect(await appendAttemptTurns(db, running.id, "00000000-0000-4000-8000-000000000000", [one])).toBe(false);
     expect(await appendAttemptTurns(db, running.id, machine.id, [one])).toBe(true);
@@ -523,6 +523,10 @@ describe("Node inspector data (#105)", () => {
     const history = await nodeAttemptHistory(db, run.flowId!, code.flowNodeId, second);
     expect(history.map((h) => h.runId)).toEqual([first]);
     expect(history[0]!.turns).toHaveLength(1);
+
+    // An Attempt without turns (an older Agent, or from before the Inspector) is left out, not shown as zeros.
+    await db.update(schema.attempt).set({ turns: null }).where(sql`${schema.attempt.runId} = ${first}`);
+    expect(await nodeAttemptHistory(db, run.flowId!, code.flowNodeId, second)).toEqual([]);
   });
 });
 
@@ -539,7 +543,7 @@ describe("Retention of Inspector turns (#105, NFR-5)", () => {
     expect(await clearTurnTargetsBefore(db, new Date(clock.now().getTime() - 86_400_000))).toBe(0);
     expect(await clearTurnTargetsBefore(db, new Date(clock.now().getTime() + 86_400_000))).toBe(1);
     const after = (await attemptsOfRun(db, start.runIds[0]!)).find((a) => a.id === code.id)!;
-    expect(after.turns).toEqual([{ index: 0, tool: "Read", target: null, resultBytes: 400, newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }]);
+    expect(after.turns).toEqual([{ index: 0, calls: [{ tool: "Read", target: null, resultBytes: 400 }], newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }]);
     // Already cleared: nothing left to do.
     expect(await clearTurnTargetsBefore(db, new Date(clock.now().getTime() + 86_400_000))).toBe(0);
   });

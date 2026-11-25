@@ -1,4 +1,4 @@
-import { extractResultBlock, MAX_TARGET_LENGTH, scrubTarget, type Turn } from "@clauderon/core";
+import { extractResultBlock, MAX_CALLS_PER_TURN, MAX_TARGET_LENGTH, scrubTarget, type Call, type Turn } from "@clauderon/core";
 
 /**
  * Headless Claude Code (spec M0 §6). These are the expected flags; the M0
@@ -192,14 +192,15 @@ export class ClaudeErrorWatch {
 }
 
 /**
- * Builds the per-turn summary of an Agent Node (#105) from its parsed events: one
- * Turn per assistant API message, with the tokens of that call and the size of
- * its tool's result. Targets are masked, made relative to the worktree and truncated.
+ * Builds the per-turn summary of an Agent Node (#105) from its parsed events: one Turn per
+ * assistant API message, with the tokens of that call and one entry per tool call (Claude often
+ * makes several in parallel), each with the size of its result. Targets are scrubbed, masked,
+ * made relative to the worktree and truncated.
  */
 export class TurnRecorder {
   private readonly turnList: Turn[] = [];
   private readonly byMessage = new Map<string, Turn>();
-  private readonly byTool = new Map<string, Turn>();
+  private readonly byTool = new Map<string, Call>();
 
   constructor(
     private readonly hide: (text: string) => string,
@@ -212,7 +213,7 @@ export class TurnRecorder {
       // One API message can arrive as several events (one per content block): the same turn, latest usage.
       let turn = this.byMessage.get(m.id);
       if (!turn) {
-        turn = { index: this.turnList.length, tool: null, target: null, resultBytes: null, newInput: 0, cacheCreated: 0, cacheRead: 0, output: 0 };
+        turn = { index: this.turnList.length, calls: [], newInput: 0, cacheCreated: 0, cacheRead: 0, output: 0 };
         this.byMessage.set(m.id, turn);
         this.turnList.push(turn);
       }
@@ -220,27 +221,27 @@ export class TurnRecorder {
       turn.cacheCreated = m.cacheCreated;
       turn.cacheRead = m.cacheRead;
       turn.output = Math.max(turn.output, m.output);
-      const first = m.tools[0];
-      if (first && turn.tool === null) {
-        turn.tool = first.name;
-        turn.target = first.target === null ? null : this.target(first.name, first.target);
+      for (const tool of m.tools) {
+        if (this.byTool.has(tool.id) || turn.calls.length >= MAX_CALLS_PER_TURN) continue;
+        const call: Call = { tool: tool.name.slice(0, 64), target: tool.target === null ? null : this.target(tool.name, tool.target), resultBytes: null };
+        turn.calls.push(call);
+        this.byTool.set(tool.id, call);
       }
-      for (const tool of m.tools) this.byTool.set(tool.id, turn);
     }
     for (const r of event.toolResults ?? []) {
-      const turn = this.byTool.get(r.id);
-      if (turn) turn.resultBytes = (turn.resultBytes ?? 0) + r.bytes;
+      const call = this.byTool.get(r.id);
+      if (call) call.resultBytes = (call.resultBytes ?? 0) + r.bytes;
     }
   }
 
   /** The turns so far, in order. */
   turns(): Turn[] {
-    return this.turnList.map((t) => ({ ...t }));
+    return this.turnList.map((t) => ({ ...t, calls: t.calls.map((c) => ({ ...c })) }));
   }
 
   /**
-   * Paths stay (relative to the worktree); a command keeps only its first two words and a URL loses
-   * its credentials and query, since arguments are where secrets end up. Then masked and truncated.
+   * Paths stay (relative to the worktree); a command keeps only its program and subcommand and a
+   * URL loses its credentials and query, since arguments are where secrets end up. Then masked and truncated.
    */
   private target(tool: string, raw: string): string {
     let kept = scrubTarget(tool, raw);

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mask, tailLines } from "@clauderon/core";
+import { MAX_TURNS_PER_MESSAGE, mask, tailLines } from "@clauderon/core";
 import type { Payload } from "@clauderon/protocol";
 import { ClaudeErrorWatch, TurnRecorder, claudeCommand, claudeResult, parseClaudeLine } from "./claude";
 import { errorText, type AgentLink, type Log } from "./link";
@@ -248,7 +248,10 @@ export async function runNode(
       stdout.flush();
       stderr.flush();
       const turns = recorder.turns();
-      if (turns.length > 0) link.send("node.turns", { attemptId: run.attemptId, turns });
+      // A session longer than one message holds is sent in several; the Gateway appends and renumbers them.
+      for (let at = 0; at < turns.length; at += MAX_TURNS_PER_MESSAGE) {
+        link.send("node.turns", { attemptId: run.attemptId, turns: turns.slice(at, at + MAX_TURNS_PER_MESSAGE) });
+      }
       result = claudeResult(finalText);
       if (exitCode !== 0) error = hide(errors.reason(exitCode));
       // A Grill round whose session Claude no longer knows (spec M3 §2.2).

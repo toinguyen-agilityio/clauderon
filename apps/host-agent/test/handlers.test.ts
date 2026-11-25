@@ -348,9 +348,21 @@ describe("Agent Nodes (RUN-10, POD-12)", () => {
     const [sent] = link.of("node.turns");
     expect(sent).toEqual({
       attemptId: "att-1",
-      turns: [{ index: 0, tool: "Read", target: "a.ts", resultBytes: 20, newInput: 2, cacheCreated: 10, cacheRead: 100, output: 5 }],
+      turns: [{ index: 0, calls: [{ tool: "Read", target: "a.ts", resultBytes: 20 }], newInput: 2, cacheCreated: 10, cacheRead: 100, output: 5 }],
     });
     expect(JSON.stringify(sent)).not.toContain("secret file contents");
+  });
+
+  it("sends a session longer than one message holds in several, without losing a turn (#105)", async () => {
+    scriptGit(["h1", "h2"]);
+    const events = Array.from({ length: 2001 }, (_, i) =>
+      JSON.stringify({ type: "assistant", message: { id: `m${i}`, usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "." }] } }),
+    ).join("\n");
+    system.script(({ argv }) => (argv[2]?.startsWith("claude ") ? { stdout: `${events}\n` } : undefined));
+    await link.deliver("node.run", nodeRun({ kind: "agent", prompt: "p" }));
+
+    const sent = link.of("node.turns");
+    expect(sent.map((m) => m.turns.length)).toEqual([2000, 1]);
   });
 
   it("a failed Claude Code run with nothing to say falls back to the exit code", async () => {
