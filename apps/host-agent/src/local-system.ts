@@ -82,6 +82,19 @@ export function localSystem({ binDir, bash = findBash() }: { binDir: string; bas
       await writeFile(path, content);
     },
 
+    async writeBytes(path, data) {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, data);
+    },
+
+    async readBytes(path) {
+      try {
+        return await readFile(path);
+      } catch {
+        return null;
+      }
+    },
+
     async readFile(path) {
       try {
         return await readFile(path, "utf8");

@@ -327,7 +327,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
       claudeNodes.map(async (id) => {
         // A deleted Flow leaves its Runs without one: no earlier Runs to compare.
         const earlier = run.run.flowId ? await nodeAttemptHistory(deps.db, run.run.flowId, id, runId) : [];
-        return [id, earlier.map((h) => historyEntry({ runId: h.runId, at: h.at, turns: h.turns ?? [] }))] as const;
+        return [id, earlier.map((h) => historyEntry({ runId: h.runId, at: h.at, turns: (h.turns ?? []).map(withCalls) }))] as const;
       }),
     ),
   );
@@ -414,6 +414,18 @@ export async function viewRun(deps: AppDeps, runId: string) {
   };
 }
 
+/**
+ * Turns stored before each turn kept its tool calls (4054bbe) have one `tool`, `target` and
+ * `resultBytes` on the turn and no `calls`; read them as a turn with that one call.
+ */
+type StoredTurn = Omit<import("@clauderon/core").Turn, "calls"> & { calls?: import("@clauderon/core").Call[]; tool?: string | null; target?: string | null; resultBytes?: number | null };
+
+function withCalls(stored: import("@clauderon/core").Turn): import("@clauderon/core").Turn {
+  const { tool, target, resultBytes, calls, ...turn } = stored as StoredTurn;
+  if (calls) return { ...turn, calls };
+  return { ...turn, calls: tool ? [{ tool, target: target ?? null, resultBytes: resultBytes ?? null }] : [] };
+}
+
 type InspectedAttempt = { inputTokens: number | null; outputTokens: number | null; cacheCreationTokens: number | null; cacheReadTokens: number | null; turns: import("@clauderon/core").Turn[] | null };
 
 /**
@@ -422,14 +434,14 @@ type InspectedAttempt = { inputTokens: number | null; outputTokens: number | nul
  * suggestions come from the per-turn summary.
  */
 export function inspectorOf(a: InspectedAttempt, history: ReturnType<typeof historyEntry>[]) {
-  const turns = a.turns ?? [];
+  const turns = (a.turns ?? []).map(withCalls);
   const findings = findWaste(turns);
   const totalsOnly = a.inputTokens !== null || a.outputTokens !== null ? { input: a.inputTokens ?? 0, output: a.outputTokens ?? 0, cacheCreated: a.cacheCreationTokens, cacheRead: a.cacheReadTokens } : null;
   return {
     hasTurns: turns.length > 0,
     totalsOnly,
     summary: summarizeTurns(turns),
-    turns: turns.map((t) => ({ ...t, calls: t.calls ?? [], context: contextSize(t), resultBytes: resultBytesOf({ ...t, calls: t.calls ?? [] }), rereads: rereads(turns, t) })),
+    turns: turns.map((t) => ({ ...t, context: contextSize(t), resultBytes: resultBytesOf(t), rereads: rereads(turns, t) })),
     findings,
     suggestions: suggest(findings),
     history,

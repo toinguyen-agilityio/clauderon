@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ticketStatus, type OutputType, type RunInput } from "@clauderon/core";
-import { appendAttemptTurns, attemptsOfRun, buildFlowSnapshot, cancelRun, clearTurnTargetsBefore, getRun, listTicketsWithRuns, logChunksOf, nodeAttemptHistory, schema, sql, startBatch, type Db } from "@clauderon/db";
+import { appendAttemptTurns, attachmentsOfRun, retryRun, attemptsOfRun, buildFlowSnapshot, sealAttachment, cancelRun, clearTurnTargetsBefore, getRun, listTicketsWithRuns, logChunksOf, nodeAttemptHistory, schema, sql, startBatch, type Db } from "@clauderon/db";
 import type { FakeAgent } from "@clauderon/testing";
 import {
   createTestDatabase,
@@ -13,7 +13,7 @@ import {
   ticketRow,
   type TestDatabase,
 } from "@clauderon/testing";
-import { startGateway } from "./harness";
+import { SESSION_SECRET, startGateway } from "./harness";
 
 const TOKEN = "ann-machine-token";
 
@@ -113,7 +113,13 @@ describe("Run engine", () => {
   });
 
   describe("a Run without a Ticket", () => {
-    const startWithInput = async (ctx: Awaited<ReturnType<typeof setup>>, input: RunInput, output: { name: string; type: OutputType; optional: boolean }, toInput: string | null) => {
+    const startWithInput = async (
+      ctx: Awaited<ReturnType<typeof setup>>,
+      input: RunInput,
+      output: { name: string; type: OutputType; optional: boolean },
+      toInput: string | null,
+      files: { name: string; data: string }[] = [],
+    ) => {
       const flowId = await sampleFlowId(db);
       const base = (await buildFlowSnapshot(db, flowId))!;
       const entry = base.nodes.find((n) => n.kind === "input")!;
@@ -124,7 +130,7 @@ describe("Run engine", () => {
       };
       const start = await startBatch(
         db,
-        { flowId, flowSnapshot, starter: ctx.member, machineId: ctx.machine.id, extraInstructions: "", ticketIds: [], direct: [{ projectId: ctx.project.id, title: "Do the plan", input }] },
+        { flowId, flowSnapshot, starter: ctx.member, machineId: ctx.machine.id, extraInstructions: "", ticketIds: [], direct: [{ projectId: ctx.project.id, title: "Do the plan", input, attachments: files.map((f) => sealAttachment({ name: f.name, data: Buffer.from(f.data) }, SESSION_SECRET)) }] },
         ctx.clock.now(),
       );
       if (!start.ok) throw new Error("start failed");
@@ -143,6 +149,59 @@ describe("Run engine", () => {
       expect(code!.prompt).toContain("## plan\n\nAdd a retry");
       expect(pr!.env).toMatchObject({ CLAUDERON_TITLE: "Do the plan", CLAUDERON_BASE: "main" });
       expect(pr!.env).not.toHaveProperty("CLAUDERON_ISSUE_NUMBER");
+    });
+
+    describe("with attached files (ADR 0011)", () => {
+      const plan = { type: "plan", value: "Read the spec" } as const;
+      const planOutput = { name: "plan", type: "plan", optional: false } as const;
+      const files = [{ name: "spec.pdf", data: "%PDF" }];
+      const agentVersion = (version: string) => db.update(schema.machine).set({ agentVersion: version });
+
+      it("names the files in the Workspace, clears their contents once delivered and has each Node check them", async () => {
+        const ctx = await setup();
+        await agentVersion("0.6.0+abc");
+        succeedEverything(ctx.agent);
+        ctx.agent.respond("workspace.prepare", ({ runId, attachments }, a) => a.send("workspace.ready", { runId, worktreePath: `/w/${runId}`, attachments: attachments?.length }));
+        const run = await startWithInput(ctx, plan, planOutput, "plan", files);
+
+        expect(run.state).toBe("succeeded");
+        const [stored] = await attachmentsOfRun(db, run.id);
+        expect(stored).toMatchObject({ name: "spec.pdf", size: 4, delivered: true });
+        const [prepare] = ctx.agent.of("workspace.prepare");
+        expect(prepare!.attachments).toEqual([{ id: stored!.id, name: "spec.pdf", size: 4, sha256: stored!.sha256 }]);
+        for (const node of ctx.agent.of("node.run")) expect(node.attachments).toEqual([{ name: "spec.pdf", sha256: stored!.sha256 }]);
+        const [row] = await db.select().from(schema.runAttachment);
+        expect(row!.sealed).toBeNull();
+      });
+
+      it("fails the Run when its Agent is too old to download them", async () => {
+        const ctx = await setup();
+        await agentVersion("0.5.0+abc");
+        succeedEverything(ctx.agent);
+        const run = await startWithInput(ctx, plan, planOutput, "plan", files);
+        expect(run).toMatchObject({ state: "failed", failureReason: expect.stringContaining("then Retry the Run") });
+        expect(ctx.agent.of("workspace.prepare")).toHaveLength(0);
+        expect((await attachmentsOfRun(db, run.id))[0]!.delivered).toBe(false);
+
+        // Updated, a Retry gets the files: they were never delivered.
+        await agentVersion("0.6.0+abc");
+        ctx.agent.respond("workspace.prepare", ({ runId, attachments }, a) => a.send("workspace.ready", { runId, worktreePath: `/w/${runId}`, attachments: attachments?.length }));
+        const entry = (run.flowSnapshot as { nodes: { id: string; kind: string }[] }).nodes.find((n) => n.kind === "input")!;
+        expect(await retryRun(db, run.id, entry.id, "", ctx.member.email, ctx.clock.now())).toMatchObject({ ok: true });
+        await ctx.gateway.engine.schedule(ctx.machine.id);
+        await ctx.flush();
+        expect(await getRun(db, run.id)).toMatchObject({ state: "succeeded" });
+        expect((await attachmentsOfRun(db, run.id))[0]!.delivered).toBe(true);
+      });
+
+      it("fails the Run when the Agent did not write every file", async () => {
+        const ctx = await setup();
+        await agentVersion("0.6.0+abc");
+        succeedEverything(ctx.agent);
+        const run = await startWithInput(ctx, plan, planOutput, "plan", files);
+        expect(run).toMatchObject({ state: "failed", failureReason: "Workspace: the attached files did not reach your Machine." });
+        expect(ctx.agent.of("node.run")).toHaveLength(0);
+      });
     });
 
     it("makes the Run's own branch from a branch Input", async () => {

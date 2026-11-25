@@ -56,8 +56,11 @@ export const messageSchemas = {
     repo: z.string(),
     baseBranch: z.string(),
     branch: z.string(),
+    /** Files to download from `GET <gateway>/agent/attachments/<id>` into the worktree (ADR 0011). */
+    attachments: z.array(z.object({ id: z.string(), name: z.string(), size: z.number().int(), sha256: z.string() })).optional(),
   }),
-  "workspace.ready": z.object({ runId: z.string(), worktreePath: z.string() }),
+  /** `attachments`: how many attached files the Agent wrote and checked. */
+  "workspace.ready": z.object({ runId: z.string(), worktreePath: z.string(), attachments: z.number().int().optional() }),
   "workspace.failed": z.object({ runId: z.string(), error: z.string() }),
   /** A Run ended Succeeded or Cancelled (RUN-14): remove its worktree and local branch; the pushed branch stays on GitHub. */
   "workspace.cleanup": z.object({ runId: z.string(), worktreePath: z.string(), owner: z.string(), repo: z.string(), branch: z.string() }),
@@ -72,6 +75,8 @@ export const messageSchemas = {
     command: z.string().optional(),
     resumeSessionId: z.string().optional(),
     env: z.record(z.string(), z.string()),
+    /** The Run's attached files, which must still be in the worktree (ADR 0011). */
+    attachments: z.array(z.object({ name: z.string(), sha256: z.string() })).optional(),
   }),
   "node.log": z.object({
     attemptId: z.string(),

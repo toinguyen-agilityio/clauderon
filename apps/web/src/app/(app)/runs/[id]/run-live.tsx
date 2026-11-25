@@ -2,16 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { isEntryKind } from "@clauderon/core";
+import { isEntryKind, type FlowSnapshot } from "@clauderon/core";
 import { duration, formatTime, tokens } from "../../../../components/format";
 import { useGatewaySocket } from "../../../../components/gateway-socket";
-import { Icon } from "../../../../components/icons";
 import { HumanForm } from "../../../../components/human-form";
 import { OutputValue } from "../../../../components/output-value";
 import { MarkdownBody, MarkdownText } from "../../../../components/markdown-text";
 import { OType, StatePill } from "../../../../components/state-pill";
 import type { viewRun } from "../../../../server/runs";
 import { NodeInspector } from "./node-inspector";
+import { currentNodeId } from "./run-diagram";
+import { RunDiagram } from "./run-flow-diagram";
 import { RetryFromHere } from "./retry-run";
 
 type Timeline = Exclude<Awaited<ReturnType<typeof viewRun>>, "not-found">["timeline"];
@@ -43,6 +44,7 @@ function classify(line: Line): string {
 export function RunLive({
   gatewayUrl,
   runId,
+  snapshot,
   timeline,
   runEnded,
   retryable,
@@ -50,6 +52,8 @@ export function RunLive({
 }: {
   gatewayUrl: string;
   runId: string;
+  /** The Flow as it was when the Run started, drawn above the Node's details. */
+  snapshot: FlowSnapshot;
   timeline: Timeline;
   runEnded: boolean;
   /** Failed or Interrupted: every Node offers Retry from here (spec M3 §4). */
@@ -59,10 +63,8 @@ export function RunLive({
 }) {
   const router = useRouter();
   const socket = useGatewaySocket(gatewayUrl);
-  const current =
-    timeline.find((n) => n.state === "running") ??
-    timeline.find((n) => n.state === "waiting_for_human") ??
-    timeline.find((n) => n.state === "failed" || n.state === "interrupted") ?? [...timeline].reverse().find((n) => n.attempts.length > 0) ?? timeline[0];
+  const currentId = currentNodeId(timeline);
+  const current = timeline.find((n) => n.id === currentId);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const node = timeline.find((n) => n.id === selectedId) ?? current;
   const [attemptPick, setAttemptPick] = useState<Record<string, string>>({});
@@ -113,11 +115,7 @@ export function RunLive({
 
   return (
     <div className="run-grid">
-      <div className="card nodes" role="list" aria-label="Nodes">
-        {timeline.map((n) => (
-          <NodeRow key={n.id} node={n} on={n.id === node.id} onSelect={() => setSelectedId(n.id)} />
-        ))}
-      </div>
+      <RunDiagram snapshot={snapshot} timeline={timeline} selectedId={node.id} onSelect={setSelectedId} />
 
       <div className="stack" style={{ minWidth: 0, gap: 16 }}>
         <div>
@@ -330,27 +328,5 @@ function Round({ round }: { round: RoundView }) {
       )}
       {!response && round.kind === "approve" && <span className="small faint">Waiting for Approve or Reject…</span>}
     </>
-  );
-}
-
-function NodeRow({ node, on, onSelect }: { node: TimelineNode; on: boolean; onSelect: () => void }) {
-  const icon = node.state === "succeeded" ? Icon.check : node.state === "failed" || node.state === "interrupted" ? Icon.x : node.state === "running" ? Icon.spin : null;
-  const [, kindLabel] = KIND[node.kind] ?? ["?", node.kind];
-  return (
-    <button type="button" role="listitem" className={`node-row ${on ? "on" : ""}`} aria-current={on} onClick={onSelect}>
-      <span className={`ndot ${node.state}`} aria-label={node.state}>
-        {icon}
-      </span>
-      <span style={{ minWidth: 0 }}>
-        <span className="nm">{node.name}</span>
-        <span className="meta">
-          {kindLabel}
-          {node.attempts.length > 1 && ` · ${node.attempts.length} Attempts`}
-          {node.state === "not reached" && " · not reached"}
-          {node.state === "waiting_for_human" && " · waiting for a person"}
-        </span>
-      </span>
-      <span className="meta num">{node.state === "running" ? "…" : node.durationMs !== null ? duration(node.durationMs) : ""}</span>
-    </button>
   );
 }

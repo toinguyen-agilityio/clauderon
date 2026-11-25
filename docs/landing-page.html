@@ -262,7 +262,7 @@ footer a:hover { color: var(--text); }
       </div>
       <div class="meta">
         <span><span lang="en">Windows · macOS · Linux · runs on your own computer</span><span lang="vi">Windows · macOS · Linux · chạy trên máy của bạn</span></span>
-        <span class="chip"><span lang="en">Latest release: v0.6.0</span><span lang="vi">Bản mới nhất: v0.6.0</span></span>
+        <span class="chip"><span lang="en">Latest release: v0.7.0</span><span lang="vi">Bản mới nhất: v0.7.0</span></span>
       </div>
     </div>
     <div>
@@ -347,6 +347,7 @@ footer a:hover { color: var(--text); }
       <div class="f"><div class="top"><b><span lang="en">Each Ticket gets its own copy of the code</span><span lang="vi">Mỗi Ticket có bản sao mã riêng</span></b><span class="pill ok"><span lang="en">Ready</span><span lang="vi">Đã xong</span></span></div><p><span lang="en">Claude never works in your own folders. Several Runs cannot step on each other.</span><span lang="vi">Claude không bao giờ làm việc trong thư mục của bạn. Nhiều Run không giẫm lên nhau.</span></p></div>
       <div class="f"><div class="top"><b><span lang="en">Retry, cancel, and recover</span><span lang="vi">Thử lại, hủy và phục hồi</span></b><span class="pill ok"><span lang="en">Ready</span><span lang="vi">Đã xong</span></span></div><p><span lang="en">If a step fails, retry from the step you choose. If your computer goes offline, the Run is marked as interrupted.</span><span lang="vi">Nếu một bước lỗi, thử lại từ bước bạn chọn. Nếu máy mất kết nối, Run được đánh dấu là bị gián đoạn.</span></p></div>
       <div class="f"><div class="top"><b><span lang="en">Watch it live</span><span lang="vi">Xem trực tiếp</span></b><span class="pill ok"><span lang="en">Ready</span><span lang="vi">Đã xong</span></span></div><p><span lang="en">Live progress with secrets hidden, plus how much Claude was used for each Run.</span><span lang="vi">Tiến độ trực tiếp với thông tin bí mật được ẩn, kèm mức Claude đã dùng cho mỗi Run.</span></p></div>
+      <div class="f"><div class="top"><b><span lang="en">See what each Claude step did</span><span lang="vi">Xem mỗi bước Claude đã làm gì</span></b><span class="pill need"><span lang="en">Partly ready</span><span lang="vi">Xong một phần</span></span></div><p><span lang="en">An Inspector tab shows each move, where usage was wasted and wording to teach Claude, which you copy by hand. Adding it to a Flow in one click is not built yet.</span><span lang="vi">Tab Inspector cho thấy từng việc, chỗ lãng phí và câu chữ để dạy Claude, bạn tự sao chép. Thêm vào Flow chỉ bằng một cú nhấp thì chưa có.</span></p></div>
     </div>
   </div>
 
@@ -371,8 +372,6 @@ footer a:hover { color: var(--text); }
   <div class="group" id="g-soon">
     <h3><span lang="en">Still to come</span><span lang="vi">Sắp tới</span></h3>
     <div class="feat">
-      <div class="f"><div class="top"><b><span lang="en">See the Claude sessions your teammates run themselves</span><span lang="vi">Xem các phiên Claude đồng đội tự chạy</span></b><span class="pill soon"><span lang="en">Planned</span><span lang="vi">Dự kiến</span></span></div><p><span lang="en">Titles and status only, no conversation content.</span><span lang="vi">Chỉ có tiêu đề và trạng thái, không có nội dung hội thoại.</span></p></div>
-      <div class="f"><div class="top"><b><span lang="en">A tab for running sessions and token use</span><span lang="vi">Tab quản lý phiên đang chạy và lượng token</span></b><span class="pill soon"><span lang="en">Planned</span><span lang="vi">Dự kiến</span></span></div><p><span lang="en">See where Claude usage goes and stop a session that wastes it.</span><span lang="vi">Biết lượng dùng Claude đi đâu và dừng phiên gây lãng phí.</span></p></div>
       <div class="f"><div class="top"><b><span lang="en">A desktop app</span><span lang="vi">Ứng dụng máy tính</span></b><span class="pill soon"><span lang="en">Under discussion</span><span lang="vi">Đang thảo luận</span></span></div><p><span lang="en">One install instead of a browser tab plus a helper. The team is still discussing it.</span><span lang="vi">Một lần cài thay cho tab trình duyệt cộng chương trình hỗ trợ. Nhóm vẫn đang thảo luận.</span></p></div>
     </div>
   </div>
@@ -428,6 +427,18 @@ footer a:hover { color: var(--text); }
   <p class="sub"><span lang="en">Newest first. Written for people who use Clauderon, not for developers.</span><span lang="vi">Mới nhất ở trên. Viết cho người dùng Clauderon, không phải cho lập trình viên.</span></p>
 
   <div class="rel">
+    <article>
+      <header><h3>v0.7.0</h3><span class="date">2026-11-25</span></header>
+      <p class="intro"><span lang="en">You can now see what each Claude step did and where its usage went, so you can make steps cheaper.</span><span lang="vi">Giờ bạn xem được mỗi bước Claude đã làm gì và lượng dùng đi đâu, để làm các bước rẻ hơn.</span></p>
+      <h4><span lang="en">New</span><span lang="vi">Mới</span></h4>
+      <ul>
+        <li><span lang="en">An Inspector tab on the Run page, next to the Log, for steps that run Claude. It lists what Claude did one move at a time, which files it read and which commands it ran, and how much usage each move took.</span><span lang="vi">Tab Inspector trên trang Run, cạnh Log, cho các bước chạy Claude. Nó liệt kê từng việc Claude đã làm, những file đã đọc và lệnh đã chạy, cùng lượng dùng của mỗi việc.</span></li>
+        <li><span lang="en">It points out where usage was wasted, such as the same file read again and again or a very long command output, and suggests wording you can copy to teach Claude.</span><span lang="vi">Nó chỉ ra chỗ lãng phí, như đọc đi đọc lại cùng một file hay kết quả lệnh quá dài, và gợi ý câu chữ bạn có thể sao chép để dạy Claude.</span></li>
+        <li><span lang="en">The same step in earlier Runs is listed too, so you can see whether a change helped.</span><span lang="vi">Cùng bước đó ở các Run trước cũng được liệt kê, để bạn thấy thay đổi có hiệu quả không.</span></li>
+      </ul>
+      <p class="foot"><span lang="en">Nothing to do on your computer: its helper updates itself. Runs started before this release show totals only. No breaking changes.</span><span lang="vi">Bạn không cần làm gì trên máy: chương trình hỗ trợ tự cập nhật. Các Run bắt đầu trước bản này chỉ hiện tổng. Không có thay đổi gây lỗi.</span></p>
+    </article>
+
     <article>
       <header><h3>v0.6.0</h3><span class="date">2026-11-24</span></header>
       <p class="intro"><span lang="en">The Operator now sets the GitHub access key right in the app, and you can start Runs from pull requests. Claude's answers are easier to read.</span><span lang="vi">Operator giờ đặt khóa truy cập GitHub ngay trong ứng dụng, và bạn có thể bắt đầu Run từ các pull request. Câu trả lời của Claude dễ đọc hơn.</span></p>
@@ -523,7 +534,7 @@ footer a:hover { color: var(--text); }
     <details><summary><span lang="en">Does Clauderon see my Claude login?</span><span lang="vi">Clauderon có thấy thông tin đăng nhập Claude của tôi không?</span></summary><p><span lang="en">No. It only checks that you are logged in. It never reads, stores or sends your login.</span><span lang="vi">Không. Nó chỉ kiểm tra bạn đã đăng nhập chưa. Nó không bao giờ đọc, lưu hay gửi thông tin đăng nhập của bạn.</span></p></details>
     <details><summary><span lang="en">Is it safe to run?</span><span lang="vi">Chạy nó có an toàn không?</span></summary><p><span lang="en">Claude works in its own copy of the project, but it is not locked in a sandbox: it has the same permissions you have. Use it with repositories you trust.</span><span lang="vi">Claude làm việc trong bản sao riêng của dự án, nhưng không bị nhốt trong sandbox: nó có cùng quyền với bạn. Hãy dùng với các repository bạn tin tưởng.</span></p></details>
     <details><summary><span lang="en">What if a step fails?</span><span lang="vi">Nếu một bước bị lỗi thì sao?</span></summary><p><span lang="en">The Run stops and waits. Someone retries from the step they choose, and that step is told why the last try failed.</span><span lang="vi">Run dừng lại và chờ. Một người thử lại từ bước họ chọn, và bước đó được cho biết vì sao lần trước lỗi.</span></p></details>
-    <details><summary><span lang="en">What is not built yet?</span><span lang="vi">Cái gì chưa làm xong?</span></summary><p><span lang="en">Seeing the Claude sessions teammates run themselves, a tab for running sessions and token use, a full "describe it, get a Flow" builder, and a desktop app. See "Still to come" above.</span><span lang="vi">Xem các phiên Claude đồng đội tự chạy, tab quản lý phiên và lượng token, trình tạo Flow "mô tả là có", và ứng dụng máy tính. Xem mục "Sắp tới" ở trên.</span></p></details>
+    <details><summary><span lang="en">What is not built yet?</span><span lang="vi">Cái gì chưa làm xong?</span></summary><p><span lang="en">Adding the Inspector's suggestions to a Flow in one click, a full "describe it, get a Flow" builder, and a desktop app. See "Still to come" above.</span><span lang="vi">Thêm gợi ý của Inspector vào Flow chỉ bằng một cú nhấp, trình tạo Flow "mô tả là có", và ứng dụng máy tính. Xem mục "Sắp tới" ở trên.</span></p></details>
   </div>
   <footer>
     <span lang="en">Want more depth?</span><span lang="vi">Muốn biết sâu hơn?</span>

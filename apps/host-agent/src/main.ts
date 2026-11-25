@@ -10,7 +10,7 @@ import { systemClock } from "@clauderon/core";
 import type { DoctorReport } from "@clauderon/protocol";
 import { Agent } from "./agent";
 import { runDoctor } from "./doctor";
-import { checkGateway, type GatewayCheck } from "./gateway-check";
+import { attachmentDownloader, checkGateway, type GatewayCheck } from "./gateway-check";
 import { findBash, localSystem } from "./local-system";
 import { checkLogins, registerLoginHandlers, type LoginHooks, type Logins } from "./logins";
 import { registerDraftHandlers } from "./drafts";
@@ -220,7 +220,7 @@ async function runCommand(): Promise<void> {
   };
 
   registerLoginHandlers(agent, system, hooks);
-  registerWorkspaceHandlers(agent, system, { home, log });
+  registerWorkspaceHandlers(agent, system, { home, log, download: attachmentDownloader(process.env.GATEWAY_URL ?? paired.gatewayUrl, paired.token) });
   nodes = registerNodeHandlers(agent, system, { log, knownSecrets: [paired.token], home });
   drafts = registerDraftHandlers(agent, system, { log, knownSecrets: [paired.token], home });
 

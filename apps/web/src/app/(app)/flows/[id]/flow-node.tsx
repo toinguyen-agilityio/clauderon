@@ -8,6 +8,20 @@ import { CanvasHandle, type HandleType } from "./flow-canvas";
 import { FIcon, kindIcon } from "./flow-icons";
 import type { PreviewNodeState } from "./test-run";
 
+/** What a Node shows: a Test run's states, and the ones a real Run adds (#189). */
+export type NodeRunState = PreviewNodeState | "failed" | "interrupted" | "cancelled" | "not reached";
+
+const STATE_LABEL: Record<NodeRunState, string> = {
+  queued: "Queued",
+  running: "Running",
+  waiting: "Waiting for a person",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  interrupted: "Interrupted",
+  cancelled: "Cancelled",
+  "not reached": "Not reached",
+};
+
 // One Node on the canvas: a card with its title, its kind and its ports (handles on the
 // edges, with their names), a toolbar above it while it is the only one selected,
 // and "+" buttons on its sides to add the step before or after it.
@@ -40,7 +54,9 @@ type Props = {
   missingInputs?: ReadonlySet<string>;
   /** Briefly highlighted, after picking its problem from the list. */
   flash?: boolean;
-  runState?: PreviewNodeState;
+  runState?: NodeRunState;
+  /** A short line under the title, such as how long a real Run's Node took. */
+  caption?: string;
   /** The Output Type traced from the legend: ports of other types fade. */
   trace?: OutputType | null;
   wire: WireFrom | null;
@@ -50,7 +66,7 @@ type Props = {
   onAdd: (side: "next" | "prev") => void;
 };
 
-export function NodeView({ id, lib, placement, selected, focused, readOnly, problems, missingInputs, flash, runState, trace, wire, renaming, onRename, onAction, onAdd }: Props) {
+export function NodeView({ id, lib, placement, selected, focused, readOnly, problems, missingInputs, flash, runState, caption, trace, wire, renaming, onRename, onAction, onAdd }: Props) {
   const title = placement.label || lib.name;
   const pill = isEntryKind(lib.kind);
   const dim = wire !== null && wire.nodeId !== id && !acceptsWire(id, lib, placement, wire);
@@ -83,9 +99,9 @@ export function NodeView({ id, lib, placement, selected, focused, readOnly, prob
             {FIcon.alert}
           </span>
         )}
-        {runState && runState !== "queued" && (
-          <span className={`fnode-state ${runState}`} aria-label={runState === "waiting" ? "Waiting for a person" : runState === "running" ? "Running" : "Succeeded"}>
-            {runState === "succeeded" ? FIcon.check : runState === "waiting" ? FIcon.pause : <span className="fnode-spin" />}
+        {runState && runState !== "queued" && runState !== "not reached" && (
+          <span className={`fnode-state ${runState}`} aria-label={STATE_LABEL[runState]}>
+            {runState === "succeeded" ? FIcon.check : runState === "waiting" ? FIcon.pause : runState === "failed" || runState === "cancelled" ? FIcon.close : runState === "interrupted" ? FIcon.alert : <span className="fnode-spin" />}
           </span>
         )}
       </div>
@@ -93,6 +109,7 @@ export function NodeView({ id, lib, placement, selected, focused, readOnly, prob
       {!pill && (
         <div className="fnode-meta">
           <span className="fnode-kind">{KIND_LABEL[lib.kind] ?? lib.kind}</span>
+          {caption && <span className="fnode-caption">{caption}</span>}
           {placement.label && placement.label !== lib.name && <span className="fnode-lib">{lib.name}</span>}
           {placement.extraInstructions.trim() && (
             <span className="fnode-note" title="Has extra instructions">

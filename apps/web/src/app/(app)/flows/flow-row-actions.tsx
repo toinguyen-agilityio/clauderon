@@ -4,15 +4,16 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { closeOnBackdrop } from "../../../components/dialog";
 import { Icon } from "../../../components/icons";
-import { deleteRunsNote } from "./flows-view";
+import { deleteRunsNote, type flowStart } from "./flows-view";
+import { StartFlow } from "./start-flow";
 import { exportFlowAction, flowActionAction, type FlowFormState } from "./actions";
 
 /**
- * Clone, Export and Delete on one Flow, samples included (FLW-8, FLW-9), as quiet icon buttons whose
+ * Start (when the Flow can start), Clone, Export and Delete on one Flow, samples included (FLW-8, FLW-9), as quiet icon buttons whose
  * name shows on hover; the row itself opens the Flow. Delete asks in a dialog first; a Flow that an Active Run locks cannot be deleted,
  * and says why. Ended Runs stay in the history.
  */
-export function FlowRowActions({ flowId, name, locked, runCount }: { flowId: string; name: string; locked: boolean; runCount: number }) {
+export function FlowRowActions({ flowId, name, locked, runCount, start }: { flowId: string; name: string; locked: boolean; runCount: number; start: ReturnType<typeof flowStart> }) {
   const runsNote = deleteRunsNote(runCount);
   const [state, action, pending] = useActionState<FlowFormState, FormData>(flowActionAction, { error: null, notice: null, openFlowId: null });
   const confirm = useRef<HTMLDialogElement>(null);
@@ -61,54 +62,63 @@ export function FlowRowActions({ flowId, name, locked, runCount }: { flowId: str
 
   return (
     <div className="flow-actions">
-      <form action={action} className="row" style={{ gap: 6 }}>
-        <input type="hidden" name="flowId" value={flowId} />
-        <button type="submit" name="action" value="clone" className="btn sm icon ghost" disabled={pending} aria-label={`Clone ${name}`} data-tip="Clone">
-          {Icon.copy}
-        </button>
-        <button type="button" className="btn sm icon ghost" disabled={exporting} aria-label={`Export ${name}`} data-tip={exporting ? "Exporting…" : "Export"} onClick={() => void exportFlow()}>
-          {exporting ? Icon.spin : Icon.download}
-        </button>
-        <button
-          type="button"
-          className="btn sm icon ghost danger-hover"
-          disabled={pending || locked}
-          aria-label={`Delete ${name}`}
-          data-tip={locked ? "Locked by an Active Run" : "Delete"}
-          onClick={() => confirm.current?.showModal()}
-        >
-          {Icon.trash}
-        </button>
+      {/* Outside the form, so Enter in the Start dialog cannot submit Clone. */}
+      <div className="row" style={{ gap: 6 }}>
+        {start === "dialog" && <StartFlow flowId={flowId} name={name} className="btn sm icon ghost" iconOnly />}
+        {start === "tickets" && (
+          <Link href="/tickets" className="btn sm icon ghost" aria-label={`Start ${name} from Tickets`} data-tip="Start from Tickets">
+            {Icon.play}
+          </Link>
+        )}
+        <form action={action} className="row" style={{ gap: 6 }}>
+          <input type="hidden" name="flowId" value={flowId} />
+          <button type="submit" name="action" value="clone" className="btn sm icon ghost" disabled={pending} aria-label={`Clone ${name}`} data-tip="Clone">
+            {Icon.copy}
+          </button>
+          <button type="button" className="btn sm icon ghost" disabled={exporting} aria-label={`Export ${name}`} data-tip={exporting ? "Exporting…" : "Export"} onClick={() => void exportFlow()}>
+            {exporting ? Icon.spin : Icon.download}
+          </button>
+          <button
+            type="button"
+            className="btn sm icon ghost danger-hover"
+            disabled={pending || locked}
+            aria-label={`Delete ${name}`}
+            data-tip={locked ? "Locked by an Active Run" : "Delete"}
+            onClick={() => confirm.current?.showModal()}
+          >
+            {Icon.trash}
+          </button>
 
-        <dialog ref={confirm} {...closeOnBackdrop} className="modal narrow" aria-labelledby={`del-${flowId}`}>
-          <div className="modal-in">
-            <div className="modal-h">
-              <h2 id={`del-${flowId}`}>Delete Flow?</h2>
-              <button type="button" className="btn ghost sm" aria-label="Close" onClick={() => confirm.current?.close()}>
-                {Icon.x}
-              </button>
-            </div>
-            <div className="modal-b">
-              <p className="small">
-                <b>{name}</b> will be deleted. This cannot be undone.
-              </p>
-              {runsNote && (
-                <p className="small faint" data-testid="delete-runs-note">
-                  {runsNote}
+          <dialog ref={confirm} {...closeOnBackdrop} className="modal narrow" aria-labelledby={`del-${flowId}`}>
+            <div className="modal-in">
+              <div className="modal-h">
+                <h2 id={`del-${flowId}`}>Delete Flow?</h2>
+                <button type="button" className="btn ghost sm" aria-label="Close" onClick={() => confirm.current?.close()}>
+                  {Icon.x}
+                </button>
+              </div>
+              <div className="modal-b">
+                <p className="small">
+                  <b>{name}</b> will be deleted. This cannot be undone.
                 </p>
-              )}
+                {runsNote && (
+                  <p className="small faint" data-testid="delete-runs-note">
+                    {runsNote}
+                  </p>
+                )}
+              </div>
+              <div className="modal-f">
+                <button type="button" className="btn" disabled={pending} autoFocus onClick={() => confirm.current?.close()}>
+                  Keep it
+                </button>
+                <button type="submit" name="action" value="delete" className="btn danger solid" disabled={pending}>
+                  {pending ? "Deleting…" : "Delete Flow"}
+                </button>
+              </div>
             </div>
-            <div className="modal-f">
-              <button type="button" className="btn" disabled={pending} autoFocus onClick={() => confirm.current?.close()}>
-                Keep it
-              </button>
-              <button type="submit" name="action" value="delete" className="btn danger solid" disabled={pending}>
-                {pending ? "Deleting…" : "Delete Flow"}
-              </button>
-            </div>
-          </div>
-        </dialog>
-      </form>
+          </dialog>
+        </form>
+      </div>
       {exportError && (
         <span className="err-text small" role="alert">
           {exportError}

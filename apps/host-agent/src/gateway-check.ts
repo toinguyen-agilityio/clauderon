@@ -1,3 +1,4 @@
+import { ATTACHMENT_LIMITS } from "@clauderon/core";
 import type { AgentCheck } from "@clauderon/protocol";
 import { httpBase } from "./pair";
 
@@ -34,4 +35,22 @@ function skew(res: Response, sentAt: number, receivedAt: number): number | null 
   const date = res.headers.get("date");
   const gateway = date ? Date.parse(date) : NaN;
   return Number.isNaN(gateway) ? null : Math.round((sentAt + receivedAt) / 2 - gateway);
+}
+
+/**
+ * Downloads a Run's attached file (`GET /agent/attachments/<id>`, ADR 0011) with the
+ * Machine's token; throws on any answer but the file, or on one larger than the limit.
+ */
+export function attachmentDownloader(gatewayUrl: string, token: string, http: typeof fetch = fetch) {
+  return async (id: string): Promise<Uint8Array> => {
+    const res = await http(`${httpBase(gatewayUrl)}/agent/attachments/${encodeURIComponent(id)}`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(300_000),
+    });
+    if (!res.ok) throw new Error(`the Gateway answered ${res.status} for an attached file`);
+    if (Number(res.headers.get("content-length") ?? 0) > ATTACHMENT_LIMITS.fileBytes) throw new Error("an attached file is larger than allowed");
+    const data = new Uint8Array(await res.arrayBuffer());
+    if (data.length > ATTACHMENT_LIMITS.fileBytes) throw new Error("an attached file is larger than allowed");
+    return data;
+  };
 }

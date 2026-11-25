@@ -5,9 +5,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../../../components/icons";
 import { FlowRowActions } from "./flow-row-actions";
-import { StartFlow } from "./start-flow";
 import { kindIcon } from "./[id]/flow-icons";
-import { filterFlows, flowSteps, groupFlows, problemsLabel, scopeCounts, type FlowRowView, type FlowScope } from "./flows-view";
+import { filterFlows, flowStart, flowSteps, groupFlows, problemsLabel, scopeCounts, type FlowRowView, type FlowScope } from "./flows-view";
 
 const SCOPES: { scope: FlowScope; label: string }[] = [
   { scope: "all", label: "All" },
@@ -71,8 +70,7 @@ function FlowCard({ flow: f }: { flow: FlowRowView }) {
           {steps > 0 && steps !== f.nodeCount ? ` in ${steps} steps` : ""}
         </span>
       </div>
-      <FlowRowActions flowId={f.id} name={f.name} locked={f.lock !== null} runCount={f.runCount} />
-      {f.problems === 0 && f.inputType && f.inputType !== "issue" && <StartFlow flowId={f.id} name={f.name} />}
+      <FlowRowActions flowId={f.id} name={f.name} locked={f.lock !== null} runCount={f.runCount} start={flowStart(f.inputType, f.problems)} />
       <Steps nodes={f.nodes} />
       {f.updatedBy && (
         <span className="flow-who small faint" title={f.updatedTitle}>
