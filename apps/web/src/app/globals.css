@@ -551,6 +551,11 @@ fieldset.choices legend { font-weight: 600; font-size: 12.5px; margin-bottom: 6p
 .pick-list { list-style: none; margin: 0; padding: 4px; max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
 .pick-list label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; cursor: pointer; overflow-wrap: anywhere; }
 .pick-list label:hover { background: var(--hover); }
+.pick-list .sf-file { display: flex; align-items: center; gap: 8px; padding: 2px 4px 2px 8px; font-size: 13px; overflow-wrap: anywhere; }
+/* a plan or summary in the Start Run dialog: room to write, and its preview at the same height */
+.field-label { font-weight: 600; font-size: 12.5px; }
+.sf-text { min-height: 160px; font-family: var(--font-mono); font-size: 12.5px; }
+.sf-preview { min-height: 160px; max-height: 320px; overflow-y: auto; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
 .choice { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .choice input[type="radio"], .choice input[type="checkbox"] { flex: none; accent-color: var(--accent); }
 .choice .input { height: 30px; }

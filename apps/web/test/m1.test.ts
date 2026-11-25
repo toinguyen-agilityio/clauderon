@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPairing, hashToken, schema, sql, type Db, type GatewayCommand } from "@clauderon/db";
+import { attachmentsOfRun, createPairing, hashToken, openAttachment, schema, sql, type Db, type GatewayCommand } from "@clauderon/db";
 import {
   FakeClock,
   FakeGitHub,
@@ -25,7 +25,7 @@ import {
 } from "../src/server/machines";
 import { enableRepository, enableableRepositories, removeRepository, syncAllProjects } from "../src/server/projects";
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
-import { pullRequestStartDialog, startDialog, startFromInput, startFromPullRequests, startRuns } from "../src/server/start";
+import { pullRequestStartDialog, startDialog, startFromForm, startFromInput, startFromPullRequests, startRuns } from "../src/server/start";
 import { ticketViewParam, viewTickets } from "../src/server/tickets";
 
 let test: TestDatabase;
@@ -552,6 +552,79 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     if (!started.ok) throw new Error(started.error);
     const [run] = await db.select().from(schema.run).where(sql`${schema.run.id} = ${started.runIds[0]!}`);
     expect(run).toMatchObject({ ticketId: null, projectId: project!.id, title: `From a branch on ${branch}`, inputValue: { type: "branch", value: { branch } } });
+  });
+
+  describe("a plan Flow with links and attached files (ADR 0011)", () => {
+    const SECRET = "web-session-secret";
+    async function planFlow() {
+      const { ann } = await ready();
+      const [project] = await db.select().from(schema.project);
+      const nodes = await db.select().from(schema.node);
+      const [flow] = await db.insert(schema.flow).values({ name: "From a plan", updatedByEmail: ann.email }).returning();
+      const [from] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "input-plan")!.id }).returning();
+      const [to] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "code-a-change")!.id, x: 200 }).returning();
+      await db.insert(schema.flowEdge).values({ flowId: flow!.id, fromFlowNodeId: from!.id, fromOutput: "plan", toFlowNodeId: to!.id, toInput: "plan" });
+      return { ann, project: project!, flowId: flow!.id };
+    }
+    const form = (fields: Record<string, string>, links: string[] = [], files: File[] = []) => {
+      const f = new FormData();
+      for (const [k, v] of Object.entries(fields)) f.set(k, v);
+      for (const l of links) f.append("link", l);
+      for (const file of files) f.append("file", file);
+      return f;
+    };
+
+    it("lists the links and the files' paths under the text, and stores the files sealed with the Run", async () => {
+      const { ann, project, flowId } = await planFlow();
+      const files = [new File(["%PDF-1.7"], "../spec.pdf"), new File(["png"], "spec.pdf")];
+      const started = await startFromForm(deps, ann, flowId, form({ projectId: project.id, value: "Ship the retry", extraInstructions: "" }, ["https://docs.example/plan", ""], files), SECRET);
+      if (!started.ok) throw new Error(started.error);
+
+      const [run] = await db.select().from(schema.run).where(sql`${schema.run.id} = ${started.runIds[0]!}`);
+      expect(run).toMatchObject({ title: "Ship the retry", inputValue: { type: "plan" } });
+      expect((run!.inputValue as { value: string }).value).toBe(
+        "Ship the retry\n\nSources (open these links for the details):\n- https://docs.example/plan\n\nAttachments (files in the worktree; read them):\n- .clauderon/inputs/spec.pdf\n- .clauderon/inputs/spec (2).pdf",
+      );
+      const stored = await attachmentsOfRun(db, run!.id);
+      expect(stored.map((a) => [a.name, a.size])).toEqual([
+        ["spec (2).pdf", 3],
+        ["spec.pdf", 8],
+      ]);
+      const [row] = await db.select().from(schema.runAttachment).where(sql`${schema.runAttachment.name} = 'spec.pdf'`);
+      expect(openAttachment(row!.sealed!, SECRET)?.toString()).toBe("%PDF-1.7");
+    });
+
+    it("starts from a file alone, named after the Flow", async () => {
+      const { ann, project, flowId } = await planFlow();
+      const started = await startFromForm(deps, ann, flowId, form({ projectId: project.id, value: "" }, [], [new File(["x"], "notes.txt")]), SECRET);
+      if (!started.ok) throw new Error(started.error);
+      const [run] = await db.select().from(schema.run).where(sql`${schema.run.id} = ${started.runIds[0]!}`);
+      expect(run!.title).toBe("From a plan");
+    });
+
+    it("needs text, a link or a file, and keeps to the limits", async () => {
+      const { ann, project, flowId } = await planFlow();
+      const base = { projectId: project.id, value: "" };
+      expect(await startFromForm(deps, ann, flowId, form(base), SECRET)).toEqual({ ok: false, error: "Write something, add a link or attach a file." });
+      expect(await startFromForm(deps, ann, flowId, form(base, ["ftp://x"]), SECRET)).toEqual({ ok: false, error: "Links start with https:// or http://." });
+      const big = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "big.bin");
+      expect(await startFromForm(deps, ann, flowId, form(base, [], [big]), SECRET)).toEqual({ ok: false, error: "big.bin is larger than 10 MB." });
+      expect(await db.select().from(schema.runAttachment)).toEqual([]);
+    });
+
+    it("refuses links and files for a Flow that does not start from a plan or summary", async () => {
+      const { ann } = await ready();
+      const [project] = await db.select().from(schema.project);
+      const nodes = await db.select().from(schema.node);
+      const [flow] = await db.insert(schema.flow).values({ name: "From a branch", updatedByEmail: ann.email }).returning();
+      const [from] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "input-branch")!.id }).returning();
+      const [to] = await db.insert(schema.flowNode).values({ flowId: flow!.id, nodeId: nodes.find((n) => n.slug === "run-tests")!.id, x: 200 }).returning();
+      await db.insert(schema.flowEdge).values({ flowId: flow!.id, fromFlowNodeId: from!.id, fromOutput: "branch", toFlowNodeId: to!.id, toInput: "branch" });
+      expect(await startFromInput(deps, ann, { flowId: flow!.id, projectId: project!.id, value: "main", extraInstructions: "", links: ["https://x.example"] })).toEqual({
+        ok: false,
+        error: "Only a plan or summary takes links and files.",
+      });
+    });
   });
 
   it("starts one Run per picked pull request as one Batch, only with a pull-request Flow and only while each is open", async () => {

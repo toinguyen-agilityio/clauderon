@@ -9,6 +9,7 @@ import { Icon } from "../../../components/icons";
 import type { StartResult } from "../../../server/start";
 import { startPullRequestsAction } from "../pull-requests/actions";
 import { loadFlowStartAction, loadFlowStartChoicesAction, startFromInputAction } from "./actions";
+import { TextInputFields, hasTextInput, linkList, type TextInputState } from "./start-text-input";
 
 type Loaded = NonNullable<Awaited<ReturnType<typeof loadFlowStartAction>>>;
 type Choice = { value: string; label: string };
@@ -67,6 +68,8 @@ function StartFlowDialog({ flowId, name, onClose }: { flowId: string; name: stri
   // Pull requests are picked several at a time: one Run each, in one Batch.
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [extra, setExtra] = useState("");
+  // A plan or summary: its text, links and files (ADR 0011).
+  const [text, setText] = useState<TextInputState>({ value: "", links: "", files: [] });
   const [error, setError] = useState<{ text: string; machinePage?: string } | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -82,6 +85,7 @@ function StartFlowDialog({ flowId, name, onClose }: { flowId: string; name: stri
   const type = data?.flow.inputType;
   const picks = type === "branch" || type === "pull-request";
   const many = type === "pull-request";
+  const textual = type === "plan" || type === "summary";
 
   useEffect(() => {
     if (!picks || !type || !projectId) return;
@@ -111,11 +115,29 @@ function StartFlowDialog({ flowId, name, onClose }: { flowId: string; name: stri
     setError(null);
     const result: StartResult = many
       ? await startPullRequestsAction({ flowId, pullRequests: [...picked].map((n) => ({ projectId, number: Number(n) })), extraInstructions: extra })
-      : await startFromInputAction({ flowId, projectId, value, extraInstructions: extra });
+      : textual
+        ? await startWithText()
+        : await startFromInputAction({ flowId, projectId, value, extraInstructions: extra });
     setPending(false);
     if (!result.ok) return setError({ text: result.error, machinePage: result.machinePage });
     ref.current?.close();
     router.push(result.runIds.length === 1 ? `/runs/${result.runIds[0]}` : "/runs");
+  };
+
+  /** Files can be larger than a server action takes, so a plan or summary goes as one multipart request. */
+  const startWithText = async (): Promise<StartResult> => {
+    const form = new FormData();
+    form.set("projectId", projectId);
+    form.set("value", text.value);
+    form.set("extraInstructions", extra);
+    for (const link of linkList(text.links)) form.append("link", link);
+    for (const file of text.files) form.append("file", file);
+    try {
+      const res = await fetch(`/api/flows/${encodeURIComponent(flowId)}/start`, { method: "POST", body: form });
+      return (await res.json()) as StartResult;
+    } catch {
+      return { ok: false, error: "Could not reach the app. Try again." };
+    }
   };
 
   const toggle = (pick: string) =>
@@ -124,7 +146,7 @@ function StartFlowDialog({ flowId, name, onClose }: { flowId: string; name: stri
       if (!next.delete(pick)) next.add(pick);
       return next;
     });
-  const ready = many ? picked.size > 0 : value.trim() !== "";
+  const ready = many ? picked.size > 0 : textual ? hasTextInput(text) : value.trim() !== "";
 
   return (
     <dialog ref={ref} {...closeOnBackdrop} className="modal wide" aria-labelledby="sf-title" onClose={onClose}>
@@ -173,22 +195,20 @@ function StartFlowDialog({ flowId, name, onClose }: { flowId: string; name: stri
                     </ul>
                   )}
                 </fieldset>
+              ) : textual ? (
+                <TextInputFields label={INPUT_LABEL[type]} state={text} onChange={setText} />
               ) : (
                 <div className="field">
                   <label htmlFor="sf-value">{INPUT_LABEL[type]}</label>
-                  {picks ? (
-                    <select id="sf-value" className="select" style={{ width: "100%" }} value={value} disabled={!choices || choices.length === 0} onChange={(e) => setValue(e.target.value)}>
-                      {!choices && <option>Loading…</option>}
-                      {choices?.length === 0 && <option>None found</option>}
-                      {choices?.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <textarea id="sf-value" className="textarea" maxLength={20_000} value={value} onChange={(e) => setValue(e.target.value)} />
-                  )}
+                  <select id="sf-value" className="select" style={{ width: "100%" }} value={value} disabled={!choices || choices.length === 0} onChange={(e) => setValue(e.target.value)}>
+                    {!choices && <option>Loading…</option>}
+                    {choices?.length === 0 && <option>None found</option>}
+                    {choices?.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
                   {type === "branch" && <span className="hint">The Run works on a new branch made from this one.</span>}
                 </div>
               )}

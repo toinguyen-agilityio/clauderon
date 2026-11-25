@@ -1,4 +1,4 @@
-import { INPUT_TYPES, checkRunInput, isEntryKind, isMachineReady, queuePositions, runInputTitle, ticketKeys, validateFlow, type InputType, type RunInput } from "@clauderon/core";
+import { INPUT_TYPES, attachmentNames, checkAttachments, checkLinks, checkRunInput, composeInputText, isEntryKind, isMachineReady, queuePositions, runInputTitle, ticketKeys, validateFlow, type InputType, type RunInput } from "@clauderon/core";
 import {
   buildFlowSnapshot,
   getMachineOfMember,
@@ -9,6 +9,7 @@ import {
   loadFlow,
   loadLibrary,
   machineRunCounts,
+  sealAttachment,
   startBatch,
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
@@ -151,7 +152,18 @@ export async function flowStartChoices(deps: AppDeps, projectId: string, type: I
   return [];
 }
 
-export type StartFromInput = { flowId: string; projectId: string; value: string; extraInstructions: string };
+export type StartFromInput = {
+  flowId: string;
+  projectId: string;
+  value: string;
+  extraInstructions: string;
+  /** A plan or summary only: links Claude opens on the Machine, listed under the text. */
+  links?: readonly string[];
+  /** A plan or summary only: files delivered into the Run's worktree (ADR 0011). */
+  files?: readonly { name: string; data: Buffer }[];
+};
+
+export type StartFromInputOptions = { /** Seals attached files; needed when there are any. */ sessionSecret?: string };
 
 /** The picked branch or pull request must exist on GitHub; its URL comes from there, not the browser. */
 async function resolveInput(deps: AppDeps, project: { owner: string; repo: string }, type: InputType, value: string): Promise<{ ok: true; input: RunInput } | { ok: false; error: string }> {
@@ -168,8 +180,24 @@ async function resolveInput(deps: AppDeps, project: { owner: string; repo: strin
   return checkRunInput(type, value);
 }
 
+/**
+ * What a plan or summary Input carries: the text, then the links and the attached files'
+ * paths. Files are checked against the limits and get safe, unique names.
+ */
+function textInput(input: StartFromInput): { ok: true; value: string; files: { name: string; data: Buffer }[] } | { ok: false; error: string } {
+  const links = checkLinks(input.links ?? []);
+  if (!links.ok) return links;
+  const raw = input.files ?? [];
+  const names = attachmentNames(raw.map((f) => f.name));
+  const files = raw.map((f, i) => ({ name: names[i]!, data: f.data }));
+  const checked = checkAttachments(files.map((f) => ({ name: f.name, size: f.data.length })));
+  if (!checked.ok) return checked;
+  const value = composeInputText(input.value, links.links, names);
+  return value ? { ok: true, value, files } : { ok: false, error: "Write something, add a link or attach a file." };
+}
+
 /** Start without a Ticket: one Run in its own Batch, in the Project the Starter picked. */
-export async function startFromInput(deps: AppDeps, viewer: Viewer, input: StartFromInput): Promise<StartResult> {
+export async function startFromInput(deps: AppDeps, viewer: Viewer, input: StartFromInput, options: StartFromInputOptions = {}): Promise<StartResult> {
   const ready = await startingMachine(deps, viewer);
   if (!ready.ok) return ready;
   const flow = (await startableFlows(deps)).find((f) => f.id === input.flowId && f.inputType !== "issue");
@@ -177,9 +205,16 @@ export async function startFromInput(deps: AppDeps, viewer: Viewer, input: Start
   const project = (await listProjects(deps.db)).find((p) => p.id === input.projectId);
   if (!project) return { ok: false, error: "Pick a Project." };
 
+  const text = flow.inputType === "plan" || flow.inputType === "summary";
+  if (!text && ((input.links?.length ?? 0) > 0 || (input.files?.length ?? 0) > 0)) return { ok: false, error: "Only a plan or summary takes links and files." };
+  const composed = text ? textInput(input) : null;
+  if (composed && !composed.ok) return composed;
+  const files = composed?.ok ? composed.files : [];
+  if (files.length > 0 && !options.sessionSecret) return { ok: false, error: "Attached files cannot be stored now. Try again." };
+
   let resolved: Awaited<ReturnType<typeof resolveInput>>;
   try {
-    resolved = await resolveInput(deps, project, flow.inputType, input.value);
+    resolved = await resolveInput(deps, project, flow.inputType, composed?.ok ? composed.value : input.value);
   } catch {
     return { ok: false, error: "Could not reach GitHub. Try again." };
   }
@@ -196,7 +231,14 @@ export async function startFromInput(deps: AppDeps, viewer: Viewer, input: Start
       machineId: ready.machine.id,
       extraInstructions: input.extraInstructions.trim(),
       ticketIds: [],
-      direct: [{ projectId: project.id, title: runInputTitle(flow.name, resolved.input), input: resolved.input }],
+      direct: [
+        {
+          projectId: project.id,
+          title: runInputTitle(flow.name, resolved.input),
+          input: resolved.input,
+          attachments: files.map((f) => sealAttachment(f, options.sessionSecret!)),
+        },
+      ],
     },
     deps.clock.now(),
   );
@@ -258,4 +300,22 @@ export async function startFromPullRequests(deps: AppDeps, viewer: Viewer, input
   if (!result.ok) return { ok: false, error: "The Runs could not start." };
   await deps.command({ type: "schedule", machineId: ready.machine.id });
   return result;
+}
+
+/**
+ * The Start Run dialog's form for a plan or summary Flow (ADR 0011): `projectId`, `value`,
+ * `extraInstructions`, one `link` per link and one `file` per attached file. The limits are
+ * checked on the files' sizes before any is read.
+ */
+export async function startFromForm(deps: AppDeps, viewer: Viewer, flowId: string, form: FormData, sessionSecret: string): Promise<StartResult> {
+  const field = (name: string) => {
+    const value = form.get(name);
+    return typeof value === "string" ? value : "";
+  };
+  const uploads = form.getAll("file").filter((f): f is File => typeof f !== "string");
+  const checked = checkAttachments(uploads.map((f) => ({ name: f.name, size: f.size })));
+  if (!checked.ok) return checked;
+  const files = await Promise.all(uploads.map(async (f) => ({ name: f.name, data: Buffer.from(await f.arrayBuffer()) })));
+  const links = form.getAll("link").filter((l): l is string => typeof l === "string");
+  return startFromInput(deps, viewer, { flowId, projectId: field("projectId"), value: field("value"), extraInstructions: field("extraInstructions"), links, files }, { sessionSecret });
 }
