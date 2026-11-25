@@ -34,6 +34,7 @@ export function NewFlow() {
   return (
     <>
       <button type="button" className="btn primary" onClick={open}>
+        {Icon.plus}
         New Flow
       </button>
       <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby="new-flow-title">

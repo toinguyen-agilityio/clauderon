@@ -107,6 +107,17 @@ export const Icon = {
       <path d="M8 2.5v8M4.75 7.5L8 10.75l3.25-3.25M2.5 13.5h11" />
     </svg>
   ),
+  upload: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 10.75v-8M4.75 5.75L8 2.5l3.25 3.25M2.5 13.5h11" />
+    </svg>
+  ),
+  sparkle: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinejoin="round" aria-hidden="true">
+      <path d="M6.5 2.5l1.2 3.3 3.3 1.2-3.3 1.2-1.2 3.3-1.2-3.3L2 7l3.3-1.2z" />
+      <path d="M12 9.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" />
+    </svg>
+  ),
   copy: (
     <svg viewBox="0 0 16 16" {...stroke}>
       <rect x="5" y="5" width="8.5" height="8.5" rx="1.25" />
