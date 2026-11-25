@@ -4,6 +4,8 @@ import { signOut } from "../../auth";
 import { Avatar, Brand } from "../../components/brand";
 import { Icon } from "../../components/icons";
 import { NeedsYouProvider } from "../../components/needs-you-live";
+import { NotificationsProvider, NotificationsToggle } from "../../components/notifications-live";
+import { ShellSocketProvider } from "../../components/shell-socket";
 import { needsYouAction } from "./actions";
 import { MobileShell } from "../../components/mobile-shell";
 import { SideNav } from "../../components/side-nav";
@@ -16,8 +18,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const needsYou = await needsYouCount(deps());
 
   return (
+    <ShellSocketProvider gatewayUrl={gatewayUrl()}>
+    <NotificationsProvider>
     <div className="shell">
-      <NeedsYouProvider initial={needsYou} load={needsYouAction} gatewayUrl={gatewayUrl()}>
+      <NeedsYouProvider initial={needsYou} load={needsYouAction}>
       <MobileShell needsYou={needsYou}>
         <Brand />
         <SideNav needsYou={needsYou} />
@@ -29,6 +33,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <div className="small faint me-email">{member.email}</div>
             </div>
           </div>
+          <NotificationsToggle />
           <div className="side-tools">
             <ThemeToggle />
             <form
@@ -49,5 +54,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <div className="view">{children}</div>
       </main>
     </div>
+    </NotificationsProvider>
+    </ShellSocketProvider>
   );
 }

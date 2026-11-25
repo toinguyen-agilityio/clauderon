@@ -2,9 +2,10 @@ import { applyMachineDoctor, applyMachineLogins, listProjects, type Db, type Gat
 import type { Payload } from "@clauderon/protocol";
 import type { MachineLinks } from "./machine-link";
 import type { LiveHub } from "./live-hub";
+import type { RunNotices } from "./notices";
 import type { RunEngine } from "./run-engine";
 
-export type MachineServiceOptions = { db: Db; links: MachineLinks; engine: RunEngine; live: LiveHub; log?: (message: string) => void };
+export type MachineServiceOptions = { db: Db; links: MachineLinks; engine: RunEngine; live: LiveHub; notices?: RunNotices; log?: (message: string) => void };
 
 /**
  * Machines on the Gateway side (ADR 0006): turns the web app's commands into
@@ -25,6 +26,12 @@ export class MachineService {
       case "needs.changed":
         this.opts.live.needsChanged();
         return;
+      case "member.notify":
+        return this.opts.notices?.send(command.kind, command.runId, {
+          memberEmail: command.memberEmail,
+          actorEmail: command.actorEmail,
+          flowNodeId: command.flowNodeId,
+        });
       case "machine.checkLogins":
         this.opts.links.send(command.machineId, "machine.checkLogins", {});
         return;

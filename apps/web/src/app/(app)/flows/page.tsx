@@ -2,7 +2,7 @@ import { SEEDED_BY } from "@clauderon/db";
 import { ago, formatTime } from "../../../components/format";
 import { flowBuildAvailability, viewFlows, type FlowView } from "../../../server/flows";
 import { viewLibrary } from "../../../server/library";
-import { deps, gatewayUrl, requireMember } from "../../../server/runtime";
+import { deps, requireMember } from "../../../server/runtime";
 import { BuildFlow } from "./build-flow";
 import { FlowsList } from "./flows-list";
 import { ImportFlow } from "./import-flow";
@@ -50,7 +50,7 @@ export default async function FlowsPage() {
         actions={
           <>
             <ImportFlow />
-            <BuildFlow gatewayUrl={gatewayUrl()} availability={buildable} />
+            <BuildFlow availability={buildable} />
             <NewFlow />
           </>
         }

@@ -538,3 +538,74 @@ describe("Needs you updates live (#197)", () => {
     expect(needsChanged).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Starter notifications (#198)", () => {
+  type Sent = { email: string; kind: string; nodeName?: string; request?: string; actor?: string };
+  const sent = (spy: { mock: { calls: [string, Record<string, unknown>][] } }): Sent[] =>
+    spy.mock.calls.map(([email, e]) => ({
+      email,
+      kind: e.kind as string,
+      ...(e.nodeName ? { nodeName: e.nodeName as string } : {}),
+      ...(e.request ? { request: e.request as string } : {}),
+      ...(e.actor ? { actor: e.actor as string } : {}),
+    }));
+
+  it("tells the Starter when the Run reaches Grill or Approve and when it succeeds, and not on other changes", async () => {
+    const { ann, bo, gateway, agent, flush, start } = await setup();
+    const notify = vi.spyOn(gateway.hub, "notifyMember");
+    scriptPlanAndDeliver(agent, { grillRounds: 1 });
+    const [runId] = await start();
+    const answer = async (action: Parameters<typeof respondToHuman>[3]) => {
+      const r = await openRequest(runId!);
+      await respondToHuman(db, r.request.id, bo.email, action, new Date());
+      await gateway.engine.resume(runId!);
+      await flush();
+    };
+    await answer({ decision: "answer", answers: { q1: "Use the ledger" } });
+    await answer({ decision: "approve" });
+    await answer({ decision: "approve" });
+
+    expect(sent(notify)).toEqual([
+      { email: ann.email, kind: "needs_human", nodeName: "Grill a plan", request: "grill" },
+      { email: ann.email, kind: "needs_human", nodeName: "Approve a plan", request: "approve" },
+      { email: ann.email, kind: "needs_human", nodeName: "Approve the pull request", request: "approve" },
+      { email: ann.email, kind: "succeeded" },
+    ]);
+    expect(notify.mock.calls[0]![1]).toMatchObject({ type: "notify", runId, ticketKey: "web#411", ticketTitle: "Ticket 411", flowName: "Plan and deliver" });
+  });
+
+  it("tells the Starter when the Run fails, naming the Node that failed", async () => {
+    const { ann, gateway, agent, start } = await setup();
+    const notify = vi.spyOn(gateway.hub, "notifyMember");
+    scriptPlanAndDeliver(agent, { testExits: [1] });
+    const [runId] = await start([0], "basic-ticket-delivery");
+    expect((await getRun(db, runId!))!.state).toBe("failed");
+    expect(sent(notify)).toEqual([{ email: ann.email, kind: "failed", nodeName: "Run tests" }]);
+  });
+
+  it("tells the Starter when a lost Machine interrupts their Run", async () => {
+    const { ann, agent, clock, flush, gateway, start } = await setup();
+    scriptPlanAndDeliver(agent, { hold: (run) => run.kind === "agent" && !run.prompt?.includes('"questions"') });
+    const [runId] = await start([0], "basic-ticket-delivery");
+    const notify = vi.spyOn(gateway.hub, "notifyMember");
+    agent.stopBeating();
+    await clock.advance(31_000);
+    await flush();
+    expect((await getRun(db, runId!))!.state).toBe("interrupted");
+    expect(sent(notify)).toEqual([{ email: ann.email, kind: "interrupted", nodeName: "Code a change" }]);
+  });
+
+  it("the web app's member.notify reaches the named Member with the actor's name and the Node", async () => {
+    const { ann, bo, gateway, agent, start } = await setup();
+    scriptPlanAndDeliver(agent);
+    const [runId] = await start();
+    const notify = vi.spyOn(gateway.hub, "notifyMember");
+    const request = await openRequest(runId!);
+    await gateway.machines.command({ type: "member.notify", memberEmail: ann.email, kind: "rejected", runId: runId!, actorEmail: bo.email, flowNodeId: request.flowNodeId });
+    expect(sent(notify)).toEqual([{ email: ann.email, kind: "rejected", nodeName: "Approve a plan", actor: "Bo" }]);
+
+    notify.mockClear();
+    await gateway.machines.command({ type: "member.notify", memberEmail: ann.email, kind: "cancelled", runId: runId!, actorEmail: "nobody@example.com" });
+    expect(sent(notify)).toEqual([{ email: ann.email, kind: "cancelled", nodeName: "Approve a plan", actor: "nobody@example.com" }]);
+  });
+});

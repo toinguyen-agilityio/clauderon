@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
 vi.mock("../src/app/(app)/flows/actions", () => ({ importFlowAction: vi.fn(), createFlowAction: vi.fn() }));
-vi.mock("../src/components/gateway-socket", () => ({ useGatewaySocket: () => null }));
+vi.mock("../src/components/shell-socket", () => ({ useShellSocket: () => null }));
 
 import { BuildFlow } from "../src/app/(app)/flows/build-flow";
 import { ImportFlow } from "../src/app/(app)/flows/import-flow";
@@ -18,7 +18,7 @@ const accessibleName = (button: string) => button.replace(/<svg[^>]*aria-hidden=
 describe("Flows page action buttons (#196)", () => {
   const cases = [
     { name: "Import Flow", el: createElement(ImportFlow) },
-    { name: "Build with Agent", el: createElement(BuildFlow, { gatewayUrl: "ws://x", availability: { ok: true, machine: "mac" } }) },
+    { name: "Build with Agent", el: createElement(BuildFlow, { availability: { ok: true, machine: "mac" } }) },
     { name: "New Flow", el: createElement(NewFlow) },
   ];
 
@@ -29,7 +29,7 @@ describe("Flows page action buttons (#196)", () => {
   });
 
   it("keeps Build with Agent disabled when no Machine can build", () => {
-    const button = pageButton(createElement(BuildFlow, { gatewayUrl: "ws://x", availability: { ok: false, reason: "No Machine online" } }));
+    const button = pageButton(createElement(BuildFlow, { availability: { ok: false, reason: "No Machine online" } }));
     expect(button).toContain('disabled=""');
     expect(button).toContain('aria-hidden="true"');
     expect(accessibleName(button)).toBe("Build with Agent");

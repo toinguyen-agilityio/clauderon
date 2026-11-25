@@ -20,11 +20,20 @@ export type GatewayCommand =
   /** A person approved or answered (spec M3 §2): continue the Run or resume its Grill session. */
   | { type: "run.resume"; machineId: string; runId: string }
   /** A Run left `waiting_for_human` in the web app: tell open Needs you pages. Needs no Machine. */
-  | { type: "needs.changed" };
+  | { type: "needs.changed" }
+  /**
+   * Another Member acted on a Run (#198): tell its Starter's open tabs. Needs no
+   * Machine; an older Gateway drops it. `flowNodeId` names the Node acted on.
+   */
+  | { type: "member.notify"; memberEmail: string; kind: MemberNotifyKind; runId: string; actorEmail: string; flowNodeId?: string };
+
+/** The actions of another Member a Run's Starter is told about. */
+export const MEMBER_NOTIFY_KINDS = ["approved", "rejected", "answered", "cancelled", "retried"] as const;
+export type MemberNotifyKind = (typeof MEMBER_NOTIFY_KINDS)[number];
 
 export type CommandPublish = (command: GatewayCommand) => Promise<void>;
 
-const TYPES = new Set(["machine.checkLogins", "machine.repaired", "schedule", "run.cancel", "run.resume", "needs.changed"]);
+const TYPES = new Set(["machine.checkLogins", "machine.repaired", "schedule", "run.cancel", "run.resume", "needs.changed", "member.notify"]);
 
 export function notifyGatewayCommand(db: Db): CommandPublish {
   return async (command) => {
@@ -34,9 +43,16 @@ export function notifyGatewayCommand(db: Db): CommandPublish {
 
 export function parseGatewayCommand(payload: string): GatewayCommand | null {
   try {
-    const value = JSON.parse(payload) as { type?: unknown; machineId?: unknown; runId?: unknown; attemptIds?: unknown };
+    const value = JSON.parse(payload) as Record<string, unknown>;
     if (typeof value.type !== "string" || !TYPES.has(value.type)) return null;
     if (value.type === "needs.changed") return { type: "needs.changed" };
+    if (value.type === "member.notify") {
+      const { memberEmail, kind, runId, actorEmail, flowNodeId } = value;
+      if (typeof memberEmail !== "string" || typeof runId !== "string" || typeof actorEmail !== "string") return null;
+      if (!(MEMBER_NOTIFY_KINDS as readonly unknown[]).includes(kind)) return null;
+      if (flowNodeId !== undefined && typeof flowNodeId !== "string") return null;
+      return { type: "member.notify", memberEmail, kind: kind as MemberNotifyKind, runId, actorEmail, ...(flowNodeId !== undefined ? { flowNodeId } : {}) };
+    }
     if (typeof value.machineId !== "string") return null;
     if (value.type === "run.cancel") {
       const { runId, attemptIds } = value;

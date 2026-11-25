@@ -80,3 +80,24 @@ describe("BrowserHub", () => {
     }
   });
 });
+
+describe("BrowserHub.notifyMember (#198)", () => {
+  it("sends the event to every socket of that Member and to no one else", async () => {
+    const ann = await sessionFor("ann@example.com");
+    const bo = await sessionFor("bo@example.com");
+    const received = async (sessionId: string) => {
+      const browser = await open(createGatewayTicket(sessionId, clock.now(), SECRET));
+      const messages: unknown[] = [];
+      browser.onMessage((text) => messages.push(JSON.parse(text)));
+      return messages;
+    };
+    const annTabs = [await received(ann.id), await received(ann.id)];
+    const boTab = await received(bo.id);
+    const event = { type: "notify", kind: "succeeded", runId: "r-1", ticketKey: "web#1", ticketTitle: "T", flowName: "F" } as const;
+
+    hub.notifyMember("Ann@Example.com", event);
+    await settle();
+    for (const tab of annTabs) expect(tab).toEqual([event]);
+    expect(boTab).toEqual([]);
+  });
+});

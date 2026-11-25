@@ -70,6 +70,16 @@ export const Icon = {
       <path d="M13.5 9.5A5.5 5.5 0 016.5 2.5a5.5 5.5 0 107 7z" />
     </svg>
   ),
+  bell: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 11.5V7a4 4 0 018 0v4.5l1 1H3l1-1zM6.75 14h2.5" />
+    </svg>
+  ),
+  bellOff: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 11.5V7a4 4 0 018 0v4.5l1 1H3l1-1zM6.75 14h2.5M2.5 2.5l11 11" />
+    </svg>
+  ),
   menu: (
     <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" aria-hidden="true">
       <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />

@@ -18,6 +18,28 @@ export const browserRequest = z.discriminatedUnion("type", [
 ]);
 export type BrowserRequest = z.infer<typeof browserRequest>;
 
+/** What a `notify` is about (#198): the Run needs a person, ended, or someone else acted on it. */
+export const NOTIFY_KINDS = ["needs_human", "succeeded", "failed", "interrupted", "approved", "rejected", "answered", "cancelled", "retried"] as const;
+export type NotifyKind = (typeof NOTIFY_KINDS)[number];
+
+/**
+ * Sent only to the Run's Starter (#198). Plain text from the Ticket and the
+ * Flow; never secrets. `request` says what a `needs_human` asks for; `actor`
+ * is who acted, for the actions of another Member.
+ */
+export const notifyEvent = z.object({
+  type: z.literal("notify"),
+  kind: z.enum(NOTIFY_KINDS),
+  runId: z.string(),
+  ticketKey: z.string(),
+  ticketTitle: z.string(),
+  flowName: z.string(),
+  nodeName: z.string().optional(),
+  request: z.enum(["approve", "grill"]).optional(),
+  actor: z.string().optional(),
+});
+export type NotifyEvent = z.infer<typeof notifyEvent>;
+
 export type BrowserEvent =
   | { type: "log"; attemptId: string; seq: number; stream: "stdout" | "stderr" | "system"; text: string }
   | { type: "run.changed"; runId: string }
@@ -25,7 +47,8 @@ export type BrowserEvent =
   | { type: "needs.changed" }
   /** A checked Flow file (JSON text) and the names of the Nodes it would add to the library. */
   | { type: "draft.ready"; draftId: string; flow: string; newNodes: string[] }
-  | { type: "draft.failed"; draftId: string; error: string };
+  | { type: "draft.failed"; draftId: string; error: string }
+  | NotifyEvent;
 
 /** Parses a browser message with `schema`, or null when it is not valid. */
 export function parseBrowserMessage<T>(schema: z.ZodType<T>, text: string): T | null {

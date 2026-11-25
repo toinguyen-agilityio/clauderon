@@ -58,7 +58,7 @@ export async function askHuman(db: Db, input: AskHumanInput): Promise<number | n
 export type HumanAction = { decision: "approve" } | { decision: "reject"; feedback: string } | { decision: "answer"; answers: GrillAnswers };
 
 export type RespondResult =
-  | { ok: true; runId: string; machineId: string | null; decision: HumanAction["decision"] }
+  | { ok: true; runId: string; machineId: string | null; decision: HumanAction["decision"]; flowNodeId: string }
   | { ok: false; reason: "not-found" }
   | { ok: false; reason: "answered"; by: string; cancelled: boolean }
   | { ok: false; reason: "invalid"; error: string };
@@ -137,7 +137,7 @@ export async function respondToHuman(db: Db, requestId: string, actorEmail: stri
         ...(response.decision === "reject" ? { feedback: response.feedback } : {}),
       },
     });
-    return { ok: true, runId: r.id, machineId: r.machineId, decision: response.decision } as const;
+    return { ok: true, runId: r.id, machineId: r.machineId, decision: response.decision, flowNodeId: a.flowNodeId } as const;
   });
 }
 
