@@ -11,6 +11,7 @@ import {
   parseGrillQuestions,
   renderRetryContext,
   schedule,
+  scrubTarget,
   snapshotFlow,
   type Clock,
   type FlowSnapshot,
@@ -38,6 +39,7 @@ import {
   runningRuns,
   runsToCleanUp,
   runsOfMachine,
+  appendAttemptTurns,
   setAttemptUsage,
   updateRun,
   type AttemptWithOutputs,
@@ -351,7 +353,22 @@ export class RunEngine {
   }
 
   async nodeUsage(usage: Payload<"node.usage">): Promise<void> {
-    await setAttemptUsage(this.opts.db, usage.attemptId, { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
+    await setAttemptUsage(this.opts.db, usage.attemptId, {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      ...(usage.cacheCreated !== undefined ? { cacheCreationTokens: usage.cacheCreated } : {}),
+      ...(usage.cacheRead !== undefined ? { cacheReadTokens: usage.cacheRead } : {}),
+    });
+  }
+
+  /** The per-turn summary of an Agent Node (#105). */
+  async nodeTurns(payload: Payload<"node.turns">, machineId: string): Promise<void> {
+    // Masked again here with the app's secrets, as a log line is (NFR-1).
+    const turns = payload.turns.map((t) => ({
+      ...t,
+      calls: t.calls.map((c) => ({ ...c, tool: this.hide(c.tool), target: c.target && this.hide(scrubTarget(c.tool, c.target)) })),
+    }));
+    await appendAttemptTurns(this.opts.db, payload.attemptId, machineId, turns);
   }
 
   /** Stores the Outputs and moves on, or fails the Attempt and the Run with its reason. */

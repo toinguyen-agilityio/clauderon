@@ -15,3 +15,7 @@ For each linked ticket (`closingIssuesReferences`, or `#N` in the PR body):
 | The work turned out not to be needed | `wontfix` label, comment why, close. |
 
 Always comment the PR link on the ticket. If unsure which row applies, ask the user instead of guessing.
+
+## What runs by itself
+
+The workflow `.github/workflows/ticket-on-merge.yml` runs on every merge into `staging`, whoever merges it: it comments the PR link on each `Closes #N` ticket (GitHub closes it) and on each `Refs #N` ticket (left open). It never closes, labels or links anything else. The rest of the table above, such as listing what is left of a partly met ticket, needs judgement and stays with a person or with the after-merge hook in `.claude/hooks/`.

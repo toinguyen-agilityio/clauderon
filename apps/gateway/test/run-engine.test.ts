@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ticketStatus, type OutputType, type RunInput } from "@clauderon/core";
-import { attemptsOfRun, buildFlowSnapshot, cancelRun, getRun, listTicketsWithRuns, logChunksOf, schema, sql, startBatch, type Db } from "@clauderon/db";
+import { appendAttemptTurns, attemptsOfRun, buildFlowSnapshot, cancelRun, clearTurnTargetsBefore, getRun, listTicketsWithRuns, logChunksOf, nodeAttemptHistory, schema, sql, startBatch, type Db } from "@clauderon/db";
 import type { FakeAgent } from "@clauderon/testing";
 import {
   createTestDatabase,
@@ -39,7 +39,8 @@ function succeedEverything(agent: FakeAgent, options: { pullRequest?: boolean; h
     const finish = () => {
       a.send("node.log", { attemptId: run.attemptId, seq: 0, stream: "stdout", text: `running ${run.kind}` });
       if (run.kind === "agent") {
-        a.send("node.usage", { attemptId: run.attemptId, inputTokens: 100, outputTokens: 20 });
+        a.send("node.usage", { attemptId: run.attemptId, inputTokens: 100, outputTokens: 20, cacheCreated: 30, cacheRead: 60 });
+        a.send("node.turns", { attemptId: run.attemptId, turns: [{ index: 0, calls: [{ tool: "Read", target: "a.ts", resultBytes: 400 }], newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }] });
         a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { outputs: { summary: "Fixed it" } }, sessionId: "s1", headCommit: "c0ffee" });
       } else if (run.command === "clauderon-open-pr") {
         const result = options.pullRequest === false ? { tail: "no changes" } : { tail: "ok", pullRequest: { number: 77, url: "https://github.com/acme/web/pull/77" } };
@@ -85,7 +86,10 @@ describe("Run engine", () => {
     const attempts = await attemptsOfRun(db, run.id);
     expect(attempts.map((a) => a.state)).toEqual(["succeeded", "succeeded", "succeeded", "succeeded"]);
     expect(attempts[0]!.outputs).toEqual([expect.objectContaining({ name: "issue", value: expect.objectContaining({ number: 411 }) })]);
-    expect(attempts[1]).toMatchObject({ inputTokens: 100, outputTokens: 20, claudeSessionId: "s1" });
+    expect(attempts[1]).toMatchObject({ inputTokens: 100, outputTokens: 20, cacheCreationTokens: 30, cacheReadTokens: 60, claudeSessionId: "s1" });
+    expect(attempts[1]!.turns).toEqual([{ index: 0, calls: [{ tool: "Read", target: "a.ts", resultBytes: 400 }], newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }]);
+    // Nodes that are not a Claude session have no turns.
+    expect(attempts[2]!.turns).toBeNull();
 
     // The check for the newly connected Agent, the login check before the Run, then the workspace, then the Nodes in order.
     expect(agent.received.map((e) => e.type)).toEqual(["machine.checkLogins", "machine.checkLogins", "workspace.prepare", "node.run", "node.run", "node.run", "workspace.cleanup"]);
@@ -455,5 +459,92 @@ describe("Queue and Slots (A2)", () => {
     // The first two start together, the rest one by one as Slots free up.
     expect(new Set(starts.slice(0, 2)).size).toBe(1);
     expect(starts[2]!).toBeGreaterThan(starts[0]!);
+  });
+});
+
+describe("Node inspector data (#105)", () => {
+  it("adds the turns of each Claude call to one list, numbered in order, only from the Attempt's own Machine while it runs", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
+    let finishNode: (() => void) | undefined;
+    succeedEverything(agent, { hold: (finish) => (finishNode = finish) });
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "");
+    if (!start.ok) throw new Error("start failed");
+    await gateway.engine.schedule(machine.id);
+    await flush();
+    // The first held Node is the Ticket's Issue Node or the Agent Node; walk until the Agent Node runs.
+    while (!(await attemptsOfRun(db, start.runIds[0]!)).some((a) => a.state === "running" && agent.of("node.run").at(-1)?.kind === "agent")) {
+      finishNode?.();
+      await flush();
+    }
+    const running = (await attemptsOfRun(db, start.runIds[0]!)).find((a) => a.state === "running")!;
+    const one = { index: 0, calls: [{ tool: "Read", target: "a.ts", resultBytes: null }], newInput: 1, cacheCreated: 2, cacheRead: 3, output: 4 };
+
+    expect(await appendAttemptTurns(db, running.id, "00000000-0000-4000-8000-000000000000", [one])).toBe(false);
+    expect(await appendAttemptTurns(db, running.id, machine.id, [one])).toBe(true);
+    expect(await appendAttemptTurns(db, running.id, machine.id, [one, one])).toBe(true);
+    const after = (await attemptsOfRun(db, start.runIds[0]!)).find((a) => a.id === running.id)!;
+    expect(after.turns!.map((t) => t.index)).toEqual([0, 1, 2]);
+
+    // An Attempt that has ended takes no more.
+    finishNode?.();
+    await flush();
+    expect(await appendAttemptTurns(db, running.id, machine.id, [one])).toBe(false);
+  });
+
+  it("an older Agent that sends no split or turns leaves them empty, with totals still stored", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
+    succeedEverything(agent);
+    agent.respond("node.run", (run, a) => {
+      if (run.kind === "agent") {
+        a.send("node.usage", { attemptId: run.attemptId, inputTokens: 50, outputTokens: 5 });
+        a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { outputs: { summary: "ok" } }, headCommit: "c0ffee" });
+      } else a.send("node.result", { attemptId: run.attemptId, exitCode: 0, result: { tail: "ok" }, headCommit: "c0ffee" });
+    });
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "");
+    if (!start.ok) throw new Error("start failed");
+    await gateway.engine.schedule(machine.id);
+    await flush();
+
+    const attempt = (await attemptsOfRun(db, start.runIds[0]!))[1]!;
+    expect(attempt).toMatchObject({ inputTokens: 50, outputTokens: 5, cacheCreationTokens: null, cacheReadTokens: null, turns: null });
+  });
+
+  it("lists the same Node's finished Attempts in other Runs of the Flow, without the current Run", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup(2, 2);
+    succeedEverything(agent);
+    const start = await startSampleBatch(db, member, machine.id, tickets.map((t) => t.id), clock.now(), "");
+    if (!start.ok) throw new Error("start failed");
+    await gateway.engine.schedule(machine.id);
+    await flush();
+
+    const [first, second] = start.runIds as [string, string];
+    const run = (await getRun(db, second))!;
+    const code = (await attemptsOfRun(db, second)).find((a) => a.turns)!;
+    const history = await nodeAttemptHistory(db, run.flowId!, code.flowNodeId, second);
+    expect(history.map((h) => h.runId)).toEqual([first]);
+    expect(history[0]!.turns).toHaveLength(1);
+
+    // An Attempt without turns (an older Agent, or from before the Inspector) is left out, not shown as zeros.
+    await db.update(schema.attempt).set({ turns: null }).where(sql`${schema.attempt.runId} = ${first}`);
+    expect(await nodeAttemptHistory(db, run.flowId!, code.flowNodeId, second)).toEqual([]);
+  });
+});
+
+describe("Retention of Inspector turns (#105, NFR-5)", () => {
+  it("clears the targets of old Attempts but keeps tools and sizes, and leaves recent ones alone", async () => {
+    const { member, machine, tickets, gateway, agent, clock, flush } = await setup();
+    succeedEverything(agent);
+    const start = await startSampleBatch(db, member, machine.id, [tickets[0]!.id], clock.now(), "");
+    if (!start.ok) throw new Error("start failed");
+    await gateway.engine.schedule(machine.id);
+    await flush();
+    const code = (await attemptsOfRun(db, start.runIds[0]!)).find((a) => a.turns)!;
+
+    expect(await clearTurnTargetsBefore(db, new Date(clock.now().getTime() - 86_400_000))).toBe(0);
+    expect(await clearTurnTargetsBefore(db, new Date(clock.now().getTime() + 86_400_000))).toBe(1);
+    const after = (await attemptsOfRun(db, start.runIds[0]!)).find((a) => a.id === code.id)!;
+    expect(after.turns).toEqual([{ index: 0, calls: [{ tool: "Read", target: null, resultBytes: 400 }], newInput: 10, cacheCreated: 30, cacheRead: 60, output: 20 }]);
+    // Already cleared: nothing left to do.
+    expect(await clearTurnTargetsBefore(db, new Date(clock.now().getTime() + 86_400_000))).toBe(0);
   });
 });

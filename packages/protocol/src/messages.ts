@@ -79,7 +79,41 @@ export const messageSchemas = {
     stream: z.enum(["stdout", "stderr", "system"]),
     text: z.string(),
   }),
-  "node.usage": z.object({ attemptId: z.string(), inputTokens: z.number().int(), outputTokens: z.number().int() }),
+  "node.usage": z.object({
+    attemptId: z.string(),
+    /** All input: new, cache created and cache read together (what older Agents send). */
+    inputTokens: z.number().int(),
+    outputTokens: z.number().int(),
+    /** The split of `inputTokens` (#105). Optional: older Agents do not send it. */
+    cacheCreated: z.number().int().nonnegative().optional(),
+    cacheRead: z.number().int().nonnegative().optional(),
+  }),
+  /** What an Agent Node did, one entry per turn (#105): sizes and names only. Older Agents never send it. */
+  "node.turns": z.object({
+    attemptId: z.string(),
+    // At most MAX_TURNS_PER_MESSAGE of @clauderon/core; a longer session is sent in several messages.
+    turns: z
+      .array(
+        z.object({
+          index: z.number().int().nonnegative(),
+          calls: z
+            .array(
+              z.object({
+                tool: z.string().max(64),
+                // MAX_TARGET_LENGTH (120) plus the ellipsis; the Gateway keeps nothing longer.
+                target: z.string().max(121).nullable(),
+                resultBytes: z.number().int().nonnegative().nullable(),
+              }),
+            )
+            .max(64),
+          newInput: z.number().int().nonnegative(),
+          cacheCreated: z.number().int().nonnegative(),
+          cacheRead: z.number().int().nonnegative(),
+          output: z.number().int().nonnegative(),
+        }),
+      )
+      .max(2000),
+  }),
   "node.result": z.object({
     attemptId: z.string(),
     exitCode: z.number().int(),
