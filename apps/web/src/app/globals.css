@@ -585,6 +585,11 @@ a.pod-tile:hover, a.stat:hover { transform: translateY(-2px); box-shadow: var(--
 .qa .q, .qa .ans { padding: 10px 12px; border-radius: var(--r-sm); max-width: 62ch; font-size: 13px; white-space: pre-wrap; }
 .qa .q { background: var(--panel); border: 1px solid var(--line); }
 .qa .ans { background: var(--accent-weak); align-self: flex-end; }
+.qa .ans.decision { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
+/* Run detail: the Node's description, timing and decision in one tinted box, like an Output. */
+.node-brief { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--code-bg); }
+.node-brief .md-box p:first-child { margin-top: 0; }
+.node-brief .md-box p:last-child { margin-bottom: 0; }
 .qa .who { font-size: 11px; color: var(--fg3); font-weight: 600; margin-bottom: 2px; display: block; white-space: normal; }
 .superseded { opacity: 0.6; }
 .history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
