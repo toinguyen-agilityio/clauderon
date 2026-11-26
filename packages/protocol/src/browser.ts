@@ -35,7 +35,7 @@ export const notifyEvent = z.object({
   ticketTitle: z.string(),
   flowName: z.string(),
   nodeName: z.string().optional(),
-  request: z.enum(["approve", "grill"]).optional(),
+  request: z.enum(["approve", "grill", "turns"]).optional(),
   actor: z.string().optional(),
 });
 export type NotifyEvent = z.infer<typeof notifyEvent>;

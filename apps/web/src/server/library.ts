@@ -79,7 +79,8 @@ export async function exportMyNodes(deps: AppDeps, nodeIds: readonly string[]): 
   const chosen = nodeIds.map((id) => rows.find((n) => n.id === id));
   if (chosen.length === 0 || chosen.some((n) => !n)) return { ok: false, error: "That Node no longer exists." };
   const nodes = chosen.map((n) => n!);
-  const file = buildNodeFile(nodes);
+  // A Node file holds the definition only; the model and turn limit stay with the library (#218).
+  const file = buildNodeFile(nodes.map(({ name, kind, instructions, command, inputs, outputs }) => ({ name, kind, instructions, command, inputs, outputs })));
   const slug = (nodes.length === 1 ? nodes[0]!.name : "nodes").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "nodes";
   return { ok: true, filename: `${slug}.nodes.json`, json: JSON.stringify(file, null, 2) };
 }
@@ -133,7 +134,7 @@ export async function cloneMyNode(deps: AppDeps, viewer: Viewer, nodeId: string)
   if (!source) return { ok: false, error: "That Node no longer exists." };
   if (!source.isSample) return { ok: false, error: "Only sample Nodes can be cloned." };
   const name = copyName(source.name, rows.map((n) => n.name));
-  const checked = checkNodeDefinition({ name, kind: source.kind, instructions: source.instructions, command: source.command, inputs: source.inputs, outputs: source.outputs });
+  const checked = checkNodeDefinition({ name, kind: source.kind, instructions: source.instructions, command: source.command, inputs: source.inputs, outputs: source.outputs, model: source.model, maxTurns: source.maxTurns });
   if (!checked.ok) return checked;
   const created = await createNode(deps.db, checked.definition, viewer.email, deps.clock.now());
   await recordAudit(deps.db, { actorEmail: viewer.email, action: "node.create", subjectType: "node", subjectId: created.id, detail: { name, clonedFrom: nodeId } });

@@ -195,6 +195,7 @@ export async function runNode(
     let result: unknown;
     let sessionId: string | undefined;
     let error: string | undefined;
+    let maxTurnsReached = false;
 
     if (run.kind === "command") {
       const output: string[] = [];
@@ -242,6 +243,7 @@ export async function runNode(
         errors.event(event);
         recorder.event(event);
         if (event.sessionId) sessionId = event.sessionId;
+        if (event.maxTurns) maxTurnsReached = true;
         if (event.usage) link.send("node.usage", { attemptId: run.attemptId, ...event.usage });
         if (event.finalText !== undefined) finalText = event.finalText;
         if (event.log) for (const part of event.log.split("\n")) log("stdout", part);
@@ -251,7 +253,7 @@ export async function runNode(
         errors.stderr(line);
         log("stderr", line);
       });
-      exitCode = await start(claudeCommand({ resumeSessionId: run.resumeSessionId }), { ...env, CLAUDERON_PROMPT_FILE: promptFile }, (stream, text) =>
+      exitCode = await start(claudeCommand({ resumeSessionId: run.resumeSessionId, model: run.model, maxTurns: run.maxTurns }), { ...env, CLAUDERON_PROMPT_FILE: promptFile }, (stream, text) =>
         (stream === "stdout" ? stdout : stderr).push(text),
       );
       stdout.flush();
@@ -263,13 +265,15 @@ export async function runNode(
       }
       result = claudeResult(finalText);
       if (exitCode !== 0) error = hide(errors.reason(exitCode));
+      // Said in `error` too, so an older Gateway fails the Node as before (#218).
+      if (maxTurnsReached) error = `Claude reached the turn limit${run.maxTurns ? ` (${run.maxTurns} turns)` : ""}`;
       // A Grill round whose session Claude no longer knows (spec M3 §2.2).
       if (unknownSession && result === undefined) error = `Claude session ${run.resumeSessionId} could not be resumed: ${hide(unknownSession)}`;
     }
 
     const headCommit = await git("rev-parse", "HEAD");
     if (!error && expectCommit && headCommit === headBefore) error = "no commit on the branch";
-    link.send("node.result", { attemptId: run.attemptId, exitCode, result, sessionId, headCommit, ...(error ? { error } : {}) });
+    link.send("node.result", { attemptId: run.attemptId, exitCode, result, sessionId, headCommit, ...(error ? { error } : {}), ...(maxTurnsReached ? { maxTurnsReached } : {}) });
   } catch (failure) {
     const text = hide(errorText(failure));
     options.log(`node ${run.attemptId}: ${text}`);

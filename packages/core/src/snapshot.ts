@@ -1,4 +1,5 @@
 import type { Flow, FlowEdge, LibraryNode, NodeInput, NodeKind, NodeOutput } from "./flow";
+import type { ClaudeModel } from "./library";
 
 /** One placement as it was when the Run started, with its library Node inlined. */
 export type SnapshotNode = {
@@ -12,6 +13,9 @@ export type SnapshotNode = {
   outputs: NodeOutput[];
   extraInstructions: string;
   enabledOptionalOutputs: string[];
+  /** The library Node's model and turn limit (#218); absent in snapshots from before them. */
+  model?: ClaudeModel | null;
+  maxTurns?: number | null;
   x: number;
   y: number;
 };

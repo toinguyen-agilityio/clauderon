@@ -15,6 +15,8 @@ export type LibraryRow = {
   command: string | null;
   inputs: NodeDefinition["inputs"];
   outputs: NodeDefinition["outputs"];
+  model: string | null;
+  maxTurns: number | null;
   isSample: boolean;
   updatedByEmail: string;
   updatedAt: Date;
@@ -35,6 +37,8 @@ export async function listLibraryRows(db: Db): Promise<LibraryRow[]> {
     command: n.command,
     inputs: n.inputs as LibraryRow["inputs"],
     outputs: n.outputs as LibraryRow["outputs"],
+    model: n.model,
+    maxTurns: n.maxTurns,
     isSample: n.isSample,
     updatedByEmail: n.updatedByEmail,
     updatedAt: n.updatedAt,
@@ -78,7 +82,8 @@ export async function updateNode(db: Db, nodeId: string, definition: NodeDefinit
     if (flowIds.length > 0) await tx.select({ id: flow.id }).from(flow).where(inArray(flow.id, flowIds)).orderBy(flow.id).for("update");
     const { row: locked, locked: stillLocked } = await lockedUse(tx, nodeId);
     if (stillLocked) return { ok: false, reason: "locked", flow: { id: stillLocked.flowId, name: stillLocked.name }, lock: stillLocked.lock! } as const;
-    await tx.update(node).set({ ...definition, updatedByEmail: actorEmail, updatedAt: now }).where(eq(node.id, nodeId));
+    // A definition without a model or turn limit sets them back to the defaults (#218).
+    await tx.update(node).set({ ...definition, model: definition.model ?? null, maxTurns: definition.maxTurns ?? null, updatedByEmail: actorEmail, updatedAt: now }).where(eq(node.id, nodeId));
     // The edit changes every Flow that uses the Node, so each one gets a version of its own.
     for (const flowId of flowIds) await recordFlowVersion(tx, { flowId, kind: "library-node", actorEmail, now, detail: { nodeId, nodeName: definition.name } });
     return { ok: true, flows: (locked ?? row).usedBy.length } as const;

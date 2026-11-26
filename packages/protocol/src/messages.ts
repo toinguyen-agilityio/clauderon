@@ -74,6 +74,9 @@ export const messageSchemas = {
     prompt: z.string().optional(),
     command: z.string().optional(),
     resumeSessionId: z.string().optional(),
+    /** The Node's Claude model and turn limit (#218). Optional: an older Gateway sends neither, an older Agent ignores them. */
+    model: z.string().optional(),
+    maxTurns: z.number().int().positive().optional(),
     env: z.record(z.string(), z.string()),
     /** The Run's attached files, which must still be in the worktree (ADR 0011). */
     attachments: z.array(z.object({ name: z.string(), sha256: z.string() })).optional(),
@@ -126,6 +129,8 @@ export const messageSchemas = {
     sessionId: z.string().optional(),
     headCommit: z.string().optional(),
     error: z.string().optional(),
+    /** The Claude session stopped at its turn limit and can be resumed (#218); `error` says so too, for an older Gateway. */
+    maxTurnsReached: z.boolean().optional(),
     diff: z.object({ text: z.string(), truncated: z.boolean() }).optional(),
     files: z.array(z.object({ name: z.string(), contentType: z.string(), base64: z.string() })).optional(),
   }),

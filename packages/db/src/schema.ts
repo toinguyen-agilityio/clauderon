@@ -38,7 +38,8 @@ export const runState = pgEnum("run_state", [
   "cancelled",
 ]);
 export const attemptState = pgEnum("attempt_state", ["running", "waiting_for_human", "succeeded", "failed", "interrupted", "cancelled"]);
-export const humanRequestKind = pgEnum("human_request_kind", ["approve", "grill"]);
+/** `turns`: an Agent or Grill session reached its turn limit and waits for Continue or Stop (#218). */
+export const humanRequestKind = pgEnum("human_request_kind", ["approve", "grill", "turns"]);
 export const logStream = pgEnum("log_stream", ["stdout", "stderr", "system"]);
 
 export const member = pgTable("member", {
@@ -243,6 +244,9 @@ export const node = pgTable("node", {
   command: text("command"),
   inputs: jsonb("inputs").$type<NodeInputJson[]>().notNull().default([]),
   outputs: jsonb("outputs").$type<NodeOutputJson[]>().notNull().default([]),
+  /** Agent and Grill (#218): the Claude model, null for the Member's default, and the turn limit, null for the default. */
+  model: text("model"),
+  maxTurns: integer("max_turns"),
   isSample: boolean("is_sample").notNull().default(false),
   updatedByEmail: text("updated_by_email").notNull(),
   updatedAt: ts("updated_at").notNull().defaultNow(),

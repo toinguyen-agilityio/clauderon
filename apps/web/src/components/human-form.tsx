@@ -1,15 +1,18 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
+import { CONTINUE_TURNS } from "@clauderon/core";
 import { respondAction, type RespondFormState } from "../app/(app)/needs-you/actions";
 import { OTHER_CHOICE } from "../server/grill-answers";
 import { Icon } from "./icons";
 
 export type OpenRequest = {
   id: string;
-  kind: "approve" | "grill";
+  kind: "approve" | "grill" | "turns";
   round: number;
   questions: Question[];
+  /** A turn-limit request: the turns the session reached (#218). */
+  turns?: number | null;
 };
 
 type Question = { id: string; text: string; options?: { label: string; recommended?: boolean }[]; multiSelect?: boolean };
@@ -29,6 +32,29 @@ export function HumanForm({ request, runId }: { request: OpenRequest; runId: str
       {state.error}
     </span>
   );
+
+  if (request.kind === "turns") {
+    return (
+      <form action={action} className="stack" style={{ gap: 8 }} data-testid="turns-form">
+        <input type="hidden" name="requestId" value={request.id} />
+        <input type="hidden" name="runId" value={runId} />
+        <p className="small muted">
+          Claude reached this Node&apos;s turn limit{request.turns ? ` after ${request.turns} turns` : ""}. Its work so far is kept: Continue lets the same session go on for up to {CONTINUE_TURNS} more turns, Stop fails the Node.
+        </p>
+        {error}
+        <div className="row">
+          <button type="submit" name="decision" value="approve" className="btn ok" disabled={pending}>
+            {Icon.check}
+            Continue
+          </button>
+          <button type="submit" name="decision" value="reject" className="btn danger" disabled={pending}>
+            {Icon.x}
+            Stop
+          </button>
+        </div>
+      </form>
+    );
+  }
 
   if (request.kind === "grill") {
     return (

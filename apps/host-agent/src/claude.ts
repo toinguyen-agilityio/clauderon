@@ -22,8 +22,12 @@ export const TOKEN_GUIDANCE = [
 ].join("\n");
 
 export type ClaudeOptions = {
-  /** Resumes this Claude session (a Grill round). */
+  /** Resumes this Claude session (a Grill round, or Continue after the turn limit). */
   resumeSessionId?: string;
+  /** The Node's model (#218); none keeps the Member's default. */
+  model?: string;
+  /** The Node's turn limit (#218). */
+  maxTurns?: number;
 };
 
 const quote = (text: string) => `'${text.replaceAll("'", "")}'`;
@@ -31,7 +35,10 @@ const quote = (text: string) => `'${text.replaceAll("'", "")}'`;
 /** The shell line that runs Claude Code on the prompt file named by `$CLAUDERON_PROMPT_FILE`. */
 export function claudeCommand(options: ClaudeOptions = {}): string {
   const resume = options.resumeSessionId ? ` --resume '${options.resumeSessionId.replace(/[^A-Za-z0-9-]/g, "")}'` : "";
-  return `claude ${CLAUDE_ARGS.join(" ")}${resume} --append-system-prompt ${quote(TOKEN_GUIDANCE)} < "$CLAUDERON_PROMPT_FILE"`;
+  const name = options.model?.replace(/[^A-Za-z0-9.-]/g, "");
+  const model = name ? ` --model '${name}'` : "";
+  const turns = options.maxTurns && Number.isInteger(options.maxTurns) && options.maxTurns > 0 ? ` --max-turns ${options.maxTurns}` : "";
+  return `claude ${CLAUDE_ARGS.join(" ")}${resume}${model}${turns} --append-system-prompt ${quote(TOKEN_GUIDANCE)} < "$CLAUDERON_PROMPT_FILE"`;
 }
 
 /**
@@ -54,6 +61,8 @@ export type ClaudeEvent = {
   finalText?: string;
   /** Claude Code's own error message, from a `result` event marked as an error. */
   error?: string;
+  /** The session stopped at its `--max-turns` (#218); it can be resumed. */
+  maxTurns?: true;
 };
 
 type Usage = { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
@@ -166,6 +175,7 @@ export function parseClaudeLine(line: string): ClaudeEvent {
         ...usage,
         finalText: event.result ?? "",
         ...(failed ? { error: message || event.subtype || "error" } : {}),
+        ...(event.subtype === "error_max_turns" ? { maxTurns: true as const } : {}),
         log: `[claude] ${event.subtype ?? "result"}`,
       };
     }

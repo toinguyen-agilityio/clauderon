@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { CREATABLE_KINDS, OUTPUT_TYPES, isEntryKind, type NodeInput, type NodeOutput, type OutputType } from "@clauderon/core";
+import { CREATABLE_KINDS, DEFAULT_MAX_TURNS, MAX_TURNS_LIMIT, OUTPUT_TYPES, isEntryKind, runsClaude, type NodeInput, type NodeOutput, type OutputType } from "@clauderon/core";
 import { Icon } from "../../../../components/icons";
 import { outputColor } from "../../../../components/state-pill";
 import { kindIcon } from "../[id]/flow-icons";
 import { KIND_LABEL, NodeView } from "../[id]/flow-node";
 import { deleteNodeAction, saveNodeAction } from "./actions";
-import { INSTRUCTIONS_MAX, KIND_HELP, TYPE_HELP, deleteBlocker, retypePort, sameValue, saveBlocker, saveOutcome, type LibraryUse, type NodeFormValue } from "./library-view";
+import { INSTRUCTIONS_MAX, KIND_HELP, MODEL_CHOICES, TYPE_HELP, deleteBlocker, nodeInput, retypePort, sameValue, saveBlocker, saveOutcome, type LibraryUse, type NodeFormValue } from "./library-view";
 
 export type { NodeFormValue } from "./library-view";
 
-export const EMPTY_NODE: NodeFormValue = { id: null, name: "", kind: "agent", instructions: "", command: null, inputs: [], outputs: [] };
+export const EMPTY_NODE: NodeFormValue = { id: null, name: "", kind: "agent", instructions: "", command: null, inputs: [], outputs: [], model: "", maxTurns: "" };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -59,7 +59,7 @@ export function NodeForm({
 
   const save = async () => {
     setPending(true);
-    const result = await saveNodeAction(value.id, { ...value, command: value.kind === "command" ? (value.command ?? "") : null });
+    const result = await saveNodeAction(value.id, nodeInput(value));
     setPending(false);
     const outcome = saveOutcome(result, isNew);
     if (outcome.close && onClose) return onClose();
@@ -245,6 +245,36 @@ export function NodeForm({
               <span className="hint nf-count">
                 {value.instructions.length.toLocaleString("en-US")} / {INSTRUCTIONS_MAX.toLocaleString("en-US")} characters
               </span>
+            </div>
+          )}
+
+          {runsClaude(value.kind) && (
+            <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
+              <div className="field" style={{ flex: 2 }}>
+                <label htmlFor={`model-${value.id ?? "new"}`}>Model</label>
+                <select id={`model-${value.id ?? "new"}`} className="input" aria-label="Model" value={value.model} disabled={readOnly} onChange={(e) => set({ model: e.target.value })}>
+                  {MODEL_CHOICES.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="hint">A smaller model costs less for a simple step.</span>
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label htmlFor={`turns-${value.id ?? "new"}`}>Turn limit</label>
+                <input
+                  id={`turns-${value.id ?? "new"}`}
+                  className="input"
+                  aria-label="Turn limit"
+                  inputMode="numeric"
+                  placeholder={String(DEFAULT_MAX_TURNS)}
+                  value={value.maxTurns}
+                  readOnly={readOnly}
+                  onChange={(e) => set({ maxTurns: e.target.value.replace(/[^0-9]/g, "").slice(0, 4) })}
+                />
+                <span className="hint">At the limit the Run waits for Continue or Stop (1 to {MAX_TURNS_LIMIT}).</span>
+              </div>
             </div>
           )}
         </div>
