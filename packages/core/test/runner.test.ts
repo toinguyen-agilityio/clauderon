@@ -3,6 +3,7 @@ import {
   MASK,
   branchName,
   buildAgentPrompt,
+  REPO_GUIDANCE,
   checkAgentResult,
   commandOutputs,
   extractResultBlock,
@@ -70,12 +71,22 @@ describe("buildAgentPrompt (RUN-10)", () => {
       ],
       outputs: ["branch", "summary"],
     });
-    const order = ["Make the change.", "Keep it small.", "Use British spelling.", "## issue", "Fix totals", "## plan", "1. Do it", '"outputs"'];
+    const order = ["Make the change.", "Keep it small.", "Use British spelling.", "## Repository guidance", "## issue", "Fix totals", "## plan", "1. Do it", '"outputs"'];
     const positions = order.map((part) => prompt.indexOf(part));
     expect(positions.every((p) => p >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(prompt).toContain('"summary"');
     expect(prompt).toMatch(/commit your work/i);
+  });
+
+  it("tells every Node to read the repository's own guidance without naming a folder layout", () => {
+    for (const grill of [false, true]) {
+      const prompt = buildAgentPrompt({ instructions: "Plan.", placementInstructions: "", batchInstructions: "", inputs: [], outputs: ["plan"], grill });
+      expect(prompt).toContain(REPO_GUIDANCE);
+    }
+    for (const file of ["AGENTS.md", "CLAUDE.md", "GEMINI.md", ".github/copilot-instructions.md", "CONTRIBUTING.md", "README.md"]) expect(REPO_GUIDANCE).toContain(file);
+    expect(REPO_GUIDANCE).not.toMatch(/docs\/(adr|specs)/);
+    expect(REPO_GUIDANCE).toMatch(/If none exist, carry on/);
   });
 
   it("leaves out empty extra instructions", () => {

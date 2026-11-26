@@ -70,15 +70,27 @@ function render(value: unknown): string {
 }
 
 /**
+ * What every Agent and Grill Node is told about the repository it works in.
+ * A Project can be any GitHub repository, with the guidance of any AI tool or
+ * none, so it names no folder and no tool: the Node reads what exists.
+ */
+export const REPO_GUIDANCE = [
+  "## Repository guidance",
+  "",
+  "Before you start, look for this repository's own guidance for AI assistants and contributors: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `CONTRIBUTING.md` and `README.md`. Read the ones that exist and follow them; skip any that are already in your context. Do not assume any folder layout or documents beyond these. If none exist, carry on with the instructions above.",
+].join("\n");
+
+/**
  * The Agent Node prompt (spec M1 §4.3): the Node's instructions, the
- * placement's and the Batch's extra instructions, each input under a heading
- * named after it, the retry context of a retried Attempt (RUN-7), then the
- * result contract of M0 §6.
+ * placement's and the Batch's extra instructions, the repository guidance,
+ * each input under a heading named after it, the retry context of a retried
+ * Attempt (RUN-7), then the result contract of M0 §6.
  */
 export function buildAgentPrompt(parts: PromptParts): string {
   const sections = [parts.instructions.trim()];
   if (parts.placementInstructions.trim()) sections.push(`Extra instructions for this step:\n${parts.placementInstructions.trim()}`);
   if (parts.batchInstructions.trim()) sections.push(`Extra instructions from the person who started this run:\n${parts.batchInstructions.trim()}`);
+  sections.push(REPO_GUIDANCE);
   for (const input of parts.inputs) sections.push(`## ${input.name}\n\n${render(input.value)}`);
   const retry = renderRetryContext(parts.retryContext);
   if (retry) sections.push(retry);
