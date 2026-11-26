@@ -1,6 +1,7 @@
 export * from "./access";
 export * from "./attachments";
 export * from "./client";
+export * from "./flow-history";
 export * from "./flows";
 export * from "./gateway-commands";
 export * from "./github-access";

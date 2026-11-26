@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { isLegacyAgentVersion } from "@clauderon/protocol";
 import { ago } from "../../../../components/format";
 import { Icon } from "../../../../components/icons";
-import { StatePill } from "../../../../components/state-pill";
 import { agentManifest, installCommandPs1, installCommandSh } from "../../../../server/agent-install";
 import { viewMachine } from "../../../../server/machines";
 import { deps, pageWebUrl, requireMember } from "../../../../server/runtime";
@@ -12,7 +11,7 @@ import { AutoRefresh } from "../auto-refresh";
 import { CmdBox } from "../cmd-box";
 import { DoctorCard } from "../doctor-card";
 import { CheckLogins, RemoveMachine, UpdateAgent } from "../machine-actions";
-import { claudeAccountLabel, defaultMachineName, machineName, MachineStatusChip, osLabel, DiskStatus, ReadyChip, ResourceMeter, resourceLabels, SlotBar, SlotChips } from "../machine-parts";
+import { claudeAccountLabel, defaultMachineName, machineName, MachineStatusChip, osLabel, DiskStatus, ReadyChip, ResourceMeter, resourceLabels, SlotChips } from "../machine-parts";
 import { MachineSettings } from "../machine-settings";
 import { PairingProgress } from "../pairing-progress";
 
@@ -40,7 +39,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const member = await requireMember();
   const view = await viewMachine(deps(), member, id);
   if (view === "not-found") notFound();
-  const { machine, using, canRemove } = view;
+  const { machine, canRemove } = view;
   const now = new Date();
   const [latest, web] = await Promise.all([agentManifest(), pageWebUrl()]);
   // ADR 0007: an old install (a clone run with tsx) cannot update itself; a bundle updates on its next connect.
@@ -50,7 +49,6 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const installCommand = machine.os === "win32" ? installCommandPs1(web) : installCommandSh(web);
   const owner = machine.owner.name ?? machine.owner.email;
   const name = machineName(machine);
-  const waiting = using.filter((r) => r.state === "waiting_for_human").length;
   // A heartbeat after the pairing: the new Agent has connected at least once.
   const connectedSincePairing = Boolean(machine.lastHeartbeatAt && machine.pairedAt && machine.lastHeartbeatAt >= machine.pairedAt);
   // Right after Pairing the logins are unknown, not missing: say "Checking…" instead of a red "Not logged in".
@@ -96,38 +94,45 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     ["Paired", ago(machine.pairedAt, now)],
   ];
 
+  const state = !machine.paired ? "unpaired" : machine.connected ? "online" : "offline";
+
   return (
     <>
-      <div>
-        <nav className="crumbs" aria-label="Breadcrumb">
-          <Link href="/machines">Machines</Link> / <span>{name}</span>
-        </nav>
-        <div className="page-head">
-          <div>
-            <h1 className="row" style={{ gap: 10 }}>
-              <span style={{ color: "var(--fg2)" }}>{Icon.host}</span>
-              {name}
-            </h1>
-            <div className="chips-row" style={{ marginTop: 8 }} data-testid="machine-chips">
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <Link href="/machines">Machines</Link> / <span>{name}</span>
+      </nav>
+      <header className={`card mach-hero mach-detail-hero is-${state}`}>
+        <div className="mach-hero-id">
+          <span className="mach-icon">
+            {Icon.host}
+            <i className="mach-led" aria-hidden />
+          </span>
+          <div className="mach-hero-name">
+            <h1>{name}</h1>
+            <div className="mach-facts small">
+              <span>
+                {machine.mine ? "Yours" : <>Owned by <b>{owner}</b></>}
+              </span>
+              <span className="mono">{machine.hostname ?? "—"}</span>
+              <span>{osLabel(machine.os, machine.arch) || "unknown OS"}</span>
+              <span className="faint">last heartbeat {ago(machine.lastHeartbeatAt, now)}</span>
+            </div>
+            <div className="chips-row" style={{ marginTop: 6 }} data-testid="machine-chips">
               <MachineStatusChip connected={machine.connected} paired={machine.paired} />
               {checking ? CHECKING : <ReadyChip ready={machine.ready} />}
               <SlotChips inUse={machine.inUse} slots={machine.slots} queued={machine.queued} />
             </div>
-            <p className="sub small" style={{ marginTop: 8 }}>
-              owner <b>{owner}</b>
-              {machine.mine ? " (you)" : ""} · last heartbeat {ago(machine.lastHeartbeatAt, now)}
-            </p>
           </div>
           {machine.mine ? (
-            <div className="row" style={{ gap: 6, alignItems: "flex-start" }}>
+            <div className="row mach-hero-actions">
               {machine.paired && <CheckLogins machineId={machine.id} connected={machine.connected} />}
               <MachineSettings machineId={machine.id} name={machine.name} defaultName={defaultMachineName(machine.owner)} slots={machine.slots} label="Settings…" small />
             </div>
           ) : (
-            <span className="faint small">Only {owner} can manage this Machine.</span>
+            <span className="faint small mach-hero-actions">Only {owner} can manage this Machine.</span>
           )}
         </div>
-      </div>
+      </header>
 
       {machine.mine && machine.paired && !machine.ready && <AutoRefresh everyMs={settingUp ? 2000 : 5000} />}
       {settingUp && <PairingProgress phase={connectedSincePairing ? "checking" : "connecting"} hostname={machine.hostname ?? "This computer"} />}
@@ -168,9 +173,11 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      <div className="grid g3">
-        <div className="card card-pad stack" data-testid="machine-ready">
-          <span className="eyebrow">Ready to run</span>
+      <div className="mach-detail">
+        <section className="card card-pad stack" data-testid="machine-ready" aria-labelledby="mach-ready-h">
+          <h2 id="mach-ready-h" className="mach-card-h">
+            Ready to run
+          </h2>
           <ul className="checklist">
             {checks.map(([ok, label, chip]) => (
               <li key={label}>
@@ -181,119 +188,31 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             ))}
           </ul>
           <p className="faint small">
-            Last checked {ago(machine.loginsCheckedAt, now)}
-            {machine.tokenRepos.length > 0 ? ` · gh reaches ${machine.tokenRepos.join(", ")}` : " · gh reaches no Project yet"}
+            Last checked {ago(machine.loginsCheckedAt, now)}.{" "}
+            {machine.tokenRepos.length > 0 ? `gh reaches ${machine.tokenRepos.join(", ")}.` : "gh reaches no Project yet."}
           </p>
-        </div>
+        </section>
 
-        <div className="card card-pad stack" data-testid="machine-slots">
-          <div className="row between">
-            <span className="eyebrow">Slots</span>
-            {machine.mine && (
-              <MachineSettings machineId={machine.id} name={machine.name} defaultName={defaultMachineName(machine.owner)} slots={machine.slots} label="Change…" small />
-            )}
-          </div>
-          <div className="big-num num">
-            {machine.inUse}
-            <span className="faint"> / {machine.slots}</span>
-          </div>
-          <SlotBar slots={machine.slots} inUse={machine.inUse} waiting={waiting} />
-          <dl className="kv">
-            <dt>Queued</dt>
-            <dd>
-              {machine.queued > 0 ? <span className="pill wait">{machine.queued} waiting</span> : <span className="pill plain">empty</span>}
-              {!machine.connected && machine.queued > 0 && <span className="faint small"> · waits for the Agent to connect</span>}
-            </dd>
-          </dl>
-        </div>
+        {machine.doctor && <DoctorCard doctor={machine.doctor} mine={machine.mine} now={now} />}
 
-        <div className="card card-pad stack">
-          <span className="eyebrow">Computer</span>
+        <section className="card card-pad stack" aria-labelledby="mach-computer-h">
+          <h2 id="mach-computer-h" className="mach-card-h">
+            Computer
+          </h2>
           <dl className="kv">
             {facts.map(([label, value]) => (
               <FactRow key={label} label={label} value={value} />
             ))}
           </dl>
           <p className="faint small">Runs work in the Agent&apos;s own directory, ~/.clauderon: one clone per Project, one worktree per Run.</p>
-        </div>
+        </section>
       </div>
 
-      {machine.doctor && <DoctorCard doctor={machine.doctor} mine={machine.mine} now={now} />}
-
-      <div className="grid g2">
-        <div className="card" data-testid="machine-using">
-          <div className="card-head">
-            <h2>
-              Using Slots <span className="faint num">{using.length}</span>
-            </h2>
-          </div>
-          {using.length > 0 ? (
-            <div className="tbl-wrap">
-              <table className="tbl">
-                <tbody>
-                  {using.map((r) => (
-                    <tr key={r.runId}>
-                      <td className="grow-cell">
-                        <span className="mono faint small">{r.key}</span>
-                        <div>
-                          <Link className="plain-link" href={`/runs/${r.runId}`}>
-                            {r.ticketTitle}
-                          </Link>
-                        </div>
-                        <div className="small faint">
-                          {r.flowName} · {ago(r.startedAt ?? r.queuedAt, now)}
-                        </div>
-                      </td>
-                      <td className="actions">
-                        <StatePill state={r.state} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="empty">No Runs on this Machine right now.</div>
-          )}
-        </div>
-
-        <div className="card" data-testid="machine-queue">
-          <div className="card-head">
-            <h2>
-              Queue <span className="faint num">{machine.queue.length}</span>
-            </h2>
-            <span className="faint small">first-in, first-out</span>
-          </div>
-          {machine.queue.length > 0 ? (
-            <div className="tbl-wrap">
-              <table className="tbl">
-                <tbody>
-                  {machine.queue.map((q) => (
-                    <tr key={q.runId}>
-                      <td className="num faint">{q.position}</td>
-                      <td className="grow-cell">
-                        <span className="mono faint small">{q.key}</span>
-                        <div>
-                          <Link className="plain-link" href={`/runs/${q.runId}`}>
-                            {q.ticketTitle}
-                          </Link>
-                        </div>
-                        <div className="small faint">
-                          {q.flowName} · {ago(q.queuedAt, now)}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="empty">Nothing waiting.</div>
-          )}
-        </div>
-      </div>
-
-      {canRemove && <RemoveMachine machineId={machine.id} name={name} />}
+      {canRemove ? (
+        <section className="mach-danger" aria-label="Remove">
+          <RemoveMachine machineId={machine.id} name={name} />
+        </section>
+      ) : null}
     </>
   );
 }

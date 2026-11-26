@@ -43,6 +43,12 @@ export type HumanResponse =
   | { decision: "answer"; answers: GrillAnswers }
   | { cancelled: true };
 
+/** What a turn-limit request holds in `questions` (#218): the turns the session reached. */
+export type TurnsSubject = { turns: number };
+
+/** The prompt that resumes a session a person let go on after its turn limit (#218). */
+export const CONTINUE_PROMPT = "You reached the turn limit and a person let you go on. Continue where you left off, then finish with the result block as asked before.\n";
+
 /** What an Approve request holds in `questions`: the input Output it passes through. */
 export type ApproveSubject = { input: { name: string; type: string; value: unknown } | null };
 
@@ -105,7 +111,11 @@ export const WRITING = [
  * The result contract of M0 §6 at the end of an Agent or Grill prompt. A
  * Grill Node may finish with questions instead of its Outputs.
  */
-export function resultContract(outputs: readonly string[], grill: boolean): string {
+/** How a `context` Output should read (#218): short, for the next Agent, not for people. */
+export const CONTEXT_WRITING =
+  "A context Output is for the next Agent in this Flow, so it does not explore the repository again: list the files that matter (with :line), the decisions already made and what you ruled out. Keep it under 300 words; no code.";
+
+export function resultContract(outputs: readonly string[], grill: boolean, contextOutputs: readonly string[] = []): string {
   const example = Object.fromEntries(outputs.filter((o) => o !== "branch").map((o) => [o, `<${o}>`]));
   const lines = [
     "## Result",
@@ -135,6 +145,7 @@ export function resultContract(outputs: readonly string[], grill: boolean): stri
     );
   }
   if (outputs.some((o) => o !== "branch")) lines.push("", ...WRITING);
+  for (const name of contextOutputs) if (outputs.includes(name)) lines.push("", `${name}: ${CONTEXT_WRITING}`);
   if (outputs.includes("branch")) lines.push("", "Commit your work on the current branch before you finish. The branch is reported for you; do not push.");
   return lines.join("\n");
 }

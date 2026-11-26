@@ -39,6 +39,11 @@ export const EXPLORING_CALLS = 8;
 const EXPLORING_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "NotebookRead", "WebFetch", "WebSearch"]);
 const EDITING_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
+/**
+ * `total` is what the Node really spent: new input, cache created and output. Cache read is left
+ * out: every turn re-reads the whole conversation from the cache at a tenth of the input price, so
+ * adding it made a long Node look many times bigger than it was. It stays on each turn.
+ */
 export type TokenSplit = { total: number; fresh: number; cacheRead: number; cacheCreated: number; newInput: number; output: number };
 
 export function splitTokens(turns: readonly Turn[]): TokenSplit {
@@ -47,13 +52,25 @@ export function splitTokens(turns: readonly Turn[]): TokenSplit {
   const cacheCreated = sum((t) => t.cacheCreated);
   const cacheRead = sum((t) => t.cacheRead);
   const output = sum((t) => t.output);
-  return { total: newInput + cacheCreated + cacheRead + output, fresh: newInput + cacheCreated, cacheRead, cacheCreated, newInput, output };
+  return { total: newInput + cacheCreated + output, fresh: newInput + cacheCreated, cacheRead, cacheCreated, newInput, output };
 }
 
 /** The totals the Run page shows beside the turn list: turns and tool calls are separate numbers. */
 export function summarizeTurns(turns: readonly Turn[]): TokenSplit & { turns: number; toolCalls: number } {
   return { ...splitTokens(turns), turns: turns.length, toolCalls: turns.reduce((n, t) => n + t.calls.length, 0) };
 }
+
+/**
+ * An Attempt's tokens without cache read (see `TokenSplit`), from the totals the Agent reported;
+ * null until it reports any. An older Agent does not send cache read, so its input stays whole.
+ */
+export function attemptTokens(a: { inputTokens: number | null; outputTokens: number | null; cacheReadTokens: number | null }): number | null {
+  if (a.inputTokens === null && a.outputTokens === null) return null;
+  return freshInput(a) + (a.outputTokens ?? 0);
+}
+
+/** An Attempt's input without cache read; 0 until it reports any. */
+export const freshInput = (a: { inputTokens: number | null; cacheReadTokens: number | null }): number => Math.max(0, (a.inputTokens ?? 0) - (a.cacheReadTokens ?? 0));
 
 /** The context Claude started a turn with. */
 export const contextSize = (turn: Turn): number => turn.newInput + turn.cacheCreated + turn.cacheRead;

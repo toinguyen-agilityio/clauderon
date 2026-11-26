@@ -1,6 +1,7 @@
-import { eq } from "drizzle-orm";
+import { inArray, eq } from "drizzle-orm";
 import type { NodeDefinition } from "@clauderon/core";
 import type { Db } from "./client";
+import { recordFlowVersion } from "./flow-history";
 import { flowLocks, type FlowLock } from "./flows";
 import { flow, flowNode, node } from "./schema";
 
@@ -14,6 +15,8 @@ export type LibraryRow = {
   command: string | null;
   inputs: NodeDefinition["inputs"];
   outputs: NodeDefinition["outputs"];
+  model: string | null;
+  maxTurns: number | null;
   isSample: boolean;
   updatedByEmail: string;
   updatedAt: Date;
@@ -34,6 +37,8 @@ export async function listLibraryRows(db: Db): Promise<LibraryRow[]> {
     command: n.command,
     inputs: n.inputs as LibraryRow["inputs"],
     outputs: n.outputs as LibraryRow["outputs"],
+    model: n.model,
+    maxTurns: n.maxTurns,
     isSample: n.isSample,
     updatedByEmail: n.updatedByEmail,
     updatedAt: n.updatedAt,
@@ -68,11 +73,21 @@ async function lockedUse(db: Db, nodeId: string) {
  * are edited like any Node. Returns how many Flows it changed.
  */
 export async function updateNode(db: Db, nodeId: string, definition: NodeDefinition, actorEmail: string, now: Date): Promise<ChangeNodeResult> {
-  const { row, locked } = await lockedUse(db, nodeId);
-  if (!row) return { ok: false, reason: "not-found" };
-  if (locked) return { ok: false, reason: "locked", flow: { id: locked.flowId, name: locked.name }, lock: locked.lock! };
-  await db.update(node).set({ ...definition, updatedByEmail: actorEmail, updatedAt: now }).where(eq(node.id, nodeId));
-  return { ok: true, flows: row.usedBy.length };
+  // One transaction, so the edit and a version in the history of each Flow it changes stand or fall together (issue #181).
+  return db.transaction(async (tx) => {
+    const { row } = await lockedUse(tx, nodeId);
+    if (!row) return { ok: false, reason: "not-found" } as const;
+    // Lock the Flows in id order (as `saveFlow` locks its own), then check them again: a Start may have come in between.
+    const flowIds = row.usedBy.map((u) => u.flowId).sort();
+    if (flowIds.length > 0) await tx.select({ id: flow.id }).from(flow).where(inArray(flow.id, flowIds)).orderBy(flow.id).for("update");
+    const { row: locked, locked: stillLocked } = await lockedUse(tx, nodeId);
+    if (stillLocked) return { ok: false, reason: "locked", flow: { id: stillLocked.flowId, name: stillLocked.name }, lock: stillLocked.lock! } as const;
+    // A definition without a model or turn limit sets them back to the defaults (#218).
+    await tx.update(node).set({ ...definition, model: definition.model ?? null, maxTurns: definition.maxTurns ?? null, updatedByEmail: actorEmail, updatedAt: now }).where(eq(node.id, nodeId));
+    // The edit changes every Flow that uses the Node, so each one gets a version of its own.
+    for (const flowId of flowIds) await recordFlowVersion(tx, { flowId, kind: "library-node", actorEmail, now, detail: { nodeId, nodeName: definition.name } });
+    return { ok: true, flows: (locked ?? row).usedBy.length } as const;
+  });
 }
 
 /** Deletes a Node (FLW-9): refused for a locked use (FLW-10) and any Flow that still uses it. */

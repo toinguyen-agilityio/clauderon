@@ -19,6 +19,8 @@ export default async function LibraryPage() {
     command: n.command,
     inputs: n.inputs,
     outputs: n.outputs,
+    model: n.model,
+    maxTurns: n.maxTurns,
     isSample: n.isSample,
     usedBy: n.usedBy.map((u) => ({ flowId: u.flowId, name: u.name, locked: u.lock !== null })),
   }));

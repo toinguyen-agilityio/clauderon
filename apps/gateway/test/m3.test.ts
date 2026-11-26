@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { FEEDBACK_HEADING, type FlowSnapshot } from "@clauderon/core";
+import { CONTINUE_PROMPT, CONTINUE_TURNS, DEFAULT_MAX_TURNS, FEEDBACK_HEADING, RETRY_RESUME_WINDOW_MS, type FlowSnapshot } from "@clauderon/core";
 import {
   attemptsOfRun,
   cancelRun,
@@ -39,6 +39,12 @@ type Script = {
   grillRounds?: number;
   /** Exit code of each `Run tests` call in turn; 0 when the list runs out. */
   testExits?: number[];
+  /** Code a change stops at its turn limit until its session is resumed (#218). */
+  turnLimit?: boolean;
+  /** Code a change fails this many fresh sessions, after one small turn (#218). */
+  codeFails?: number;
+  /** A resumed Code a change session is gone (#218). */
+  resumeGone?: boolean;
   /** Don't answer node.run at all for these Node kinds, e.g. to keep a Node running. */
   hold?: (run: Payload<"node.run">) => boolean;
 };
@@ -46,6 +52,7 @@ type Script = {
 /** An Agent for *Plan and deliver*: Grill asks `grillRounds` rounds, then every Node succeeds. */
 function scriptPlanAndDeliver(agent: FakeAgent, script: Script = {}) {
   let asked = 0;
+  let codeFails = script.codeFails ?? 0;
   const exits = [...(script.testExits ?? [])];
   agent.respond("machine.checkLogins", (_, a) =>
     a.send("machine.logins", { claude: true, gh: true, ghAccount: "octocat", tokenRepos: [], checkedAt: new Date().toISOString() }),
@@ -61,6 +68,14 @@ function scriptPlanAndDeliver(agent: FakeAgent, script: Script = {}) {
       } else {
         done({ exitCode: 0, sessionId: "sess-grill", result: { outputs: { plan: "1. Fix totals" } } });
       }
+    } else if (run.kind === "agent" && script.resumeGone && run.resumeSessionId) {
+      done({ exitCode: 1, error: "Claude session sess-code could not be resumed: No conversation found", sessionGone: true });
+    } else if (run.kind === "agent" && codeFails > 0 && !run.resumeSessionId) {
+      codeFails--;
+      a.send("node.turns", { attemptId: run.attemptId, turns: [{ index: 0, calls: [], newInput: 10, cacheCreated: 5_000, cacheRead: 5_000, output: 10 }] });
+      done({ exitCode: 1, sessionId: "sess-code", error: "Claude Code exited 1" });
+    } else if (run.kind === "agent" && script.turnLimit && !run.resumeSessionId) {
+      done({ exitCode: 1, sessionId: "sess-code", error: "Claude reached the turn limit (200 turns)", maxTurnsReached: true });
     } else if (run.kind === "agent") {
       done({ exitCode: 0, sessionId: "sess-code", headCommit: "c0ffee", result: { outputs: { summary: "Fixed it" } } });
     } else if (run.command?.startsWith("npm test")) {
@@ -254,6 +269,94 @@ describe("Human Nodes on the Gateway (spec M3 §2)", () => {
     await gateway.engine.resume(runId!);
     await flush();
     expect(await getRun(db, runId!)).toMatchObject({ state: "failed", failureReason: "Claude session sess-grill could not be resumed: No conversation found" });
+  });
+});
+
+describe("Turn limit (#218)", () => {
+  const scriptTurnLimit = (agent: FakeAgent) => scriptPlanAndDeliver(agent, { turnLimit: true });
+
+  it("pauses the Node for Continue, which resumes the same session with more turns", async () => {
+    const { ann, gateway, agent, flush, start } = await setup();
+    scriptTurnLimit(agent);
+    const [runId] = await start([0], "basic-ticket-delivery");
+
+    const waiting = await openRequest(runId!);
+    expect(waiting.request).toMatchObject({ kind: "turns", round: 1, questions: { turns: DEFAULT_MAX_TURNS } });
+    expect(await getRun(db, runId!)).toMatchObject({ state: "waiting_for_human" });
+    expect(await respondToHuman(db, waiting.request.id, ann.email, { decision: "approve" }, new Date())).toMatchObject({ ok: true });
+    await gateway.engine.resume(runId!);
+    await gateway.engine.resume(runId!);
+    await flush();
+
+    const runs = agent.of("node.run").filter((r) => r.attemptId === waiting.request.attemptId);
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({ maxTurns: DEFAULT_MAX_TURNS });
+    expect(runs[0]!.resumeSessionId).toBeUndefined();
+    expect(runs[1]).toMatchObject({ resumeSessionId: "sess-code", maxTurns: CONTINUE_TURNS, prompt: CONTINUE_PROMPT });
+    const attempts = await attemptsOfRun(db, runId!);
+    expect(attempts.find((a) => a.id === waiting.request.attemptId)).toMatchObject({ state: "succeeded" });
+  });
+
+  it("Stop fails the Node and the Run", async () => {
+    const { ann, agent, start } = await setup();
+    scriptTurnLimit(agent);
+    const [runId] = await start([0], "basic-ticket-delivery");
+    const waiting = await openRequest(runId!);
+    expect(await respondToHuman(db, waiting.request.id, ann.email, { decision: "reject", feedback: "" }, new Date())).toMatchObject({ ok: true, decision: "reject" });
+    expect(await getRun(db, runId!)).toMatchObject({ state: "failed", failureReason: `Stopped at the turn limit (${DEFAULT_MAX_TURNS} turns) at “Code a change”` });
+    const attempts = await attemptsOfRun(db, runId!);
+    expect(attempts.find((a) => a.id === waiting.request.attemptId)).toMatchObject({ state: "failed", error: `Stopped at the turn limit (${DEFAULT_MAX_TURNS} turns)` });
+  });
+});
+
+describe("Retry resumes the failed session (#218)", () => {
+  async function failThenRetry(script: Script, wait = 0) {
+    const ctx = await setup();
+    scriptPlanAndDeliver(ctx.agent, script);
+    const [runId] = await ctx.start([0], "basic-ticket-delivery");
+    expect(await getRun(db, runId!)).toMatchObject({ state: "failed" });
+    if (wait > 0) {
+      await ctx.clock.advance(wait);
+      // One long fake-clock jump outruns the heartbeat writes, so the watcher drops
+      // the Machine; its Agent says hello again, as the real one does.
+      ctx.reconnect();
+      await ctx.flush();
+    }
+    const snapshot = (await getRun(db, runId!))!.flowSnapshot as FlowSnapshot;
+    const code = snapshot.nodes.find((n) => n.name === "Code a change")!.id;
+    const before = ctx.agent.of("node.run").length;
+    expect(await retryRun(db, runId!, code, "Try again.", ctx.ann.email, new Date())).toMatchObject({ ok: true });
+    await ctx.gateway.engine.schedule(ctx.machine.id);
+    await ctx.flush();
+    const runs = ctx.agent.of("node.run").slice(before).filter((r) => r.kind === "agent");
+    return { runId: runId!, runs };
+  }
+
+  it("resumes a small session that failed minutes ago, with the retry context", async () => {
+    const { runId, runs } = await failThenRetry({ codeFails: 1 });
+    expect(runs[0]).toMatchObject({ resumeSessionId: "sess-code" });
+    expect(runs[0]!.prompt).toContain("Your last attempt at this step did not finish.");
+    expect(runs[0]!.prompt).toContain("Try again.");
+    expect(runs[0]!.prompt).not.toContain("## issue");
+    expect((await getRun(db, runId))!.state).not.toBe("failed");
+  });
+
+  it("starts fresh once the prompt cache has gone cold", async () => {
+    const { runs } = await failThenRetry({ codeFails: 1 }, RETRY_RESUME_WINDOW_MS + 1_000);
+    expect(runs[0]!.resumeSessionId).toBeUndefined();
+    expect(runs[0]!.prompt).toContain("## issue");
+    expect(runs[0]!.prompt).toContain("Try again.");
+  });
+
+  it("starts fresh on the same Attempt when the session is gone, and succeeds", async () => {
+    const { runId, runs } = await failThenRetry({ codeFails: 1, resumeGone: true });
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({ resumeSessionId: "sess-code" });
+    expect(runs[1]!.attemptId).toBe(runs[0]!.attemptId);
+    expect(runs[1]!.resumeSessionId).toBeUndefined();
+    expect(runs[1]!.prompt).toContain("## issue");
+    const attempt = (await attemptsOfRun(db, runId)).find((a) => a.id === runs[0]!.attemptId);
+    expect(attempt).toMatchObject({ state: "succeeded" });
   });
 });
 

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Payload } from "@clauderon/protocol";
 import { settle } from "@clauderon/testing";
-import { parseClaudeLine } from "../src/claude";
+import { TOKEN_GUIDANCE, claudeCommand, parseClaudeLine } from "../src/claude";
 import { registerLoginHandlers } from "../src/logins";
 import { registerNodeHandlers } from "../src/nodes";
 import { registerWorkspaceHandlers } from "../src/workspace";
@@ -352,7 +352,7 @@ describe("Agent Nodes (RUN-10, POD-12)", () => {
 
     expect(system.files.get("/home/ann/.clauderon/projects/acme/web/.git/worktrees/run-1/clauderon-prompt-att-1.md")).toBe("Do the thing");
     const claude = system.execs.find((e) => e.argv[2]?.startsWith("claude "))!;
-    expect(claude.argv[2]).toBe('claude -p --output-format stream-json --verbose --dangerously-skip-permissions < "$CLAUDERON_PROMPT_FILE"');
+    expect(claude.argv[2]).toBe(`claude -p --output-format stream-json --verbose --dangerously-skip-permissions --append-system-prompt '${TOKEN_GUIDANCE}' < "$CLAUDERON_PROMPT_FILE"`);
     expect(claude.options.cwd).toBe("/home/ann/.clauderon/runs/run-1");
 
     expect(link.of("node.usage")).toEqual([{ attemptId: "att-1", inputTokens: 15, outputTokens: 7, cacheCreated: 0, cacheRead: 5 }]);
@@ -446,5 +446,24 @@ describe("Agent Nodes (RUN-10, POD-12)", () => {
       }),
     );
     expect(withModels.usage).toEqual({ inputTokens: 66, outputTokens: 44, cacheCreated: 22, cacheRead: 33 });
+  });
+});
+
+describe("claudeCommand (#218)", () => {
+  it("appends the short token guidance, also to a resumed session", () => {
+    expect(TOKEN_GUIDANCE).not.toContain("'");
+    expect(claudeCommand()).toContain(`--append-system-prompt '${TOKEN_GUIDANCE}'`);
+    expect(claudeCommand({ resumeSessionId: "sess-1" })).toMatch(/--resume 'sess-1' --append-system-prompt '/);
+  });
+
+  it("passes the Node's model and turn limit, cleaned", () => {
+    expect(claudeCommand({ model: "haiku", maxTurns: 80 })).toContain(" --model 'haiku' --max-turns 80 ");
+    expect(claudeCommand({ model: "op'us; rm -rf /", maxTurns: 0 })).toContain(" --model 'opusrm-rf' ");
+    expect(claudeCommand({ maxTurns: 0 })).not.toContain("--max-turns");
+  });
+
+  it("reads a session that stopped at its turn limit", () => {
+    expect(parseClaudeLine(JSON.stringify({ type: "result", subtype: "error_max_turns", is_error: true, session_id: "s1" }))).toMatchObject({ maxTurns: true, sessionId: "s1" });
+    expect(parseClaudeLine(JSON.stringify({ type: "result", subtype: "success", result: "done" })).maxTurns).toBeUndefined();
   });
 });

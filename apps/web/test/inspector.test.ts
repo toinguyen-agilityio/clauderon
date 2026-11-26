@@ -11,7 +11,7 @@ describe("Node inspector view (#105)", () => {
     const turns = [turn(0, [call("Bash", "pnpm test", 40_000), call("Read", "b.ts", 1000)]), turn(1, [call("Read", "a.ts", 100)]), turn(2)];
     const view = inspectorOf({ ...base, turns }, []);
     expect(view.hasTurns).toBe(true);
-    expect(view.summary).toMatchObject({ turns: 3, toolCalls: 3, cacheRead: 1500, fresh: 165 });
+    expect(view.summary).toMatchObject({ turns: 3, toolCalls: 3, cacheRead: 1500, fresh: 165, total: 195 });
     expect(view.turns[0]).toMatchObject({ context: 555, resultBytes: 41_000, rereads: 2 });
     expect(view.turns[0]!.calls).toHaveLength(2);
     expect(view.findings.map((f) => f.kind)).toEqual(["large-result"]);
@@ -37,6 +37,10 @@ describe("Node inspector view (#105)", () => {
     expect(view.turns[0]).not.toHaveProperty("tool");
     expect(view.turns[2]!.calls).toEqual([]);
     expect(view.findings.map((f) => f.kind)).toEqual(["repeated-read"]);
+  });
+
+  it("leaves cache read out of the totals an Attempt without turns shows", () => {
+    expect(inspectorOf({ ...base, turns: null }, []).totalsOnly).toMatchObject({ input: 100, output: 20 });
   });
 
   it("has no totals while an Attempt has not reported any", () => {

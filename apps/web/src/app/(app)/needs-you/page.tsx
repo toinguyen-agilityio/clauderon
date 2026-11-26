@@ -43,7 +43,7 @@ export default async function NeedsYouPage() {
                 <div className="stack" style={{ gap: 2 }}>
                   <div className="row" style={{ gap: 8 }}>
                     <b>{item.nodeName}</b>
-                    <span className="tag">{item.kind === "grill" ? `Grill · round ${item.round}` : "Approve"}</span>
+                    <span className="tag">{item.kind === "grill" ? `Grill · round ${item.round}` : item.kind === "turns" ? "Turn limit" : "Approve"}</span>
                   </div>
                   <div className="small faint">
                     <span className="mono">{item.key}</span> {item.ticketTitle} · {item.flowName} ·{" "}
@@ -59,7 +59,7 @@ export default async function NeedsYouPage() {
               </div>
               <KeepOpen className="card-pad" initialOpen={items.length <= 3}>
                 <summary className="small">
-                  {item.kind === "grill" ? "Answer the questions" : "Review and decide"}
+                  {item.kind === "grill" ? "Answer the questions" : item.kind === "turns" ? "Continue or stop" : "Review and decide"}
                 </summary>
                 {item.kind === "approve" ? (
                   <div className="grid g2">
@@ -76,6 +76,8 @@ export default async function NeedsYouPage() {
                     </div>
                     <HumanForm request={{ id: item.id, kind: "approve", round: item.round, questions: [] }} runId={item.runId} />
                   </div>
+                ) : item.kind === "turns" ? (
+                  <HumanForm request={{ id: item.id, kind: "turns", round: item.round, questions: [], turns: item.turns }} runId={item.runId} />
                 ) : (
                   <HumanForm request={{ id: item.id, kind: "grill", round: item.round, questions: item.questions }} runId={item.runId} />
                 )}

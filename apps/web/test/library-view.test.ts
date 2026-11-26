@@ -76,7 +76,7 @@ describe("Node library list (ticket #71)", () => {
 });
 
 describe("Node form (ticket #71)", () => {
-  const form = (over: Partial<NodeFormValue> = {}): NodeFormValue => ({ id: null, name: "Write notes", kind: "agent", instructions: "Write the notes.", command: null, inputs: [], outputs: [], ...over });
+  const form = (over: Partial<NodeFormValue> = {}): NodeFormValue => ({ id: null, name: "Write notes", kind: "agent", instructions: "Write the notes.", command: null, inputs: [], outputs: [], model: "", maxTurns: "", ...over });
 
   it("says why Save is unavailable, in the server's words", () => {
     expect(saveBlocker(form({ name: "  " }))).toBe("Give the Node a name.");

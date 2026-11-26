@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "../../../components/icons";
-import { StatePill, TicketStatusPill } from "../../../components/state-pill";
+import { runStateLook, tagColor, TicketStatusPill, ticketTone } from "../../../components/state-pill";
 import type { TicketRow } from "../../../server/tickets";
 import { loadStartDialog, startAction } from "./actions";
 import { StartRunsDialog } from "../../../components/start-runs-dialog";
@@ -11,7 +11,7 @@ import { StartRunsDialog } from "../../../components/start-runs-dialog";
 const selectable = (t: TicketRow) => t.activeRunId === null && t.status !== "Closed";
 
 /** The Tickets table with multi-select, the selection bar and the Start dialog (TIC-3, RUN-1). */
-export function TicketTable({ rows }: { rows: TicketRow[] }) {
+export function TicketTable({ rows, searched, view }: { rows: TicketRow[]; searched: boolean; view: "Open" | "Closed" }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const pickable = rows.filter(selectable);
@@ -32,12 +32,12 @@ export function TicketTable({ rows }: { rows: TicketRow[] }) {
 
   return (
     <>
-      <div className="card">
+      <div className="tk-list">
         <div className="tbl-wrap">
-          <table className="tbl">
+          <table className="tbl tk-table">
             <thead>
               <tr>
-                <th style={{ width: 36 }}>
+                <th className="tk-cb">
                   <input
                     type="checkbox"
                     className="cb"
@@ -47,68 +47,72 @@ export function TicketTable({ rows }: { rows: TicketRow[] }) {
                     onChange={() => setSelected(allSelected ? new Set() : new Set(pickable.map((t) => t.id)))}
                   />
                 </th>
-                <th>Key</th>
+                <th className="tk-stub">Issue</th>
                 <th>Title</th>
                 <th>Status</th>
-                <th>Latest Run</th>
+                <th className="tk-latest">Latest Run</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={5}>
-                    <div className="empty">
-                      <b>No Tickets match</b>
-                      Clear the search or pick another status. New issues show up within a minute.
+                    <div className="empty tk-empty">
+                      <b>{searched ? "No Tickets match this search" : view === "Closed" ? "No closed Tickets" : "No open Tickets"}</b>
+                      {searched ? "Try another word or issue number, or clear the search." : "New issues on GitHub show up here within a minute."}
                     </div>
                   </td>
                 </tr>
               )}
-              {rows.map((t) => (
-                <tr key={t.id} className={selected.has(t.id) ? "sel" : undefined}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      className="cb"
-                      aria-label={`Select ${t.key}`}
-                      checked={selected.has(t.id)}
-                      disabled={!selectable(t)}
-                      title={t.activeRunId ? `Has an Active Run (${t.activeRunState?.replaceAll("_", " ")})` : t.status === "Closed" ? "Closed on GitHub" : undefined}
-                      onChange={() => toggle(t.id)}
-                    />
-                  </td>
-                  <td className="mono faint" style={{ whiteSpace: "nowrap" }}>
-                    {t.key}
-                  </td>
-                  <td className="t-title">
-                    <a href={t.url} target="_blank" rel="noreferrer">
-                      {t.title}
-                    </a>
-                    {t.labels.length > 0 && (
-                      <div className="row" style={{ gap: 4, marginTop: 4 }}>
-                        {t.labels.map((l) => (
-                          <span key={l} className="label">
-                            {l}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <TicketStatusPill status={t.status} />
-                  </td>
-                  <td className="small">
-                    {t.latestRun ? (
-                      <Link href={`/runs/${t.latestRun.id}`} className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
-                        <StatePill state={t.latestRun.state} />
-                        <span className="mono">{t.latestRun.id.slice(0, 8)}</span>
-                      </Link>
-                    ) : (
-                      <span className="faint">No Runs yet</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((t) => {
+                const repo = t.key.slice(0, t.key.lastIndexOf("#"));
+                const locked = t.activeRunId
+                  ? `Has an Active Run (${t.activeRunState?.replaceAll("_", " ")})`
+                  : t.status === "Closed"
+                    ? "Closed on GitHub"
+                    : undefined;
+                return (
+                  <tr key={t.id} className={`tk-row tone-${ticketTone(t.status) || "mute"}${selected.has(t.id) ? " sel" : ""}`}>
+                    <td className="tk-cb">
+                      <input
+                        type="checkbox"
+                        className="cb"
+                        aria-label={`Select ${t.key}`}
+                        checked={selected.has(t.id)}
+                        disabled={!selectable(t)}
+                        title={locked}
+                        onChange={() => toggle(t.id)}
+                      />
+                    </td>
+                    <td className="tk-stub">
+                      <span className="tk-num">#{t.number}</span>
+                      <span className="tk-repo" style={{ "--c": tagColor(repo) } as React.CSSProperties}>
+                        {repo}
+                      </span>
+                    </td>
+                    <td className="t-title">
+                      <a href={t.url} target="_blank" rel="noreferrer">
+                        {t.title}
+                      </a>
+                      {t.labels.length > 0 && (
+                        <div className="tk-labels">
+                          {t.labels.map((l) => (
+                            <span key={l} className="label" style={{ "--c": tagColor(l) } as React.CSSProperties}>
+                              {l}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="nowrap">
+                      <TicketStatusPill status={t.status} />
+                    </td>
+                    <td className="tk-latest">
+                      {t.latestRun ? <LatestRun run={t.latestRun} /> : <span className="faint">No Runs yet</span>}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -116,8 +120,8 @@ export function TicketTable({ rows }: { rows: TicketRow[] }) {
 
       {selected.size > 0 && (
         <div className="selbar" role="region" aria-label="Selection">
-          <span>
-            <b>{selected.size}</b> Ticket{selected.size > 1 ? "s" : ""} selected
+          <span className="tk-selcount">
+            <b className="num">{selected.size}</b> Ticket{selected.size > 1 ? "s" : ""} selected
           </span>
           <div className="row">
             <button type="button" className="btn ghost sm" onClick={() => setSelected(new Set())}>
@@ -142,6 +146,18 @@ export function TicketTable({ rows }: { rows: TicketRow[] }) {
         />
       )}
     </>
+  );
+}
+
+/** The newest Run as a state dot, its label and short id, linked to the Run. */
+function LatestRun({ run }: { run: NonNullable<TicketRow["latestRun"]> }) {
+  const [tone, label] = runStateLook(run.state);
+  return (
+    <Link href={`/runs/${run.id}`} className={`tk-run tone-${tone || "mute"}`}>
+      <i aria-hidden />
+      <span className="tk-run-state">{label}</span>
+      <span className="mono">{run.id.slice(0, 8)}</span>
+    </Link>
   );
 }
 

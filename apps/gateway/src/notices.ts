@@ -6,7 +6,7 @@ export type NoticeOptions = {
   /** The Node it is about: undefined for the latest Attempt's Node, null for none. */
   flowNodeId?: string | null;
   /** What a `needs_human` asks for. */
-  request?: "approve" | "grill";
+  request?: "approve" | "grill" | "turns";
   /** Who acted, for another Member's action; the Starter is told, never the actor. */
   actorEmail?: string;
   /** The Starter as the web app read it; the Run's own Starter otherwise. */

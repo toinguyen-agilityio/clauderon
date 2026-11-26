@@ -2,6 +2,22 @@ import { NODE_KINDS, OUTPUT_TYPES, isEntryKind, type NodeInput, type NodeKind, t
 
 // What a Member may enter for a library Node (spec M2 §4, FLW-1, FLW-9).
 
+/** The Claude models an Agent or Grill Node can run on (#218); none means the Member's own default. */
+export const CLAUDE_MODELS = ["opus", "sonnet", "haiku"] as const;
+export type ClaudeModel = (typeof CLAUDE_MODELS)[number];
+
+/**
+ * Turns one Claude session may take before it pauses for a person (#218): a safety net against an
+ * Agent going in circles, not a quota, so a normal Ticket never reaches it.
+ */
+export const DEFAULT_MAX_TURNS = 200;
+export const MAX_TURNS_LIMIT = 1_000;
+/** The turns a person gives with Continue. */
+export const CONTINUE_TURNS = 50;
+
+/** Whether a Node of this kind runs a Claude session, so has a model and a turn limit. */
+export const runsClaude = (kind: NodeKind): boolean => kind === "agent" || kind === "grill";
+
 export type NodeDefinition = {
   name: string;
   kind: NodeKind;
@@ -11,6 +27,10 @@ export type NodeDefinition = {
   command: string | null;
   inputs: NodeInput[];
   outputs: NodeOutput[];
+  /** Agent and Grill only (#218); null runs on the Member's default model. Absent in files and older callers. */
+  model?: ClaudeModel | null;
+  /** Agent and Grill only (#218); null means `DEFAULT_MAX_TURNS`. */
+  maxTurns?: number | null;
 };
 
 /** Kinds a Member can create; Input Nodes are samples only, one per Input Type. */
@@ -30,6 +50,8 @@ export function checkNodeDefinition(raw: {
   command?: unknown;
   inputs?: unknown;
   outputs?: unknown;
+  model?: unknown;
+  maxTurns?: unknown;
 }): DefinitionCheck {
   const name = String(raw.name ?? "").trim();
   if (!name) return { ok: false, error: "Give the Node a name." };
@@ -64,5 +86,26 @@ export function checkNodeDefinition(raw: {
   if (hasDuplicate(portNames(inputs))) return { ok: false, error: "Two inputs have the same name." };
   if (hasDuplicate(portNames(outputs))) return { ok: false, error: "Two Outputs have the same name." };
 
-  return { ok: true, definition: { name, kind, instructions, command: kind === "command" ? command : null, inputs, outputs } };
+  const model = raw.model == null || raw.model === "" ? null : String(raw.model);
+  if (model !== null && !(CLAUDE_MODELS as readonly string[]).includes(model)) return { ok: false, error: `Pick a model: ${CLAUDE_MODELS.join(", ")} or the default.` };
+  const maxTurns = raw.maxTurns == null || raw.maxTurns === "" ? null : Number(raw.maxTurns);
+  if (maxTurns !== null && (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > MAX_TURNS_LIMIT)) {
+    return { ok: false, error: `The turn limit is a whole number from 1 to ${MAX_TURNS_LIMIT}.` };
+  }
+
+  const claude = runsClaude(kind);
+  return {
+    ok: true,
+    definition: {
+      name,
+      kind,
+      instructions,
+      command: kind === "command" ? command : null,
+      inputs,
+      outputs,
+      // Only when set, so Flow and Node files and their comparisons stay as they were.
+      ...(claude && model ? { model: model as ClaudeModel } : {}),
+      ...(claude && maxTurns ? { maxTurns } : {}),
+    },
+  };
 }

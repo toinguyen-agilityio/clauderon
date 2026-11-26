@@ -28,6 +28,8 @@ function fake(type: NodeOutput["type"], name: string, context: { branch: string 
       return `Simulated summary for ${name}`;
     case "screenshot":
       return "simulated screenshot";
+    case "context":
+      return `Simulated context from ${name}`;
   }
 }
 

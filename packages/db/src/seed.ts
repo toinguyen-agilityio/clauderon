@@ -1,6 +1,7 @@
 import { inArray } from "drizzle-orm";
 import type { NodeInput, NodeKind, NodeOutput } from "@clauderon/core";
 import type { Db } from "./client";
+import { recordFlowVersion } from "./flow-history";
 import { flow, flowEdge, flowNode, node } from "./schema";
 
 // Sample Nodes and Flows of requirements §4.4 (FLW-8), keyed by slug so
@@ -245,6 +246,7 @@ export async function seedSamples(db: Db, now: Date = new Date()): Promise<void>
           toInput,
         });
       }
+      await recordFlowVersion(tx, { flowId, kind: "create", actorEmail: SEEDED_BY, now });
     }
   });
 }

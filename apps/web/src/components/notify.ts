@@ -70,7 +70,7 @@ const at = (node: string | undefined) => (node ? ` at “${node}”` : "");
 export function notifyText(event: NotifyEvent): { title: string; body: string } {
   const by = event.actor ?? "someone";
   const what = {
-    needs_human: `${event.request === "grill" ? "Answers needed" : "Approve needed"}${at(event.nodeName)}`,
+    needs_human: `${event.request === "grill" ? "Answers needed" : event.request === "turns" ? "Turn limit reached" : "Approve needed"}${at(event.nodeName)}`,
     succeeded: "Run succeeded",
     failed: `Run failed${at(event.nodeName)}`,
     interrupted: `Run interrupted${at(event.nodeName)}`,

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { RunInput, Turn } from "@clauderon/core";
+import type { FlowChange, FlowVersionKind, RunInput, Turn, VersionSnapshot } from "@clauderon/core";
 import {
   bigint,
   boolean,
@@ -38,7 +38,8 @@ export const runState = pgEnum("run_state", [
   "cancelled",
 ]);
 export const attemptState = pgEnum("attempt_state", ["running", "waiting_for_human", "succeeded", "failed", "interrupted", "cancelled"]);
-export const humanRequestKind = pgEnum("human_request_kind", ["approve", "grill"]);
+/** `turns`: an Agent or Grill session reached its turn limit and waits for Continue or Stop (#218). */
+export const humanRequestKind = pgEnum("human_request_kind", ["approve", "grill", "turns"]);
 export const logStream = pgEnum("log_stream", ["stdout", "stderr", "system"]);
 
 export const member = pgTable("member", {
@@ -243,6 +244,9 @@ export const node = pgTable("node", {
   command: text("command"),
   inputs: jsonb("inputs").$type<NodeInputJson[]>().notNull().default([]),
   outputs: jsonb("outputs").$type<NodeOutputJson[]>().notNull().default([]),
+  /** Agent and Grill (#218): the Claude model, null for the Member's default, and the turn limit, null for the default. */
+  model: text("model"),
+  maxTurns: integer("max_turns"),
   isSample: boolean("is_sample").notNull().default(false),
   updatedByEmail: text("updated_by_email").notNull(),
   updatedAt: ts("updated_at").notNull().defaultNow(),
@@ -290,6 +294,29 @@ export const flowEdge = pgTable("flow_edge", {
     .references(() => flowNode.id, { onDelete: "cascade" }),
   toInput: text("to_input").notNull(),
 });
+
+/**
+ * One version of a Flow (issue #181): a full, masked snapshot with a precomputed summary. No foreign
+ * key to `flow`, so the history outlives a deleted Flow. Only the app reads it, never the Gateway.
+ */
+export const flowVersion = pgTable(
+  "flow_version",
+  {
+    id: id(),
+    flowId: uuid("flow_id").notNull(),
+    seq: integer("seq").notNull(),
+    kind: text("kind").$type<FlowVersionKind>().notNull(),
+    actorEmail: text("actor_email").notNull(),
+    at: ts("at").notNull().defaultNow(),
+    flowName: text("flow_name").notNull(),
+    snapshot: jsonb("snapshot").$type<VersionSnapshot>().notNull(),
+    summary: jsonb("summary").$type<FlowChange[]>().notNull().default([]),
+    detail: jsonb("detail").$type<FlowVersionDetail>().notNull().default({}),
+  },
+  (t) => [uniqueIndex("flow_version_flow_seq_idx").on(t.flowId, t.seq), index("flow_version_kind_at_idx").on(t.kind, t.at)],
+);
+
+export type FlowVersionDetail = { clonedFrom?: string; restoredFromVersionId?: string; nodeId?: string; nodeName?: string };
 
 export const batch = pgTable("batch", {
   id: id(),

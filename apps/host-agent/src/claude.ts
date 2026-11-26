@@ -7,10 +7,38 @@ import { extractResultBlock, MAX_CALLS_PER_TURN, MAX_TARGET_LENGTH, scrubTarget,
  */
 export const CLAUDE_ARGS = ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"] as const;
 
+/**
+ * Appended to Claude Code's system prompt on every Agent and Grill Node (#218). Every turn re-reads
+ * the whole conversation, so the number of turns and the size of tool results are what a Node
+ * costs. Short and fixed, so it is cached once and costs almost nothing. No single quotes: it is
+ * passed single-quoted.
+ */
+export const TOKEN_GUIDANCE = [
+  "Keep this session small: every later turn re-reads the whole conversation.",
+  "- Run independent commands together in one turn (several tool calls at once, or one command joined with &&).",
+  "- Do not print whole large files; read only the part you need (a line range, or grep with a little context).",
+  "- Keep command output short: pipe it through head, tail or grep, and never print install or build logs in full.",
+  "- While working, run only the tests that cover your change; run the full suite once at the end.",
+].join("\n");
+
+export type ClaudeOptions = {
+  /** Resumes this Claude session (a Grill round, or Continue after the turn limit). */
+  resumeSessionId?: string;
+  /** The Node's model (#218); none keeps the Member's default. */
+  model?: string;
+  /** The Node's turn limit (#218). */
+  maxTurns?: number;
+};
+
+const quote = (text: string) => `'${text.replaceAll("'", "")}'`;
+
 /** The shell line that runs Claude Code on the prompt file named by `$CLAUDERON_PROMPT_FILE`. */
-export function claudeCommand(resumeSessionId?: string): string {
-  const resume = resumeSessionId ? ` --resume '${resumeSessionId.replace(/[^A-Za-z0-9-]/g, "")}'` : "";
-  return `claude ${CLAUDE_ARGS.join(" ")}${resume} < "$CLAUDERON_PROMPT_FILE"`;
+export function claudeCommand(options: ClaudeOptions = {}): string {
+  const resume = options.resumeSessionId ? ` --resume '${options.resumeSessionId.replace(/[^A-Za-z0-9-]/g, "")}'` : "";
+  const name = options.model?.replace(/[^A-Za-z0-9.-]/g, "");
+  const model = name ? ` --model '${name}'` : "";
+  const turns = options.maxTurns && Number.isInteger(options.maxTurns) && options.maxTurns > 0 ? ` --max-turns ${options.maxTurns}` : "";
+  return `claude ${CLAUDE_ARGS.join(" ")}${resume}${model}${turns} --append-system-prompt ${quote(TOKEN_GUIDANCE)} < "$CLAUDERON_PROMPT_FILE"`;
 }
 
 /**
@@ -33,6 +61,8 @@ export type ClaudeEvent = {
   finalText?: string;
   /** Claude Code's own error message, from a `result` event marked as an error. */
   error?: string;
+  /** The session stopped at its `--max-turns` (#218); it can be resumed. */
+  maxTurns?: true;
 };
 
 type Usage = { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
@@ -145,6 +175,7 @@ export function parseClaudeLine(line: string): ClaudeEvent {
         ...usage,
         finalText: event.result ?? "",
         ...(failed ? { error: message || event.subtype || "error" } : {}),
+        ...(event.subtype === "error_max_turns" ? { maxTurns: true as const } : {}),
         log: `[claude] ${event.subtype ?? "result"}`,
       };
     }

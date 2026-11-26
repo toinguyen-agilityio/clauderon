@@ -2,6 +2,8 @@ import {
   RUN_STATES,
   contextSize,
   findWaste,
+  attemptTokens,
+  freshInput,
   historyEntry,
   rereads,
   resultBytesOf,
@@ -12,6 +14,7 @@ import {
   ticketKeys,
   topologicalOrder,
   type ApproveSubject,
+  type TurnsSubject,
   type GrillQuestion,
   type HumanResponse,
   type RetryContext,
@@ -229,6 +232,9 @@ export async function cancelRunAs(deps: AppDeps, viewer: Viewer, runId: string):
   return { ok: true };
 }
 
+/** The turns a turn-limit request says the session reached (#218); null for any other request. */
+const turnsOf = (r: { kind: string; questions: unknown }): number | null => (r.kind === "turns" ? ((r.questions as TurnsSubject | null)?.turns ?? null) : null);
+
 const NOTIFY_OF_DECISION = { approve: "approved", reject: "rejected", answer: "answered" } as const;
 
 /**
@@ -310,6 +316,7 @@ export async function viewNeedsYou(deps: AppDeps) {
     waitedMs: now.getTime() - r.request.createdAt.getTime(),
     questions: r.request.kind === "grill" ? ((r.request.questions ?? []) as GrillQuestion[]) : [],
     subject: r.request.kind === "approve" ? ((r.request.questions as ApproveSubject | null)?.input ?? null) : null,
+    turns: turnsOf(r.request),
   }));
 }
 
@@ -388,6 +395,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
             round: open.round,
             questions: open.kind === "grill" ? ((open.questions ?? []) as GrillQuestion[]) : [],
             subject: open.kind === "approve" ? ((open.questions as ApproveSubject | null)?.input ?? null) : null,
+            turns: turnsOf(open),
           }
         : null,
       // Newest first (spec M3 §8).
@@ -400,7 +408,8 @@ export async function viewRun(deps: AppDeps, runId: string) {
         endedAt: a.endedAt,
         error: a.error,
         exitCode: a.exitCode,
-        inputTokens: a.inputTokens,
+        // Without cache read, as every token total on the Run page (`TokenSplit`).
+        inputTokens: a.inputTokens === null ? null : freshInput(a),
         outputTokens: a.outputTokens,
         inspector: inspectorOf(a, histories.get(id) ?? []),
         retryContext: a.retryContext ? renderRetryContext(a.retryContext as RetryContext) : null,
@@ -413,6 +422,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
             round: r.round,
             askedAt: r.createdAt,
             questions: r.kind === "grill" ? ((r.questions ?? []) as GrillQuestion[]) : [],
+            turns: turnsOf(r),
             response: r.response as HumanResponse | null,
             respondedBy: r.respondedByEmail,
             respondedAt: r.respondedAt,
@@ -421,7 +431,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
     };
   });
 
-  const tokens = run.attempts.reduce((sum, a) => sum + (a.inputTokens ?? 0) + (a.outputTokens ?? 0), 0);
+  const tokens = run.attempts.reduce((sum, a) => sum + (attemptTokens(a) ?? 0), 0);
   const durationMs = run.run.startedAt ? (run.run.endedAt ?? deps.clock.now()).getTime() - run.run.startedAt.getTime() : null;
   return {
     ...run,
@@ -457,7 +467,7 @@ type InspectedAttempt = { inputTokens: number | null; outputTokens: number | nul
 export function inspectorOf(a: InspectedAttempt, history: ReturnType<typeof historyEntry>[]) {
   const turns = (a.turns ?? []).map(withCalls);
   const findings = findWaste(turns);
-  const totalsOnly = a.inputTokens !== null || a.outputTokens !== null ? { input: a.inputTokens ?? 0, output: a.outputTokens ?? 0, cacheCreated: a.cacheCreationTokens, cacheRead: a.cacheReadTokens } : null;
+  const totalsOnly = a.inputTokens !== null || a.outputTokens !== null ? { input: freshInput(a), output: a.outputTokens ?? 0, cacheCreated: a.cacheCreationTokens, cacheRead: a.cacheReadTokens } : null;
   return {
     hasTurns: turns.length > 0,
     totalsOnly,

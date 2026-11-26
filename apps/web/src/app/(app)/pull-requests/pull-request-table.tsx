@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Avatar } from "../../../components/brand";
 import { Icon } from "../../../components/icons";
+import { tagColor } from "../../../components/state-pill";
 import { StartRunsDialog } from "../../../components/start-runs-dialog";
 import type { PullRequestRow } from "../../../server/runs";
 import { loadPullRequestStartDialog, startPullRequestsAction } from "./actions";
@@ -37,10 +38,10 @@ export function PullRequestTable({ rows, empty }: { rows: PullRequestListRow[]; 
   return (
     <>
       <div className="tbl-wrap">
-        <table className="tbl">
+        <table className="tbl tk-table">
           <thead>
             <tr>
-              <th style={{ width: 36 }}>
+              <th className="tk-cb">
                 <input
                   type="checkbox"
                   className="cb"
@@ -50,9 +51,9 @@ export function PullRequestTable({ rows, empty }: { rows: PullRequestListRow[]; 
                   onChange={() => setSelected(allSelected ? new Set() : new Set(pickable.map((r) => r.id)))}
                 />
               </th>
-              <th>Pull request</th>
-              <th>Ticket</th>
-              <th>Flow</th>
+              <th className="tk-stub">Pull request</th>
+              <th>Title</th>
+              <th>Opened from</th>
               <th>Opened by</th>
             </tr>
           </thead>
@@ -60,80 +61,90 @@ export function PullRequestTable({ rows, empty }: { rows: PullRequestListRow[]; 
             {rows.length === 0 && (
               <tr>
                 <td colSpan={5}>
-                  <div className="empty">
+                  <div className="empty tk-empty">
                     <b>No pull requests</b>
                     {empty}
                   </div>
                 </td>
               </tr>
             )}
-            {rows.map((r) => (
-              <tr key={r.id} className={selected.has(r.id) ? "sel" : undefined}>
-                <td>
-                  <input
-                    type="checkbox"
-                    className="cb"
-                    aria-label={`Select ${r.repo}#${r.number}`}
-                    checked={selected.has(r.id)}
-                    disabled={!selectable(r)}
-                    title={selectable(r) ? undefined : "Could not read it from GitHub just now"}
-                    onChange={() => toggle(r.id)}
-                  />
-                </td>
-                <td className="t-title">
-                  <span className="mono faint small">
-                    {r.repo}{" "}
+            {rows.map((r) => {
+              const tone = !selectable(r) ? "mute" : r.needsYou ? "wait" : "ok";
+              return (
+                <tr key={r.id} className={`tk-row tone-${tone}${selected.has(r.id) ? " sel" : ""}`}>
+                  <td className="tk-cb">
+                    <input
+                      type="checkbox"
+                      className="cb"
+                      aria-label={`Select ${r.repo}#${r.number}`}
+                      checked={selected.has(r.id)}
+                      disabled={!selectable(r)}
+                      title={selectable(r) ? undefined : "Could not read it from GitHub just now"}
+                      onChange={() => toggle(r.id)}
+                    />
+                  </td>
+                  <td className="tk-stub">
+                    <span className="tk-num">#{r.number}</span>
+                    <span className="tk-repo" style={{ "--c": tagColor(r.repo) } as React.CSSProperties}>
+                      {r.repo}
+                    </span>
+                  </td>
+                  <td className="t-title">
                     {r.url ? (
-                      <a className="mono" href={r.url} target="_blank" rel="noreferrer">
-                        #{r.number} {Icon.external}
+                      <a className="tk-ext" href={r.url} target="_blank" rel="noreferrer">
+                        {r.title ?? `Pull request #${r.number}`} {Icon.external}
                       </a>
                     ) : (
-                      <span className="mono">#{r.number}</span>
+                      <span>{r.title ?? `Pull request #${r.number}`}</span>
                     )}
-                  </span>
-                  {r.title && <div>{r.title}</div>}
-                  {r.needsYou && <span className="pill wait">Needs you</span>}
-                  {r.branch && <div className="mono faint small clip pr-branch">{r.branch}</div>}
-                </td>
-                <td className="t-title">
-                  {r.run ? (
-                    <>
-                      <span className="mono faint small">{r.run.key}</span>
-                      <div>
-                        <Link href={`/runs/${r.run.id}`}>{r.run.ticketTitle}</Link>
+                    {(r.branch || r.needsYou || !selectable(r)) && (
+                      <div className="tk-meta">
+                        {r.needsYou && <span className="pill wait">Needs your review</span>}
+                        {r.branch && <span className="tk-branch clip">{r.branch}</span>}
+                        {!selectable(r) && <span className="faint">Could not read it from GitHub just now</span>}
                       </div>
-                    </>
-                  ) : (
-                    <span className="faint small">Not opened by a Run</span>
-                  )}
-                </td>
-                <td className="small nowrap">{r.run?.flowName ?? <span className="faint">—</span>}</td>
-                <td>
-                  {r.run ? (
-                    <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
-                      <Avatar name={r.run.starterName} email={r.run.starterEmail} picture={r.run.starterPicture} />
+                    )}
+                  </td>
+                  <td className="t-title">
+                    {r.run ? (
+                      <>
+                        <Link href={`/runs/${r.run.id}`}>{r.run.ticketTitle}</Link>
+                        <div className="tk-meta">
+                          <span className="tk-flow">{r.run.flowName}</span>
+                          <span className="faint">{r.run.key}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <span className="faint small">Not opened by a Run</span>
+                    )}
+                  </td>
+                  <td>
+                    {r.run ? (
+                      <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
+                        <Avatar name={r.run.starterName} email={r.run.starterEmail} picture={r.run.starterPicture} />
+                        <span className="small nowrap">
+                          {r.run.starterName ?? r.run.starterEmail}
+                          <div className="faint">{r.ago}</div>
+                        </span>
+                      </div>
+                    ) : (
                       <span className="small nowrap">
-                        {r.run.starterName ?? r.run.starterEmail}
+                        <span className="mono">@{r.authorLogin}</span>
                         <div className="faint">{r.ago}</div>
                       </span>
-                    </div>
-                  ) : (
-                    <span className="small nowrap">
-                      <span className="mono">@{r.authorLogin}</span>
-                      <div className="faint">{r.ago}</div>
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {selected.size > 0 && (
         <div className="selbar" role="region" aria-label="Selection">
-          <span>
-            <b>{selected.size}</b> pull request{selected.size > 1 ? "s" : ""} selected
+          <span className="tk-selcount">
+            <b className="num">{selected.size}</b> pull request{selected.size > 1 ? "s" : ""} selected
           </span>
           <div className="row">
             <button type="button" className="btn ghost sm" onClick={() => setSelected(new Set())}>
