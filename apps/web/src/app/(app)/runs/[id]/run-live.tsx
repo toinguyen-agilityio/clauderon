@@ -21,6 +21,7 @@ type Line = { seq: number; stream: string; text: string };
 
 const KIND: Record<string, [letter: string, label: string]> = {
   ticket: ["T", "Ticket"],
+  input: ["I", "Input"],
   agent: ["A", "Agent"],
   command: ["$", "Command"],
   approve: ["H", "Human · Approve"],
@@ -115,24 +116,26 @@ export function RunLive({
     <div className="run-grid">
       <RunDiagram snapshot={snapshot} timeline={timeline} selectedId={node.id} onSelect={setSelectedId} />
 
-      <div className="stack" style={{ minWidth: 0, gap: 16 }}>
-        <div>
-          <div className="row" style={{ gap: 8 }}>
-            <span className={`kind ${node.kind}`} title={kindLabel}>
-              {letter}
-            </span>
+      <div className="ns">
+        <header className="ns-head">
+          <span className={`kind ${node.kind}`} title={kindLabel}>
+            {letter}
+          </span>
+          <div className="ns-title">
+            <span className="ns-kind">{kindLabel}</span>
             <h2>{node.name}</h2>
-            <StatePill state={attempt ? attempt.state : node.state} />
-            {retryable && node.canRetry && (
-              <span style={{ marginLeft: "auto" }}>
-                <RetryFromHere runId={runId} nodeId={node.id} nodeName={node.name} inputs={node.retryInputs} context={retryContext} />
-              </span>
-            )}
           </div>
-        </div>
+          <StatePill state={attempt ? attempt.state : node.state} />
+          {retryable && node.canRetry && (
+            <span className="ns-retry">
+              <RetryFromHere runId={runId} nodeId={node.id} nodeName={node.name} inputs={node.retryInputs} context={retryContext} />
+            </span>
+          )}
+        </header>
 
         {node.attempts.length > 1 && (
           <div className="att-tabs" role="tablist" aria-label="Attempts">
+            <span className="ns-label">Attempt</span>
             {node.attempts.map((a) => (
               <button key={a.id} type="button" role="tab" aria-selected={a.id === attempt?.id} className={a.id === attempt?.id ? "on" : ""} onClick={() => setAttemptPick({ ...attemptPick, [node.id]: a.id })}>
                 #{a.number}
@@ -225,13 +228,25 @@ export function RunLive({
         ) : (
           <>
             {!isEntryKind(node.kind) && (
-              <div className="seg" role="tablist" aria-label="Node view" style={{ alignSelf: "flex-start" }}>
-                <button type="button" role="tab" aria-selected={view === "log"} className={view === "log" ? "on" : ""} onClick={() => setView("log")}>
-                  Log
-                </button>
-                <button type="button" role="tab" aria-selected={view === "inspector"} className={view === "inspector" ? "on" : ""} onClick={() => setView("inspector")}>
-                  Inspector
-                </button>
+              <div className="ns-bar">
+                <div className="seg" role="tablist" aria-label="Node view">
+                  <button type="button" role="tab" aria-selected={view === "log"} className={view === "log" ? "on" : ""} onClick={() => setView("log")}>
+                    Log
+                  </button>
+                  <button type="button" role="tab" aria-selected={view === "inspector"} className={view === "inspector" ? "on" : ""} onClick={() => setView("inspector")}>
+                    Inspector
+                  </button>
+                </div>
+                {view === "log" && (
+                  <div className="ns-bar-end">
+                    {live && <span className="ns-live">Live</span>}
+                    {!socket && <span className="ns-reconnect">Reconnecting…</span>}
+                    <label className="row small faint" style={{ gap: 6 }}>
+                      <input type="checkbox" className="cb" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+                      Follow
+                    </label>
+                  </div>
+                )}
               </div>
             )}
 
@@ -248,16 +263,6 @@ export function RunLive({
 
             {!isEntryKind(node.kind) && view === "log" && (
               <div className="stack" style={{ gap: 8 }}>
-                <div className="log-head">
-                  <span className="eyebrow">
-                    Log {live && <span style={{ color: "var(--run)" }}>· live</span>}
-                    {!socket && <span style={{ color: "var(--wait)" }}> · reconnecting</span>}
-                  </span>
-                  <label className="row small faint" style={{ gap: 6 }}>
-                    <input type="checkbox" className="cb" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
-                    Follow
-                  </label>
-                </div>
                 <pre className="term" ref={logBox} aria-live="polite" aria-label={`Log of ${node.name}`}>
                   {lines.length === 0 && <span className="d">{live ? "Waiting for output…" : "No log lines."}</span>}
                   {lines.map((l) => (
@@ -270,22 +275,25 @@ export function RunLive({
               </div>
             )}
 
-            <div className="grid g2">
-              <div className="stack" style={{ gap: 8 }}>
-                <span className="eyebrow">Inputs</span>
+            <div className="ns-io">
+              <div className="ns-io-col">
+                <span className="ns-label">Inputs</span>
                 {node.inputs.length === 0 && <span className="faint small">None</span>}
                 {node.inputs.map((i) => (
-                  <div key={i.name} className="stack" style={{ gap: 4 }}>
+                  <div key={i.name} className="ns-io-item">
                     <OType type={i.type} label={i.name} />
                     <OutputValue type={i.type} value={i.value} name={i.name} />
                   </div>
                 ))}
               </div>
-              <div className="stack" style={{ gap: 8 }}>
-                <span className="eyebrow">Outputs</span>
+              <span className="ns-io-arrow" aria-hidden>
+                <i>→</i>
+              </span>
+              <div className="ns-io-col">
+                <span className="ns-label">Outputs</span>
                 {attempt.outputs.length === 0 && <span className="faint small">{attempt.state === "running" ? "Not produced yet" : "None"}</span>}
                 {attempt.outputs.map((o) => (
-                  <div key={o.name} className="stack" style={{ gap: 4 }}>
+                  <div key={o.name} className="ns-io-item">
                     <OType type={o.type} label={o.name} />
                     <OutputValue type={o.type} value={o.value} name={o.name} />
                   </div>

@@ -1679,3 +1679,105 @@ a.audit-id:hover { text-decoration: none; background: color-mix(in srgb, var(--a
   .hl-card { padding: 12px 14px; }
   .hl-when { display: none; }
 }
+
+/* Run page: a run sheet. The header carries the state (a coloured edge and a verdict strip along its
+   bottom) and a row of facts; the body is the Flow diagram over the selected Node's sheet; History is a rail. */
+.run-head { --tone: var(--fg3); position: relative; padding: 0; overflow: hidden; }
+.run-head::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--tone); }
+.run-head.t-run { --tone: var(--run); }
+.run-head.t-wait { --tone: var(--wait); }
+.run-head.t-acc { --tone: var(--accent-text); }
+.run-head.t-ok { --tone: var(--ok); }
+.run-head.t-fail { --tone: var(--fail); }
+.run-head.t-intr { --tone: var(--intr); }
+.run-head-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: start; padding: 22px 24px 20px 28px; }
+.run-head-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.run-key { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 12.5px; color: var(--fg2); }
+.run-key svg { width: 12px; height: 12px; }
+.run-head h1 { margin-top: 10px; max-width: 62ch; font-size: clamp(1.35rem, 2.1vw, 1.8rem); line-height: 1.22; color: var(--heading); overflow-wrap: anywhere; }
+.run-head-by { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--fg2); }
+.run-head-by .avatar { width: 22px; height: 22px; font-size: 10px; }
+.run-head-by b { color: var(--fg); font-weight: 600; }
+.run-head-actions { display: flex; gap: 8px; }
+
+/* Facts wrap onto rows; each draws its own top and left hairline, and the container clips the outer ones. */
+.run-facts { display: flex; flex-wrap: wrap; margin: 0; border-top: 1px solid var(--line); overflow: hidden; }
+.run-fact { flex: 1 1 150px; min-width: 0; padding: 14px 20px 15px; box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line); }
+.run-fact:first-child { padding-left: 28px; }
+.run-fact.is-wide { flex: 2 1 260px; }
+.run-fact dt { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg3); }
+.run-fact dd { margin: 5px 0 0; min-width: 0; font-size: 15px; font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
+.run-fact dd.run-fact-sub { margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--fg3); }
+.run-branch { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; color: var(--fg); }
+
+.run-verdict { --v-bg: var(--mute-bg); --v-line: var(--line); padding: 12px 24px 13px 28px; border-top: 1px solid var(--v-line); background: var(--v-bg); font-size: 13.5px; color: var(--fg); }
+.run-verdict p + p { margin-top: 4px; }
+.run-verdict .small { color: var(--fg2); }
+.run-verdict.is-ok { --v-bg: var(--ok-bg); --v-line: color-mix(in srgb, var(--ok) 25%, transparent); }
+.run-verdict.is-fail { --v-bg: var(--fail-bg); --v-line: color-mix(in srgb, var(--fail) 25%, transparent); }
+.run-verdict.is-wait { --v-bg: var(--wait-bg); --v-line: color-mix(in srgb, var(--wait) 25%, transparent); }
+.run-verdict.is-intr { --v-bg: var(--intr-bg); --v-line: color-mix(in srgb, var(--intr) 25%, transparent); }
+.run-verdict.is-info { --v-bg: var(--accent-weak); --v-line: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* The diagram runs edge to edge across the top of the body card; the Node sheet sits under it. */
+.run-body { overflow: hidden; }
+.run-body .run-grid { padding: 0; gap: 0; }
+.run-body .run-diagram { height: 280px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; }
+.ns { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding: 20px 24px 24px; }
+.ns-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.ns-head .kind { width: 30px; height: 30px; border-radius: 8px; font-size: 13px; }
+.ns-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ns-title h2 { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.ns-kind, .ns-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg3); }
+.ns-retry { margin-left: auto; }
+.ns .att-tabs .ns-label { margin-right: 2px; }
+.ns-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.ns-bar-end { display: flex; align-items: center; gap: 14px; }
+.ns-live, .ns-reconnect { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--run); }
+.ns-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: ns-pulse 1.6s ease-in-out infinite; }
+.ns-reconnect { color: var(--wait); }
+@keyframes ns-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .ns-live::before { animation: none; } }
+
+/* Inputs flow into the Node and Outputs out of it: two columns with an arrow on the seam between them. */
+.ns-io { display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); padding: 16px 18px 18px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.ns-io-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ns-io-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ns-io-arrow { display: grid; place-items: center; background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; }
+.ns-io-arrow i { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); color: var(--fg3); font-style: normal; font-size: 13px; }
+
+.run-history { padding: 18px 24px 22px; }
+.run-history h2 { font-size: 15px; letter-spacing: -0.005em; margin-bottom: 14px; }
+/* Times line up in one column; each entry's body draws the rail and its dot. */
+.rh { display: grid; grid-template-columns: max-content minmax(0, 1fr); margin: 0; padding: 0; list-style: none; }
+.rh-item { display: contents; }
+.rh-item { --tone: var(--fg3); }
+.rh-item.a-start, .rh-item.a-answer { --tone: var(--accent-text); }
+.rh-item.a-approve, .rh-item.a-continue, .rh-item.a-resume { --tone: var(--ok); }
+.rh-item.a-reject, .rh-item.a-stop, .rh-item.a-cancel { --tone: var(--fail); }
+.rh-item.a-retry { --tone: var(--wait); }
+.rh-time { padding: 2px 18px 0 0; font-family: var(--font-mono); font-size: 12px; color: var(--fg3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rh-body { position: relative; min-width: 0; padding: 0 0 18px 22px; border-left: 1px solid var(--line); font-size: 13.5px; line-height: 1.45; color: var(--fg2); }
+.rh-body::before { content: ""; position: absolute; left: -6px; top: 4px; width: 11px; height: 11px; border-radius: 50%; background: var(--panel); border: 2px solid var(--tone); box-sizing: border-box; }
+.rh-item:last-child .rh-body { padding-bottom: 0; border-left-color: transparent; }
+.rh-body b { color: var(--fg); font-weight: 600; }
+.rh-who { color: var(--fg3); overflow-wrap: anywhere; }
+.rh-quote { display: block; margin-top: 6px; padding: 6px 10px; border-left: 2px solid var(--line-strong); border-radius: 0 var(--r-sm) var(--r-sm) 0; background: var(--code-bg); color: var(--fg2); font-size: 13px; }
+
+@media (max-width: 760px) {
+  .run-head-row { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 18px 16px 16px 20px; }
+  .run-fact { padding: 12px 16px; }
+  .run-fact:first-child { padding-left: 20px; }
+  .run-verdict { padding: 12px 16px 12px 20px; }
+  .run-body .run-diagram { height: 240px; }
+  .ns { padding: 16px; }
+  .ns-io { grid-template-columns: minmax(0, 1fr); padding: 14px; }
+  .ns-io-arrow { height: 36px; background-size: 100% 1px; }
+  .ns-io-arrow i { transform: rotate(90deg); }
+  .run-history { padding: 16px; }
+  .rh { grid-template-columns: minmax(0, 1fr); }
+  .rh-time { padding: 0 0 4px 22px; border-left: 1px solid var(--line); }
+  .rh-time { position: relative; }
+  .rh-body::before { display: none; }
+  .rh-time::before { content: ""; position: absolute; left: -6px; top: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--panel); border: 2px solid var(--tone); box-sizing: border-box; }
+}
