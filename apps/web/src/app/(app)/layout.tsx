@@ -47,7 +47,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               </button>
             </form>
           </div>
-          <div className="small faint" title="App version">{appVersion(process.env)}</div>
+          {appVersion(process.env) && (
+            <div className="small faint" title="App version">
+              {appVersion(process.env)}
+            </div>
+          )}
         </div>
       </MobileShell>
       </NeedsYouProvider>

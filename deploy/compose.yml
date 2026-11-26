@@ -71,7 +71,7 @@ services:
       # The Gateway's public WebSocket origin, for browsers and Agents.
       GATEWAY_URL: wss://${GATEWAY_HOSTNAME:?set GATEWAY_HOSTNAME}
       # Release tag shown in the sidebar; deploy/deploy.sh sets it from git.
-      APP_VERSION: ${APP_VERSION:-dev}
+      APP_VERSION: ${APP_VERSION:-}
     ports:
       - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
     depends_on:
