@@ -1,0 +1,109 @@
+{
+  "title": "Release 1",
+  "languages": ["en", "vi"],
+  "meta": {"en": "Tested 2026-11-19 on the production build (pnpm build, out/ served locally), Chromium via Playwright, commit e021b43. Light and dark themes at 320, 375 and 1280px.", "vi": "Kiểm thử ngày 19/11/2026 trên bản build production (pnpm build, phục vụ out/ ở local), Chromium qua Playwright, commit e021b43. Giao diện sáng và tối ở 320, 375 và 1280px."},
+  "issuesNote": {"en": "#95, #98, #101, #102, #105. #101 and #102 were tested together as the Sport page.", "vi": "#95, #98, #101, #102, #105. #101 và #102 được test chung ở trang Sport."},
+  "issues": [
+    {
+      "id": "95",
+      "label": "#95",
+      "title": {"en": "Rename on navigation", "vi": "Đổi tên trên thanh điều hướng"},
+      "links": [{"text": "#95 Rename only on navigation", "href": "https://github.com/toinguyen-agilityio/my-portfolio/issues/95"}],
+      "cases": [
+        {
+          "id": "95-1",
+          "title": {"en": "Name shown in the navigation, light and dark", "vi": "Tên hiển thị trên thanh điều hướng, sáng và tối"},
+          "status": "pass",
+          "tested": {"en": "Check the name shown as the brand in the top navigation on / and /story, in light and dark themes.", "vi": "Kiểm tra tên hiển thị ở logo trên thanh điều hướng tại / và /story, ở giao diện sáng và tối."},
+          "expected": {"en": "The navigation shows the new name \"Jordan Walker\"; the hero greeting and portrait alt text keep \"Jordan Ellis\" (rename applies to the navigation only).", "vi": "Thanh điều hướng hiện tên mới \"Jordan Walker\"; lời chào ở hero và alt của ảnh chân dung vẫn giữ \"Jordan Ellis\" (chỉ đổi tên trên thanh điều hướng)."},
+          "result": {"en": "Matches: the navigation shows \"Jordan Walker\" on both pages in both themes, and the hero and portrait still say \"Jordan Ellis\".", "vi": "Đúng như mong muốn: thanh điều hướng hiện \"Jordan Walker\" ở cả 2 trang, cả 2 giao diện; hero và ảnh chân dung vẫn là \"Jordan Ellis\"."},
+          "findings": [
+            {"text": {"en": "Navigation shows \"Jordan Walker\" on / (light, dark)", "vi": "Thanh điều hướng hiện \"Jordan Walker\" ở / (sáng, tối)"}, "shots": [1, 3]},
+            {"text": {"en": "Navigation shows \"Jordan Walker\" on /story (light, dark)", "vi": "Thanh điều hướng hiện \"Jordan Walker\" ở /story (sáng, tối)"}, "shots": [2, 4]},
+            {"text": {"en": "Hero greeting still says \"Jordan Ellis\"", "vi": "Lời chào ở hero vẫn là \"Jordan Ellis\""}, "shots": [1, 3]}
+          ],
+          "raw": [
+            "/ light: nav brand = \"Jordan Walker\"",
+            "hero greeting 'Jordan Ellis' present=true, portrait alt 'Jordan Ellis' present=true",
+            "/story light: nav brand = \"Jordan Walker\""
+          ],
+          "shots": [
+            "shots/95-1-home-light-1280.png",
+            "shots/95-1-story-light-1280.png",
+            "shots/95-1-home-dark-1280.png",
+            "shots/95-1-story-dark-1280.png"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "105",
+      "label": "#105",
+      "title": {"en": "Photography page", "vi": "Trang Photography"},
+      "links": [{"text": "#105 Mock data for the Photography page", "href": "https://github.com/toinguyen-agilityio/my-portfolio/issues/105"}],
+      "cases": [
+        {
+          "id": "105-1",
+          "title": {"en": "Photography category page", "vi": "Trang chuyên mục Photography"},
+          "status": "fail",
+          "tested": {"en": "Open the Photography category page at 320, 375 and 1280px, light and dark, and check every post card.", "vi": "Mở trang chuyên mục Photography ở 320, 375 và 1280px, sáng và tối, và kiểm tra từng thẻ bài viết."},
+          "expected": {"en": "It lists all 3 Photography posts in order, and every card shows cover, date, location and reading time; back link present, no horizontal scroll, no empty state.", "vi": "Trang hiện đủ 3 bài Photography đúng thứ tự, mọi thẻ đều có ảnh bìa, ngày, địa điểm và thời gian đọc; có link quay lại, không cuộn ngang, không hiện trạng thái trống."},
+          "result": {"en": "Does not match: 2 of the 3 cards show no location.", "vi": "Không đúng như mong muốn: 2/3 thẻ không hiện địa điểm."},
+          "findings": [
+            {"text": {"en": "Post 2 card ('Golden hour on the river') shows no location: its front matter in content/story/photography/golden-hour-river.mdx has no `location` field.", "vi": "Thẻ bài 2 ('Golden hour on the river') không hiện địa điểm: front matter trong content/story/photography/golden-hour-river.mdx không có trường `location`."}, "shots": [3, 6]},
+            {"text": {"en": "Post 3 card ('A day in the darkroom') shows no location: no `location` field in day-in-the-darkroom.mdx. The plan expects every card to show a location; file a bug or confirm location is optional for these posts.", "vi": "Thẻ bài 3 ('A day in the darkroom') không hiện địa điểm: day-in-the-darkroom.mdx không có trường `location`. Kế hoạch yêu cầu mọi thẻ đều hiện địa điểm; cần tạo bug hoặc xác nhận địa điểm là tùy chọn với các bài này."}, "shots": [3, 6]},
+            {"text": {"en": "Everything else passed: 3 posts in order, cover, date, reading time, back link, no empty state, no horizontal scroll at 320 / 375px.", "vi": "Các kiểm tra khác đều đạt: 3 bài đúng thứ tự, ảnh bìa, ngày, thời gian đọc, link quay lại, không trống, không cuộn ngang ở 320 / 375px."}, "shots": [1, 2, 4, 5]}
+          ],
+          "raw": [
+            "/story/photography light 320: 3 posts [One roll of film in Huế | Golden hour on the river | A day in the darkroom]; no h-scroll, images load, no empty state",
+            "/story/photography light 375: 3 posts [One roll of film in Huế | Golden hour on the river | A day in the darkroom]; no h-scroll, images load, no empty state"
+          ],
+          "shots": [
+            "shots/105-1-photography-light-320.png",
+            "shots/105-1-photography-light-375.png",
+            "shots/105-1-photography-light-1280.png",
+            "shots/105-1-photography-dark-320.png",
+            "shots/105-1-photography-dark-375.png",
+            "shots/105-1-photography-dark-1280.png"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "110",
+      "label": "#110",
+      "title": {"en": "Release checks across all pages", "vi": "Kiểm tra toàn bản phát hành"},
+      "links": [{"text": "#110 Release 1: test checklist", "href": "https://github.com/toinguyen-agilityio/my-portfolio/issues/110"}],
+      "cases": [
+        {
+          "id": "theme-persistence",
+          "title": {"en": "Theme toggle persists after reload, no flash", "vi": "Giao diện sáng/tối được giữ sau khi tải lại, không bị nháy"},
+          "status": "pass",
+          "tested": {"en": "Switch to dark theme on 4 pages, reload, and watch the theme while the page loads.", "vi": "Chuyển sang giao diện tối ở 4 trang, tải lại trang, và theo dõi giao diện trong lúc trang đang tải."},
+          "expected": {"en": "The choice is saved, the page comes back dark after reload, and there is no flash of the light theme while loading.", "vi": "Lựa chọn được lưu lại, sau khi tải lại trang vẫn là giao diện tối, và không bị nháy giao diện sáng lúc đang tải."},
+          "result": {"en": "Matches: on all 4 pages the theme stays dark after reload (saved as \"dark\") and the dark class is present from the earliest load state.", "vi": "Đúng như mong muốn: ở cả 4 trang giao diện vẫn tối sau khi tải lại (lưu là \"dark\") và class dark có ngay từ lúc trang bắt đầu tải."},
+          "findings": [
+            {"text": {"en": "Home: light → toggled dark → still dark after reload", "vi": "Trang chủ: sáng → bấm sang tối → tải lại vẫn tối"}, "shots": [1, 2, 3]}
+          ],
+          "raw": [
+            "/: starts light=yes, toggled dark=true, after reload dark=true, localStorage=dark, dark class at every readyState with stored dark=true [interactive:true,complete:true]"
+          ],
+          "shots": [
+            "shots/theme-home-1-light-1280.png",
+            "shots/theme-home-2-toggled-dark-1280.png",
+            "shots/theme-home-3-after-reload-dark-1280.png"
+          ]
+        }
+      ],
+      "extra": [
+        {"status": "pass", "text": {"en": "Console errors on all pages visited: the only entries are the browser's 'Failed to load resource: 404' line for the four intentional 404 URLs. No other console error, page error, failed request or 4xx/5xx asset.", "vi": "Lỗi console trên mọi trang đã mở: chỉ có dòng 'Failed to load resource: 404' của trình duyệt cho 4 URL 404 cố ý. Không có lỗi console, lỗi trang, request lỗi hay tài nguyên 4xx/5xx nào khác."}},
+        {"status": "pass", "text": {"en": "'[PLACEHOLDER]' text: scanned all 12 pages, none found.", "vi": "Chữ '[PLACEHOLDER]': đã quét 12 trang, không có."}}
+      ]
+    }
+  ],
+  "notCovered": [
+    {"en": "Hover check: the border colour changes and the cursor is a pointer. No lift (translateY) was measured, which the plan allows.", "vi": "Kiểm tra hover: màu viền đổi và con trỏ là pointer. Không đo hiệu ứng nâng (translateY), kế hoạch cho phép."},
+    {"en": "Real Safari, a real phone and a visual check of the placeholder images are still for a person to do.", "vi": "Safari thật, điện thoại thật và việc xem bằng mắt các ảnh placeholder vẫn cần người kiểm tra."}
+  ],
+  "footer": {"title": {"en": "Pull request", "vi": "Pull request"}, "items": [{"text": {"en": "Test evidence and results:", "vi": "Bằng chứng và kết quả test:"}, "href": "https://github.com/toinguyen-agilityio/my-portfolio/pull/111"}]}
+}
