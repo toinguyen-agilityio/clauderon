@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contextSize, findWaste, historyEntry, rereads, resultBytesOf, scrubTarget, splitTokens, suggest, summarizeTurns, type Call, type Turn } from "../src";
+import { attemptTokens, contextSize, findWaste, historyEntry, rereads, resultBytesOf, scrubTarget, splitTokens, suggest, summarizeTurns, type Call, type Turn } from "../src";
 
 const call = (tool: string, target: string | null = null, resultBytes: number | null = null): Call => ({ tool, target, resultBytes });
 const turn = (index: number, calls: Call[] = [], over: Partial<Turn> = {}): Turn => ({
@@ -13,9 +13,9 @@ const turn = (index: number, calls: Call[] = [], over: Partial<Turn> = {}): Turn
 });
 
 describe("token split", () => {
-  it("keeps new input, cache created and cache read apart", () => {
+  it("keeps new input, cache created and cache read apart, and leaves cache read out of the total", () => {
     const s = splitTokens([turn(0), turn(1)]);
-    expect(s).toEqual({ total: 2320, fresh: 220, cacheRead: 2000, cacheCreated: 200, newInput: 20, output: 100 });
+    expect(s).toEqual({ total: 320, fresh: 220, cacheRead: 2000, cacheCreated: 200, newInput: 20, output: 100 });
   });
 
   it("counts turns and tool calls separately, parallel calls included", () => {
@@ -79,7 +79,18 @@ describe("suggestions and history", () => {
 
   it("totals an attempt for the history row", () => {
     const at = new Date("2026-01-01T00:00:00Z");
-    expect(historyEntry({ runId: "r1", at, turns: [turn(0), turn(1)] })).toEqual({ runId: "r1", at, turns: 2, fresh: 220, total: 2320 });
+    expect(historyEntry({ runId: "r1", at, turns: [turn(0), turn(1)] })).toEqual({ runId: "r1", at, turns: 2, fresh: 220, total: 320 });
+  });
+});
+
+describe("attemptTokens", () => {
+  it("leaves cache read out of an Attempt's total", () => {
+    expect(attemptTokens({ inputTokens: 1100, outputTokens: 20, cacheReadTokens: 1000 })).toBe(120);
+  });
+
+  it("keeps the whole input when an older Agent sent no cache read, and is null before any report", () => {
+    expect(attemptTokens({ inputTokens: 900, outputTokens: 10, cacheReadTokens: null })).toBe(910);
+    expect(attemptTokens({ inputTokens: null, outputTokens: null, cacheReadTokens: null })).toBeNull();
   });
 });
 
