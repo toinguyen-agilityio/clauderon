@@ -455,4 +455,15 @@ describe("claudeCommand (#218)", () => {
     expect(claudeCommand()).toContain(`--append-system-prompt '${TOKEN_GUIDANCE}'`);
     expect(claudeCommand({ resumeSessionId: "sess-1" })).toMatch(/--resume 'sess-1' --append-system-prompt '/);
   });
+
+  it("passes the Node's model and turn limit, cleaned", () => {
+    expect(claudeCommand({ model: "haiku", maxTurns: 80 })).toContain(" --model 'haiku' --max-turns 80 ");
+    expect(claudeCommand({ model: "op'us; rm -rf /", maxTurns: 0 })).toContain(" --model 'opusrm-rf' ");
+    expect(claudeCommand({ maxTurns: 0 })).not.toContain("--max-turns");
+  });
+
+  it("reads a session that stopped at its turn limit", () => {
+    expect(parseClaudeLine(JSON.stringify({ type: "result", subtype: "error_max_turns", is_error: true, session_id: "s1" }))).toMatchObject({ maxTurns: true, sessionId: "s1" });
+    expect(parseClaudeLine(JSON.stringify({ type: "result", subtype: "success", result: "done" })).maxTurns).toBeUndefined();
+  });
 });

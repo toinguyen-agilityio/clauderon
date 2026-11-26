@@ -43,6 +43,12 @@ export type HumanResponse =
   | { decision: "answer"; answers: GrillAnswers }
   | { cancelled: true };
 
+/** What a turn-limit request holds in `questions` (#218): the turns the session reached. */
+export type TurnsSubject = { turns: number };
+
+/** The prompt that resumes a session a person let go on after its turn limit (#218). */
+export const CONTINUE_PROMPT = "You reached the turn limit and a person let you go on. Continue where you left off, then finish with the result block as asked before.\n";
+
 /** What an Approve request holds in `questions`: the input Output it passes through. */
 export type ApproveSubject = { input: { name: string; type: string; value: unknown } | null };
 

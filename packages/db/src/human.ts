@@ -6,6 +6,7 @@ import {
   type GrillAnswers,
   type GrillQuestion,
   type HumanResponse,
+  type TurnsSubject,
 } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordAudit } from "./access";
@@ -23,8 +24,8 @@ const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 export type AskHumanInput = {
   runId: string;
   attemptId: string;
-  kind: "approve" | "grill";
-  questions: GrillQuestion[] | ApproveSubject;
+  kind: "approve" | "grill" | "turns";
+  questions: GrillQuestion[] | ApproveSubject | TurnsSubject;
   /** The Claude session a Grill round resumes. */
   claudeSessionId?: string | null;
   now: Date;
@@ -94,6 +95,29 @@ export async function respondToHuman(db: Db, requestId: string, actorEmail: stri
     const snapshot = r.flowSnapshot as FlowSnapshot;
     const node = snapshot.nodes.find((n) => n.id === a.flowNodeId);
     let response: HumanResponse;
+    if (request.kind === "turns") {
+      // Continue (approve) resumes the same session with more turns; Stop (reject) fails the Node (#218).
+      if (action.decision === "answer") return { ok: false, reason: "invalid", error: "This Node asks for Continue or Stop." } as const;
+      response = action.decision === "reject" ? { decision: "reject", feedback: action.feedback.trim() } : { decision: "approve" };
+      await tx.update(humanRequest).set({ response, respondedByEmail: actorEmail, respondedAt: now }).where(eq(humanRequest.id, requestId));
+      const turns = (request.questions as TurnsSubject | null)?.turns;
+      if (response.decision === "approve") {
+        await tx.update(attempt).set({ state: "running" }).where(eq(attempt.id, a.id));
+        await tx.update(run).set({ state: "running" }).where(eq(run.id, r.id));
+      } else {
+        const error = `Stopped at the turn limit${turns ? ` (${turns} turns)` : ""}`;
+        await tx.update(attempt).set({ state: "failed", endedAt: now, error }).where(eq(attempt.id, a.id));
+        await tx.update(run).set({ state: "failed", endedAt: now, failureReason: `${error} at “${node?.name ?? "Agent"}”` }).where(eq(run.id, r.id));
+      }
+      await recordAudit(tx, {
+        actorEmail,
+        action: response.decision === "approve" ? "run.continue" : "run.stop",
+        subjectType: "run",
+        subjectId: r.id,
+        detail: { node: node?.name ?? a.flowNodeId, round: request.round, ...(turns ? { turns } : {}) },
+      });
+      return { ok: true, runId: r.id, machineId: r.machineId, decision: response.decision, flowNodeId: a.flowNodeId } as const;
+    }
     if (request.kind === "approve") {
       if (action.decision === "answer") return { ok: false, reason: "invalid", error: "This Node asks for Approve or Reject." } as const;
       if (action.decision === "reject") {
@@ -210,12 +234,12 @@ export async function countOpenHumanRequests(db: Db): Promise<number> {
   return row?.n ?? 0;
 }
 
-/** The answered Grill rounds of an Attempt, newest last, for the Gateway's resume. */
+/** The latest round of an Attempt that the Gateway resumes (a Grill round, or Continue after the turn limit), once answered. */
 export async function latestAnsweredRound(db: Db, attemptId: string): Promise<HumanRequest | null> {
   const rows = await db
     .select()
     .from(humanRequest)
-    .where(and(eq(humanRequest.attemptId, attemptId), inArray(humanRequest.kind, ["grill"])))
+    .where(and(eq(humanRequest.attemptId, attemptId), inArray(humanRequest.kind, ["grill", "turns"])))
     .orderBy(asc(humanRequest.round));
   const last = rows.at(-1);
   return last?.respondedAt ? last : null;

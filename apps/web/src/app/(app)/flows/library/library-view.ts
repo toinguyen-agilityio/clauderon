@@ -15,6 +15,9 @@ export type LibraryNodeView = {
   command: string | null;
   inputs: NodeInput[];
   outputs: NodeOutput[];
+  /** Agent and Grill (#218): null runs on the Member's default model / the default turn limit. */
+  model: string | null;
+  maxTurns: number | null;
   isSample: boolean;
   usedBy: LibraryUse[];
 };
@@ -27,7 +30,30 @@ export type NodeFormValue = {
   command: string | null;
   inputs: NodeInput[];
   outputs: NodeOutput[];
+  /** Agent and Grill (#218): "" for the Member's default model. */
+  model: string;
+  /** Agent and Grill (#218): "" for the default turn limit; text while it is typed. */
+  maxTurns: string;
 };
+
+/** The model choices of an Agent or Grill Node (#218), in the order the form lists them. */
+export const MODEL_CHOICES: readonly { value: string; label: string }[] = [
+  { value: "", label: "Default (the Member's own Claude Code setting)" },
+  { value: "opus", label: "Opus: hardest work, such as coding or planning" },
+  { value: "sonnet", label: "Sonnet: most everyday steps" },
+  { value: "haiku", label: "Haiku: small steps, such as a summary or a PR description" },
+];
+
+/** The form's value as the server takes it: the model and turn limit only for a Node that runs Claude. */
+export function nodeInput(value: NodeFormValue) {
+  const claude = value.kind === "agent" || value.kind === "grill";
+  return {
+    ...value,
+    command: value.kind === "command" ? (value.command ?? "") : null,
+    model: claude && value.model ? value.model : null,
+    maxTurns: claude && value.maxTurns.trim() ? value.maxTurns.trim() : null,
+  };
+}
 
 export const KIND_HELP: Record<NodeKind, string> = {
   agent: "Claude works on the instructions by itself and reports its Outputs.",
@@ -110,7 +136,7 @@ export function retypePort<P extends { name: string; type: OutputType }>(port: P
 
 /** Why Save is not available yet (the same rules the server applies), or null when the form can be saved. */
 export function saveBlocker(value: NodeFormValue): string | null {
-  const checked = checkNodeDefinition({ ...value, command: value.kind === "command" ? (value.command ?? "") : null });
+  const checked = checkNodeDefinition(nodeInput(value));
   return checked.ok ? null : checked.error;
 }
 

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
-import { NODE_KINDS, OUTPUT_TYPES, type Flow, type NodeDefinition, type FlowSnapshot, type LibraryNode, type NodeInput, type NodeOutput } from "@clauderon/core";
+import { CLAUDE_MODELS, NODE_KINDS, OUTPUT_TYPES, type ClaudeModel, type Flow, type NodeDefinition, type FlowSnapshot, type LibraryNode, type NodeInput, type NodeOutput } from "@clauderon/core";
 import type { Db } from "./client";
 import { recordFlowVersion } from "./flow-history";
 import { flow, flowEdge, flowNode, node, run } from "./schema";
@@ -56,6 +56,8 @@ export async function buildFlowSnapshot(db: Db, flowId: string): Promise<FlowSna
       outputs: n.outputs.filter((o) => isOutputType(o.type)) as NodeOutput[],
       extraInstructions: placement.extraInstructions,
       enabledOptionalOutputs: placement.enabledOptionalOutputs,
+      model: (CLAUDE_MODELS as readonly string[]).includes(n.model ?? "") ? (n.model as ClaudeModel) : null,
+      maxTurns: n.maxTurns,
       x: placement.x,
       y: placement.y,
     })),

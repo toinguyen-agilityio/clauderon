@@ -8,6 +8,9 @@ import {
   buildGrillAnswerPrompt,
   checkAgentResult,
   commandOutputs,
+  CONTINUE_PROMPT,
+  CONTINUE_TURNS,
+  DEFAULT_MAX_TURNS,
   mask,
   nextNode,
   parseGrillQuestions,
@@ -285,7 +288,7 @@ export class RunEngine {
         grill: node.kind === "grill",
         retryContext,
       });
-      this.opts.links.send(machineId, "node.run", { ...base, kind: "agent", prompt, env: this.agentEnv(node) });
+      this.opts.links.send(machineId, "node.run", { ...base, kind: "agent", prompt, ...this.claudeOptions(node), env: this.agentEnv(node) });
     } else {
       const env = this.commandEnv(ctx, inputs);
       // The Host Agent turns it into $CLAUDERON_RETRY_CONTEXT_FILE (spec M3 §4).
@@ -312,6 +315,11 @@ export class RunEngine {
     return attachments.length > 0 ? { attachments: attachments.map(({ name, sha256 }) => ({ name, sha256 })) } : {};
   }
 
+  /** The Node's model and turn limit (#218); a snapshot from before them gets the default limit. */
+  private claudeOptions(node: SnapshotNode, maxTurns = node.maxTurns ?? DEFAULT_MAX_TURNS): { model?: string; maxTurns: number } {
+    return { ...(node.model ? { model: node.model } : {}), maxTurns };
+  }
+
   private agentEnv(node: SnapshotNode): Record<string, string> {
     const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs);
     return outputs.some((o) => o.type === "branch") ? { CLAUDERON_EXPECT_COMMIT: "1" } : {};
@@ -319,8 +327,9 @@ export class RunEngine {
 
   /**
    * A person approved or answered (spec M3 §2): the web app already moved the
-   * Run back to `running`. An answered Grill round resumes the same Claude
-   * session on the same Attempt; otherwise the Run goes on to its next Node.
+   * Run back to `running`. An answered Grill round, or Continue after the turn
+   * limit (#218), resumes the same Claude session on the same Attempt;
+   * otherwise the Run goes on to its next Node.
    */
   resume(runId: string): Promise<void> {
     return this.serial(async () => {
@@ -330,9 +339,10 @@ export class RunEngine {
       const attempt = (await attemptsOfRun(this.opts.db, runId)).find((a) => !a.superseded && a.state === "running");
       if (!attempt) return this.advance(runId);
       const node = ctx.snapshot.nodes.find((n) => n.id === attempt.flowNodeId);
-      if (node?.kind !== "grill") return;
+      if (node?.kind !== "grill" && node?.kind !== "agent") return;
       const round = await latestAnsweredRound(this.opts.db, attempt.id);
       if (!round || this.resumedRounds.has(round.id)) return;
+      if (round.kind !== "turns" && node.kind !== "grill") return;
       this.resumedRounds.add(round.id);
       if (!attempt.claudeSessionId) {
         const end = { endedAt: this.now(), exitCode: -1, claudeSessionId: null };
@@ -340,13 +350,16 @@ export class RunEngine {
       }
       const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs).map((o) => o.name);
       const answers = (round.response as { answers?: GrillAnswers } | null)?.answers ?? {};
+      const turns = round.kind === "turns";
       this.opts.links.send(machineId, "node.run", {
         attemptId: attempt.id,
         runId,
         worktreePath: ctx.run.worktreePath ?? "",
         kind: "agent",
-        prompt: buildGrillAnswerPrompt((round.questions ?? []) as GrillQuestion[], answers, outputs),
+        prompt: turns ? CONTINUE_PROMPT : buildGrillAnswerPrompt((round.questions ?? []) as GrillQuestion[], answers, outputs),
         resumeSessionId: attempt.claudeSessionId,
+        // Continue gives the session a few more turns; a Grill round gets the Node's own limit again.
+        ...this.claudeOptions(node, turns ? CONTINUE_TURNS : undefined),
         env: this.agentEnv(node),
         ...(await this.attachmentsToCheck(runId)),
       });
@@ -424,6 +437,17 @@ export class RunEngine {
       const end = { endedAt: this.now(), exitCode: result.exitCode, claudeSessionId: result.sessionId ?? attempt.claudeSessionId };
       const branch = { branch: ctx.run.branch ?? "", headCommit: result.headCommit ?? null };
       let outputs: OutputValue[];
+      if (result.maxTurnsReached && end.claudeSessionId && (node.kind === "agent" || node.kind === "grill")) {
+        // A safety net, not a failure (#218): a person lets the session go on, or stops it.
+        const turns = attempt.turns?.length || (node.maxTurns ?? DEFAULT_MAX_TURNS);
+        const round = await askHuman(this.opts.db, { runId: ctx.run.id, attemptId: attempt.id, kind: "turns", questions: { turns }, claudeSessionId: end.claudeSessionId, now: this.now() });
+        this.opts.live.runChanged(ctx.run.id);
+        if (round !== null) {
+          this.opts.live.needsChanged();
+          await this.notify("needs_human", ctx.run.id, { flowNodeId: node.id, request: "turns" });
+        }
+        return;
+      }
       if (result.error) {
         return this.failAttempt(ctx, attempt.id, this.hide(result.error), end);
       }

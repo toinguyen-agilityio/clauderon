@@ -22,6 +22,8 @@ const ACTIONS: Record<string, string> = {
   "run.start": "started",
   "run.cancel": "cancelled",
   "run.retry": "retried",
+  "run.continue": "let go on past its turn limit",
+  "run.stop": "stopped at its turn limit",
   "machine.pair": "paired",
   "machine.unpair": "unpaired",
   "machine.remove": "removed",

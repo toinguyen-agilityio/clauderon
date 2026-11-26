@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { FEEDBACK_HEADING, type FlowSnapshot } from "@clauderon/core";
+import { CONTINUE_PROMPT, CONTINUE_TURNS, DEFAULT_MAX_TURNS, FEEDBACK_HEADING, type FlowSnapshot } from "@clauderon/core";
 import {
   attemptsOfRun,
   cancelRun,
@@ -39,6 +39,8 @@ type Script = {
   grillRounds?: number;
   /** Exit code of each `Run tests` call in turn; 0 when the list runs out. */
   testExits?: number[];
+  /** Code a change stops at its turn limit until its session is resumed (#218). */
+  turnLimit?: boolean;
   /** Don't answer node.run at all for these Node kinds, e.g. to keep a Node running. */
   hold?: (run: Payload<"node.run">) => boolean;
 };
@@ -61,6 +63,8 @@ function scriptPlanAndDeliver(agent: FakeAgent, script: Script = {}) {
       } else {
         done({ exitCode: 0, sessionId: "sess-grill", result: { outputs: { plan: "1. Fix totals" } } });
       }
+    } else if (run.kind === "agent" && script.turnLimit && !run.resumeSessionId) {
+      done({ exitCode: 1, sessionId: "sess-code", error: "Claude reached the turn limit (200 turns)", maxTurnsReached: true });
     } else if (run.kind === "agent") {
       done({ exitCode: 0, sessionId: "sess-code", headCommit: "c0ffee", result: { outputs: { summary: "Fixed it" } } });
     } else if (run.command?.startsWith("npm test")) {
@@ -254,6 +258,43 @@ describe("Human Nodes on the Gateway (spec M3 §2)", () => {
     await gateway.engine.resume(runId!);
     await flush();
     expect(await getRun(db, runId!)).toMatchObject({ state: "failed", failureReason: "Claude session sess-grill could not be resumed: No conversation found" });
+  });
+});
+
+describe("Turn limit (#218)", () => {
+  const scriptTurnLimit = (agent: FakeAgent) => scriptPlanAndDeliver(agent, { turnLimit: true });
+
+  it("pauses the Node for Continue, which resumes the same session with more turns", async () => {
+    const { ann, gateway, agent, flush, start } = await setup();
+    scriptTurnLimit(agent);
+    const [runId] = await start([0], "basic-ticket-delivery");
+
+    const waiting = await openRequest(runId!);
+    expect(waiting.request).toMatchObject({ kind: "turns", round: 1, questions: { turns: DEFAULT_MAX_TURNS } });
+    expect(await getRun(db, runId!)).toMatchObject({ state: "waiting_for_human" });
+    expect(await respondToHuman(db, waiting.request.id, ann.email, { decision: "approve" }, new Date())).toMatchObject({ ok: true });
+    await gateway.engine.resume(runId!);
+    await gateway.engine.resume(runId!);
+    await flush();
+
+    const runs = agent.of("node.run").filter((r) => r.attemptId === waiting.request.attemptId);
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({ maxTurns: DEFAULT_MAX_TURNS });
+    expect(runs[0]!.resumeSessionId).toBeUndefined();
+    expect(runs[1]).toMatchObject({ resumeSessionId: "sess-code", maxTurns: CONTINUE_TURNS, prompt: CONTINUE_PROMPT });
+    const attempts = await attemptsOfRun(db, runId!);
+    expect(attempts.find((a) => a.id === waiting.request.attemptId)).toMatchObject({ state: "succeeded" });
+  });
+
+  it("Stop fails the Node and the Run", async () => {
+    const { ann, agent, start } = await setup();
+    scriptTurnLimit(agent);
+    const [runId] = await start([0], "basic-ticket-delivery");
+    const waiting = await openRequest(runId!);
+    expect(await respondToHuman(db, waiting.request.id, ann.email, { decision: "reject", feedback: "" }, new Date())).toMatchObject({ ok: true, decision: "reject" });
+    expect(await getRun(db, runId!)).toMatchObject({ state: "failed", failureReason: `Stopped at the turn limit (${DEFAULT_MAX_TURNS} turns) at “Code a change”` });
+    const attempts = await attemptsOfRun(db, runId!);
+    expect(attempts.find((a) => a.id === waiting.request.attemptId)).toMatchObject({ state: "failed", error: `Stopped at the turn limit (${DEFAULT_MAX_TURNS} turns)` });
   });
 });
 

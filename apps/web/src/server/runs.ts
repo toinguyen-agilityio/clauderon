@@ -14,6 +14,7 @@ import {
   ticketKeys,
   topologicalOrder,
   type ApproveSubject,
+  type TurnsSubject,
   type GrillQuestion,
   type HumanResponse,
   type RetryContext,
@@ -231,6 +232,9 @@ export async function cancelRunAs(deps: AppDeps, viewer: Viewer, runId: string):
   return { ok: true };
 }
 
+/** The turns a turn-limit request says the session reached (#218); null for any other request. */
+const turnsOf = (r: { kind: string; questions: unknown }): number | null => (r.kind === "turns" ? ((r.questions as TurnsSubject | null)?.turns ?? null) : null);
+
 const NOTIFY_OF_DECISION = { approve: "approved", reject: "rejected", answer: "answered" } as const;
 
 /**
@@ -312,6 +316,7 @@ export async function viewNeedsYou(deps: AppDeps) {
     waitedMs: now.getTime() - r.request.createdAt.getTime(),
     questions: r.request.kind === "grill" ? ((r.request.questions ?? []) as GrillQuestion[]) : [],
     subject: r.request.kind === "approve" ? ((r.request.questions as ApproveSubject | null)?.input ?? null) : null,
+    turns: turnsOf(r.request),
   }));
 }
 
@@ -390,6 +395,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
             round: open.round,
             questions: open.kind === "grill" ? ((open.questions ?? []) as GrillQuestion[]) : [],
             subject: open.kind === "approve" ? ((open.questions as ApproveSubject | null)?.input ?? null) : null,
+            turns: turnsOf(open),
           }
         : null,
       // Newest first (spec M3 §8).
@@ -416,6 +422,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
             round: r.round,
             askedAt: r.createdAt,
             questions: r.kind === "grill" ? ((r.questions ?? []) as GrillQuestion[]) : [],
+            turns: turnsOf(r),
             response: r.response as HumanResponse | null,
             respondedBy: r.respondedByEmail,
             respondedAt: r.respondedAt,

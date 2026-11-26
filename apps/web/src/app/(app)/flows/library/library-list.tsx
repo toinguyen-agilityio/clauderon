@@ -98,7 +98,17 @@ function NodeDialog({ node, onClose }: { node: LibraryNodeView | null; onClose: 
           {node ? (
             <>
               <NodeForm
-                initial={{ id: node.id, name: node.name, kind: node.kind, instructions: node.instructions, command: node.command, inputs: node.inputs, outputs: node.outputs }}
+                initial={{
+                  id: node.id,
+                  name: node.name,
+                  kind: node.kind,
+                  instructions: node.instructions,
+                  command: node.command,
+                  inputs: node.inputs,
+                  outputs: node.outputs,
+                  model: node.model ?? "",
+                  maxTurns: node.maxTurns === null ? "" : String(node.maxTurns),
+                }}
                 usedBy={node.usedBy}
                 onClose={() => ref.current?.close()}
               />

@@ -189,7 +189,7 @@ export function RunLive({
 
                 {attempt.rounds.length > 0 && (
                   <div className="stack" style={{ gap: 8 }}>
-                    <span className="eyebrow">{node.kind === "grill" ? "Rounds" : "Decision"}</span>
+                    <span className="eyebrow">{node.kind === "grill" ? "Rounds" : node.kind === "agent" ? "Turn limit" : "Decision"}</span>
                     <div className="qa">
                       {attempt.rounds.map((r) => (
                         <Round key={r.id} round={r} />
@@ -204,7 +204,9 @@ export function RunLive({
 
         {node.openRequest && (
           <div className="card card-pad stack" style={{ gap: 12 }}>
-            <span className="eyebrow">{node.openRequest.kind === "grill" ? `Claude asks · round ${node.openRequest.round}` : "Waiting for a decision"}</span>
+            <span className="eyebrow">
+              {node.openRequest.kind === "grill" ? `Claude asks · round ${node.openRequest.round}` : node.openRequest.kind === "turns" ? "Turn limit reached" : "Waiting for a decision"}
+            </span>
             {node.openRequest.kind === "approve" && node.openRequest.subject && (
               <div className="stack" style={{ gap: 4 }}>
                 <OType type={node.openRequest.subject.type} label={node.openRequest.subject.name} />
@@ -321,19 +323,21 @@ function Round({ round }: { round: RoundView }) {
           </div>
         ))}
       {response && "cancelled" in response && <span className="small faint">Closed by Cancel{who && ` · ${who}`}</span>}
+      {round.kind === "turns" && <span className="small faint">Reached the turn limit{round.turns ? ` after ${round.turns} turns` : ""}</span>}
       {response && "decision" in response && response.decision === "approve" && (
         <div className="ans decision">
           <span className="who">{who}</span>
-          Approved
+          {round.kind === "turns" ? "Continued" : "Approved"}
         </div>
       )}
       {response && "decision" in response && response.decision === "reject" && (
         <div className="ans decision">
           <span className="who">{who}</span>
-          Rejected: {response.feedback}
+          {round.kind === "turns" ? "Stopped" : `Rejected: ${response.feedback}`}
         </div>
       )}
       {!response && round.kind === "approve" && <span className="small faint">Waiting for Approve or Reject…</span>}
+      {!response && round.kind === "turns" && <span className="small faint">Waiting for Continue or Stop…</span>}
     </>
   );
 }
