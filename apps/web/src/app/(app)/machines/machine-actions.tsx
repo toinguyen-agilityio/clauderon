@@ -3,7 +3,7 @@
 import { useActionState, useRef } from "react";
 import { Icon } from "../../../components/icons";
 import { closeOnBackdrop } from "../../../components/dialog";
-import { checkLoginsAction, removeMachineAction, unpairAction, updateAgentAction, type MachineFormState, type UpdateFormState } from "./actions";
+import { checkLoginsAction, removeMachineAction, updateAgentAction, type MachineFormState, type UpdateFormState } from "./actions";
 import { AutoRefresh } from "./auto-refresh";
 
 /** Check logins on the owner's own Machine (POD-5): its Agent answers once connected. */
@@ -106,26 +106,12 @@ function Confirmed({
   );
 }
 
-export function UnpairMachine({ machineId, name }: { machineId: string; name: string }) {
-  return (
-    <Confirmed
-      testId="machine-unpair"
-      title={`Unpair ${name}?`}
-      body="Its Agent is disconnected at once and its Running Runs become Interrupted. Slots, queue and Run history stay; pair a computer again to go on."
-      button="Unpair"
-      pendingLabel="Unpairing…"
-      machineId={machineId}
-      action={unpairAction}
-    />
-  );
-}
-
 export function RemoveMachine({ machineId, name }: { machineId: string; name: string }) {
   return (
     <Confirmed
       testId="machine-remove"
       title={`Remove ${name}?`}
-      body="Deletes the Machine and its settings; Run history stays without a Machine. Refused while it has Active Runs. The Agent's directory (~/.clauderon) stays on the computer."
+      body="Stops its Agent on the computer and deletes the Machine and its settings. Run history stays without a Machine. Refused while it has Active Runs. The folder ~/.clauderon stays on the computer; connect it again with the install command to get the newest Agent."
       button="Remove Machine"
       pendingLabel="Removing…"
       machineId={machineId}

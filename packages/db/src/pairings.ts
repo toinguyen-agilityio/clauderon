@@ -111,15 +111,3 @@ export async function approvePairing(db: Db, approver: { id: string; email: stri
     return { ok: true, machine: saved, replaced: Boolean(existing?.tokenHash) } as const;
   });
 }
-
-/** Unpairs a Machine: its token stops working; the row, its Runs and Slots stay. */
-export async function unpairMachine(db: Db, machineId: string, actorEmail: string): Promise<boolean> {
-  const rows = await db
-    .update(machine)
-    .set({ tokenHash: null, connected: false })
-    .where(eq(machine.id, machineId))
-    .returning({ id: machine.id });
-  if (rows.length === 0) return false;
-  await recordAudit(db, { actorEmail, action: "machine.unpair", subjectType: "machine", subjectId: machineId });
-  return true;
-}
