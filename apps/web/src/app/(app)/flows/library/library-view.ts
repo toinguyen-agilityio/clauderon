@@ -72,6 +72,7 @@ export const TYPE_HELP: Record<OutputType, string> = {
   "pull-request": "A GitHub pull request.",
   summary: "Free text, such as a summary or a link.",
   screenshot: "Screenshots of the pages a change touches.",
+  context: "Short notes for the next Agent: the files that matter, decisions made, what was ruled out. Saves it exploring the repository again.",
 };
 
 export const INSTRUCTIONS_MAX = 20_000;

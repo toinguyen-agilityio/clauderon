@@ -131,6 +131,8 @@ export const messageSchemas = {
     error: z.string().optional(),
     /** The Claude session stopped at its turn limit and can be resumed (#218); `error` says so too, for an older Gateway. */
     maxTurnsReached: z.boolean().optional(),
+    /** `--resume` named a session Claude Code no longer has (#218): a retry starts fresh instead. */
+    sessionGone: z.boolean().optional(),
     diff: z.object({ text: z.string(), truncated: z.boolean() }).optional(),
     files: z.array(z.object({ name: z.string(), contentType: z.string(), base64: z.string() })).optional(),
   }),

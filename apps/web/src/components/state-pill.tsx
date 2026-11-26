@@ -55,6 +55,7 @@ const OUTPUT_COLOR: Record<string, string> = {
   "pull-request": "--t-pr",
   summary: "--t-summary",
   screenshot: "--t-shot",
+  context: "--t-context",
 };
 
 /** The CSS colour of an Output Type, for ports and edges on the Flow canvas. */

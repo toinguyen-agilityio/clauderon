@@ -196,6 +196,7 @@ export async function runNode(
     let sessionId: string | undefined;
     let error: string | undefined;
     let maxTurnsReached = false;
+    let sessionGone = false;
 
     if (run.kind === "command") {
       const output: string[] = [];
@@ -268,12 +269,15 @@ export async function runNode(
       // Said in `error` too, so an older Gateway fails the Node as before (#218).
       if (maxTurnsReached) error = `Claude reached the turn limit${run.maxTurns ? ` (${run.maxTurns} turns)` : ""}`;
       // A Grill round whose session Claude no longer knows (spec M3 §2.2).
-      if (unknownSession && result === undefined) error = `Claude session ${run.resumeSessionId} could not be resumed: ${hide(unknownSession)}`;
+      if (unknownSession && result === undefined) {
+        error = `Claude session ${run.resumeSessionId} could not be resumed: ${hide(unknownSession)}`;
+        sessionGone = true;
+      }
     }
 
     const headCommit = await git("rev-parse", "HEAD");
     if (!error && expectCommit && headCommit === headBefore) error = "no commit on the branch";
-    link.send("node.result", { attemptId: run.attemptId, exitCode, result, sessionId, headCommit, ...(error ? { error } : {}), ...(maxTurnsReached ? { maxTurnsReached } : {}) });
+    link.send("node.result", { attemptId: run.attemptId, exitCode, result, sessionId, headCommit, ...(error ? { error } : {}), ...(maxTurnsReached ? { maxTurnsReached } : {}), ...(sessionGone ? { sessionGone } : {}) });
   } catch (failure) {
     const text = hide(errorText(failure));
     options.log(`node ${run.attemptId}: ${text}`);
