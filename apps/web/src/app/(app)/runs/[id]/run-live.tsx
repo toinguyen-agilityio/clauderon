@@ -214,7 +214,7 @@ export function RunLive({
             )}
 
             {!isEntryKind(node.kind) && (
-              <div className="att-tabs" role="tablist" aria-label="Node view">
+              <div className="seg" role="tablist" aria-label="Node view" style={{ alignSelf: "flex-start" }}>
                 <button type="button" role="tab" aria-selected={view === "log"} className={view === "log" ? "on" : ""} onClick={() => setView("log")}>
                   Log
                 </button>
