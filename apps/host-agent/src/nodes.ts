@@ -251,7 +251,7 @@ export async function runNode(
         errors.stderr(line);
         log("stderr", line);
       });
-      exitCode = await start(claudeCommand(run.resumeSessionId), { ...env, CLAUDERON_PROMPT_FILE: promptFile }, (stream, text) =>
+      exitCode = await start(claudeCommand({ resumeSessionId: run.resumeSessionId }), { ...env, CLAUDERON_PROMPT_FILE: promptFile }, (stream, text) =>
         (stream === "stdout" ? stdout : stderr).push(text),
       );
       stdout.flush();
