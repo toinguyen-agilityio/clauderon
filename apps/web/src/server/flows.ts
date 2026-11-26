@@ -351,7 +351,14 @@ export async function viewFlowHistory(deps: AppDeps, flowId: string): Promise<Fl
   };
 }
 
-export type SnapshotView = { name: string; nodes: { name: string; kind: string; instructions: string; extraInstructions: string }[]; edges: string[] };
+export type SnapshotView = {
+  name: string;
+  nodes: { name: string; kind: string; instructions: string; extraInstructions: string }[];
+  /** Each connection in words, e.g. "Plan (plan) → Approve (plan)". */
+  edges: string[];
+  /** The same connections as parts, in the same order, for a page that lays them out. */
+  links: { from: string; output: string; to: string; input: string }[];
+};
 
 /** A version's graph as lists a page can show; masked (NFR-1). */
 function snapshotView(raw: VersionSnapshot): SnapshotView {
@@ -361,10 +368,73 @@ function snapshotView(raw: VersionSnapshot): SnapshotView {
     name: snapshot.name,
     nodes: snapshot.nodes.map((n) => ({ name: nodeName(n), kind: n.definition.kind, instructions: n.definition.kind === "command" ? (n.definition.command ?? "") : n.definition.instructions, extraInstructions: n.extraInstructions })),
     edges: snapshot.edges.map((e) => `${byId.get(e.fromFlowNodeId) ?? "?"} (${e.fromOutput}) → ${byId.get(e.toFlowNodeId) ?? "?"} (${e.toInput})`),
+    links: snapshot.edges.map((e) => ({ from: byId.get(e.fromFlowNodeId) ?? "?", output: e.fromOutput, to: byId.get(e.toFlowNodeId) ?? "?", input: e.toInput })),
   };
 }
 
-export type FlowVersionView = { entry: HistoryEntryView; flowName: string; deleted: boolean; lock: FlowLock | null; before: SnapshotView | null; after: SnapshotView };
+export type ChangeStatus = "added" | "removed" | "changed" | "same";
+type SnapshotNode = SnapshotView["nodes"][number];
+export type NodeChange = { status: ChangeStatus; name: string; kind: string; before: SnapshotNode | null; after: SnapshotNode | null; fields: ("kind" | "instructions" | "extraInstructions")[] };
+export type LinkChange = { status: Exclude<ChangeStatus, "changed">; link: SnapshotView["links"][number] };
+
+/** Keys a list by a name, numbering repeats ("Plan", "Plan#2") so two Nodes of one name still pair up in order. */
+function keyed<T>(items: T[], name: (item: T) => string): Map<string, T> {
+  const seen = new Map<string, number>();
+  return new Map(
+    items.map((item) => {
+      const n = (seen.get(name(item)) ?? 0) + 1;
+      seen.set(name(item), n);
+      return [n === 1 ? name(item) : `${name(item)}#${n}`, item];
+    }),
+  );
+}
+
+/**
+ * What one version changed, Node by Node and connection by connection. Nodes pair up by name (a
+ * snapshot keeps no stable id a reader can show), so a renamed Node reads as one removed and one
+ * added. With no version before (the first one), everything is "same".
+ */
+export function compareSnapshots(before: SnapshotView | null, after: SnapshotView): { nodes: NodeChange[]; links: LinkChange[] } {
+  if (!before) {
+    return {
+      nodes: after.nodes.map((n) => ({ status: "same", name: n.name, kind: n.kind, before: null, after: n, fields: [] })),
+      links: after.links.map((link) => ({ status: "same", link })),
+    };
+  }
+  const old = keyed(before.nodes, (n) => n.name);
+  const now = keyed(after.nodes, (n) => n.name);
+  const nodes: NodeChange[] = [];
+  for (const [key, a] of now) {
+    const b = old.get(key);
+    if (!b) {
+      nodes.push({ status: "added", name: a.name, kind: a.kind, before: null, after: a, fields: [] });
+      continue;
+    }
+    const fields = (["kind", "instructions", "extraInstructions"] as const).filter((f) => a[f] !== b[f]);
+    nodes.push({ status: fields.length > 0 ? "changed" : "same", name: a.name, kind: a.kind, before: b, after: a, fields });
+  }
+  for (const [key, b] of old) if (!now.has(key)) nodes.push({ status: "removed", name: b.name, kind: b.kind, before: b, after: null, fields: [] });
+
+  const text = (l: SnapshotView["links"][number]) => `${l.from}\u0000${l.output}\u0000${l.to}\u0000${l.input}`;
+  const oldLinks = keyed(before.links, text);
+  const newLinks = keyed(after.links, text);
+  const links: LinkChange[] = [...newLinks].map(([key, link]) => ({ status: oldLinks.has(key) ? "same" : "added", link }));
+  for (const [key, link] of oldLinks) if (!newLinks.has(key)) links.push({ status: "removed", link });
+  return { nodes, links };
+}
+
+export type FlowVersionView = {
+  entry: HistoryEntryView;
+  flowName: string;
+  deleted: boolean;
+  lock: FlowLock | null;
+  before: SnapshotView | null;
+  after: SnapshotView;
+  /** How many versions the Flow has, and the ids of the versions on either side, for stepping through. */
+  count: number;
+  olderId: string | null;
+  newerId: string | null;
+};
 
 /** One version with the graph before and after it. */
 export async function viewFlowVersion(deps: AppDeps, flowId: string, versionId: string): Promise<FlowVersionView | null> {
@@ -372,7 +442,19 @@ export async function viewFlowVersion(deps: AppDeps, flowId: string, versionId: 
   const history = await viewFlowHistory(deps, flowId);
   const entry = history?.entries.find((e) => e.id === versionId);
   if (!found || !history || !entry) return null;
-  return { entry, flowName: history.name, deleted: history.deleted, lock: history.lock, before: found.previous ? snapshotView(found.previous.snapshot) : null, after: snapshotView(found.version.snapshot) };
+  // Entries are newest first.
+  const at = history.entries.indexOf(entry);
+  return {
+    entry,
+    flowName: history.name,
+    deleted: history.deleted,
+    lock: history.lock,
+    before: found.previous ? snapshotView(found.previous.snapshot) : null,
+    after: snapshotView(found.version.snapshot),
+    count: history.entries.length,
+    olderId: history.entries[at + 1]?.id ?? null,
+    newerId: history.entries[at - 1]?.id ?? null,
+  };
 }
 
 export type DeletedFlowView = { flowId: string; name: string; versionId: string; deletedByEmail: string; deletedByName: string | null; deletedAt: Date };

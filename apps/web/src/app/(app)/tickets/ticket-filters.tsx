@@ -40,13 +40,13 @@ export function FilterLink({ href, className, current, children }: { href: strin
   );
 }
 
-export function TicketSearch({ project, status, q }: { project?: string; status?: string; q?: string }) {
+export function TicketSearch({ project, status, size, q }: { project?: string; status?: string; size?: string; q?: string }) {
   const { pending, target, go } = use(FiltersContext);
   const [submitted, setSubmitted] = useState<string | null>(null);
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const value = String(new FormData(e.currentTarget).get("q") ?? "").trim();
-    const query = new URLSearchParams(Object.entries({ project, status, q: value }).filter(([, v]) => v) as [string, string][]);
+    const query = new URLSearchParams(Object.entries({ project, status, size, q: value }).filter(([, v]) => v) as [string, string][]);
     const href = `/tickets${query.size ? `?${query}` : ""}`;
     setSubmitted(href);
     go(href);
@@ -61,6 +61,7 @@ export function TicketSearch({ project, status, q }: { project?: string; status?
     >
       {project && <input type="hidden" name="project" value={project} />}
       {status && <input type="hidden" name="status" value={status} />}
+      {size && <input type="hidden" name="size" value={size} />}
       {Icon.search}
       <input className="input" type="search" name="q" defaultValue={q ?? ""} placeholder="Search title or #number" aria-label="Search Tickets" />
     </form>

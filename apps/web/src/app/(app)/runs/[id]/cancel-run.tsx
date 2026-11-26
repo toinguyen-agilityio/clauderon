@@ -15,7 +15,7 @@ export function CancelRun({ runId, running }: { runId: string; running: boolean 
       <button type="button" className="btn danger" onClick={() => ref.current?.showModal()} data-testid="run-cancel">
         Cancel Run
       </button>
-      <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby="cancel-run-title">
+      <dialog ref={ref} {...closeOnBackdrop} className="modal danger" aria-labelledby="cancel-run-title">
         <form action={action} className="modal-in">
           <div className="modal-h">
             <h2 id="cancel-run-title">Cancel this Run?</h2>

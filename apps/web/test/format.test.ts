@@ -35,9 +35,9 @@ describe("appVersion", () => {
     expect(appVersion({ APP_VERSION: "v0.8.0" })).toBe("v0.8.0");
   });
 
-  it("falls back to dev", () => {
-    expect(appVersion({})).toBe("dev");
-    expect(appVersion({ APP_VERSION: "" })).toBe("dev");
-    expect(appVersion({ APP_VERSION: "  " })).toBe("dev");
+  it("is null when unset, so the sidebar shows no version", () => {
+    expect(appVersion({})).toBeNull();
+    expect(appVersion({ APP_VERSION: "" })).toBeNull();
+    expect(appVersion({ APP_VERSION: "  " })).toBeNull();
   });
 });

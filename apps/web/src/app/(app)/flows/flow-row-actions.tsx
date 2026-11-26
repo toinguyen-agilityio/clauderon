@@ -89,7 +89,7 @@ export function FlowRowActions({ flowId, name, locked, runCount, start }: { flow
             {Icon.trash}
           </button>
 
-          <dialog ref={confirm} {...closeOnBackdrop} className="modal narrow" aria-labelledby={`del-${flowId}`}>
+          <dialog ref={confirm} {...closeOnBackdrop} className="modal narrow danger" aria-labelledby={`del-${flowId}`}>
             <div className="modal-in">
               <div className="modal-h">
                 <h2 id={`del-${flowId}`}>Delete Flow?</h2>
