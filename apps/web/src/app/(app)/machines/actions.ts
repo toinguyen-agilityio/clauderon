@@ -8,7 +8,6 @@ import {
   lookUpPairing,
   removeMachine,
   setMyMachineSettings,
-  unpairMyMachine,
   updateMyAgent,
   type PairingPreview,
 } from "../../../server/machines";
@@ -63,14 +62,6 @@ export async function setSettingsAction(_state: SettingsFormState, form: FormDat
   if (result === "not-found") notFound();
   revalidatePath("/machines", "layout");
   return result.ok ? { error: null, saved: true } : { error: result.error, saved: false };
-}
-
-export async function unpairAction(_state: MachineFormState, form: FormData): Promise<MachineFormState> {
-  const member = await requireMember();
-  const result = await unpairMyMachine(deps(), member, String(form.get("machineId") ?? ""));
-  if (result === "not-found") notFound();
-  revalidatePath("/machines", "layout");
-  return { error: null };
 }
 
 /** Remove a Machine, then back to the Machines page. */

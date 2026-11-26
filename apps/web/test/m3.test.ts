@@ -28,7 +28,7 @@ import { addToAllowlist } from "../src/server/access";
 import type { AppDeps } from "../src/server/deps";
 import { cloneMyFlow, deleteMyFlow, editorData, saveMyFlow } from "../src/server/flows";
 import { createMyNode, deleteMyNode, updateMyNode } from "../src/server/library";
-import { approveMyPairing, removeMachine, setMyMachineSettings, unpairMyMachine } from "../src/server/machines";
+import { approveMyPairing, removeMachine, setMyMachineSettings } from "../src/server/machines";
 import { removeMember } from "../src/server/members";
 import { cancelRunAs, needsYouCount, respondAs, retryAs, viewAudit, viewNeedsYou, viewRun } from "../src/server/runs";
 import { startRuns } from "../src/server/start";
@@ -441,16 +441,15 @@ describe("Audit (T3-12, RUN-15, spec M3 §7)", () => {
     expect(await lastEntry("run.retry")).toMatchObject({ actorEmail: "bo@example.com", subjectId: b.runId, detail: { from: "interrupted" } });
   });
 
-  it("machine.pair, machine.settings, machine.unpair, machine.remove", async () => {
+  it("machine.pair, machine.settings, machine.remove", async () => {
     const cy = await memberRow(db, "cy@example.com");
     const pending = await createPairing(db, { tokenHash: hashToken("cy-token"), hostname: "cy-mac", os: "darwin", arch: "arm64" }, deps.clock.now());
     if (!pending.ok) throw new Error("pairing failed");
     const paired = await approveMyPairing(deps, cy, pending.pairing.code);
     if (!paired.ok) throw new Error("approve failed");
     await setMyMachineSettings(deps, cy, paired.machineId, { slots: 3 });
-    await unpairMyMachine(deps, cy, paired.machineId);
     await removeMachine(deps, cy, paired.machineId);
-    for (const action of ["machine.pair", "machine.settings", "machine.unpair", "machine.remove"]) {
+    for (const action of ["machine.pair", "machine.settings", "machine.remove"]) {
       expect(await lastEntry(action)).toMatchObject({ actorEmail: "cy@example.com", subjectType: "machine", subjectId: paired.machineId });
     }
   });

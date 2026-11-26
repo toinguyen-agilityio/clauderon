@@ -12,7 +12,6 @@ import {
   machineOfTokenHash,
   pairingStatus,
   schema,
-  unpairMachine,
   type Db,
 } from "../src/index";
 import { createTestDatabase, type TestDatabase } from "../src/test-database";
@@ -122,14 +121,5 @@ describe("Pairing (ADR 0006)", () => {
     expect(await createPairing(db, request("one-more"), now)).toEqual({ ok: false, reason: "busy" });
     // Expired codes are cleared, so pairing works again later.
     expect((await createPairing(db, request("one-more"), later(PAIRING_TTL_MS + 1))).ok).toBe(true);
-  });
-
-  it("unpairing stops the token but keeps the Machine", async () => {
-    const paired = await approvePairing(db, ann, (await started("t1")).code, now);
-    if (!paired.ok) throw new Error("not paired");
-    expect(await unpairMachine(db, paired.machine.id, ann.email)).toBe(true);
-    expect(await machineOfTokenHash(db, hashToken("t1"))).toBeNull();
-    expect(await getMachine(db, paired.machine.id)).toMatchObject({ tokenHash: null, connected: false });
-    expect(await unpairMachine(db, "00000000-0000-0000-0000-000000000000", ann.email)).toBe(false);
   });
 });

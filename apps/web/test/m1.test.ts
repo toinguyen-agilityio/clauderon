@@ -19,7 +19,6 @@ import {
   lookUpPairing,
   removeMachine,
   setMyMachineSettings,
-  unpairMyMachine,
   updateMyAgent,
   viewMachine,
   viewMachines,
@@ -151,17 +150,6 @@ describe("Machines (ADR 0006)", () => {
     expect(commands).toEqual([]);
     expect(await updateMyAgent(deps, ann, machine.id)).toEqual({ ok: true });
     expect(commands).toEqual([{ type: "machine.updateAgent", machineId: machine.id }]);
-  });
-
-  it("Unpair stops the token and tells the Gateway; the Machine and its Slots stay", async () => {
-    const ann = await memberRow(db, "ann@example.com");
-    const bob = await memberRow(db, "bob@example.com");
-    const machine = await machineRow(db, ann.id, { slots: 4 });
-    expect(await unpairMyMachine(deps, bob, machine.id)).toBe("not-found");
-    expect(await unpairMyMachine(deps, ann, machine.id)).toEqual({ ok: true });
-    expect((await db.select().from(schema.machine))[0]).toMatchObject({ tokenHash: null, connected: false, slots: 4 });
-    expect(commands).toEqual([{ type: "machine.repaired", machineId: machine.id }]);
-    expect((await viewMachines(deps, ann)).mine).toMatchObject({ paired: false, ready: false });
   });
 
   it("Remove is refused while a Run is Active, then deletes the row and keeps the ended Runs", async () => {
