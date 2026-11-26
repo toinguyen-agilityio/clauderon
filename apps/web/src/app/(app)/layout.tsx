@@ -11,6 +11,7 @@ import { MobileShell } from "../../components/mobile-shell";
 import { SideNav } from "../../components/side-nav";
 import { needsYouCount } from "../../server/runs";
 import { deps, gatewayUrl, requireMember } from "../../server/runtime";
+import { appVersion } from "../../server/version";
 
 /** The signed-in shell of the prototype: left rail, work area on the right. */
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -46,6 +47,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               </button>
             </form>
           </div>
+          <div className="small faint" title="App version">{appVersion(process.env)}</div>
         </div>
       </MobileShell>
       </NeedsYouProvider>
