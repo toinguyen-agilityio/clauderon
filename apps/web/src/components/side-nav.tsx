@@ -27,7 +27,7 @@ export function SideNav({ needsYou: initial }: { needsYou: number }) {
       items: [
         { href: "/flows", label: "Flows", icon: Icon.flows },
         { href: "/machines", label: "Machines", icon: Icon.host },
-        { href: "/projects", label: "Projects", icon: Icon.projects },
+        { href: "/projects", label: "Project Settings", icon: Icon.projects },
         { href: "/members", label: "Members", icon: Icon.allowlist },
       ],
     },

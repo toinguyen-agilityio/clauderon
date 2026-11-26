@@ -147,21 +147,25 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** The Projects page switch that turns notifications on and off for this browser. */
+/** The Projects page card whose switch turns notifications on and off for this browser. */
 export function NotificationsToggle() {
   const setting = useContext(NotifySetting);
   if (!setting) return null;
   const state = switchState(setting.enabled, setting.permission);
   return (
-    <div className="notify-switch">
-      <label className="notify-switch-row" title={state.hint ?? undefined}>
-        {state.label}
+    <section className="card notify-card" aria-labelledby="notify-card-h">
+      <div className="notify-card-head">
+        <h2 id="notify-card-h">{state.label}</h2>
         <span className="fe-switch">
-          <input type="checkbox" role="switch" checked={state.on} disabled={state.disabled} onChange={setting.toggle} />
+          <input type="checkbox" role="switch" aria-labelledby="notify-card-h" checked={state.on} disabled={state.disabled} onChange={setting.toggle} />
           <span aria-hidden="true" />
         </span>
-      </label>
-      {state.hint && <p className="small faint">{state.hint}</p>}
-    </div>
+      </div>
+      <p className="small muted">
+        Get a notification when one of your Runs needs you at an Approve or Grill Node, when it ends, or when someone else approves, rejects, answers,
+        cancels or retries it. It works while an app tab is open, and applies to this browser only.
+      </p>
+      {state.hint && <p className="hint">{state.hint}</p>}
+    </section>
   );
 }
