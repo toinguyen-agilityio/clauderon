@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONTEXT_WRITING,
   MASK,
+  RETRY_RESUME_MAX_CONTEXT,
+  RETRY_RESUME_WINDOW_MS,
+  buildRetryResumePrompt,
+  resumableSession,
   branchName,
   buildAgentPrompt,
   REPO_GUIDANCE,
@@ -174,5 +179,33 @@ describe("tailLines", () => {
   it("keeps the last n lines", () => {
     expect(tailLines("a\nb\nc\n", 2)).toBe("b\nc");
     expect(MASK).toBe("•••");
+  });
+});
+
+describe("retry resume and context (#218)", () => {
+  const now = new Date("2026-01-01T00:10:00Z");
+  const turn = (context: number) => ({ index: 0, calls: [], newInput: 0, cacheCreated: 0, cacheRead: context, output: 1 });
+  const failed = { state: "failed", claudeSessionId: "s1", endedAt: new Date("2026-01-01T00:08:00Z"), turns: [turn(1_000), turn(40_000)] };
+
+  it("resumes a small session that failed minutes ago", () => {
+    expect(resumableSession(failed, now)).toBe("s1");
+    expect(resumableSession({ ...failed, state: "interrupted" }, now)).toBe("s1");
+  });
+
+  it("starts fresh when the cache is cold, the context large, or nothing to resume", () => {
+    expect(resumableSession({ ...failed, endedAt: new Date(now.getTime() - RETRY_RESUME_WINDOW_MS - 1) }, now)).toBeNull();
+    expect(resumableSession({ ...failed, turns: [turn(RETRY_RESUME_MAX_CONTEXT)] }, now)).toBeNull();
+    expect(resumableSession({ ...failed, state: "succeeded" }, now)).toBeNull();
+    expect(resumableSession({ ...failed, claudeSessionId: null }, now)).toBeNull();
+    expect(resumableSession({ ...failed, turns: null }, now)).toBeNull();
+    expect(resumableSession(undefined, now)).toBeNull();
+  });
+
+  it("asks for the result again when resuming, and says what a context Output holds", () => {
+    const prompt = buildRetryResumePrompt({ outputs: ["summary", "context"], contextOutputs: ["context"], retryContext: { feedback: null, failure: null, note: "Mind the cache.", retriedBy: "Ann" } });
+    expect(prompt).toContain("Mind the cache.");
+    expect(prompt).toContain("## Result");
+    expect(prompt).toContain(`context: ${CONTEXT_WRITING}`);
+    expect(buildAgentPrompt({ instructions: "Do it.", placementInstructions: "", batchInstructions: "", inputs: [], outputs: ["summary"] })).not.toContain(CONTEXT_WRITING);
   });
 });

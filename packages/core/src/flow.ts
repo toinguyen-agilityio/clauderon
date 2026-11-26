@@ -1,4 +1,5 @@
-export const OUTPUT_TYPES = ["issue", "plan", "branch", "test-result", "pull-request", "summary", "screenshot"] as const;
+/** `context` (#218): short notes one Agent Node hands the next, so it does not explore the repository again. */
+export const OUTPUT_TYPES = ["issue", "plan", "branch", "test-result", "pull-request", "summary", "screenshot", "context"] as const;
 export type OutputType = (typeof OUTPUT_TYPES)[number];
 
 // `ticket` is the entry kind of Flows and Run snapshots from before Input Nodes.

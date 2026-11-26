@@ -6,6 +6,8 @@ import {
   branchName,
   buildAgentPrompt,
   buildGrillAnswerPrompt,
+  buildRetryResumePrompt,
+  resumableSession,
   checkAgentResult,
   commandOutputs,
   CONTINUE_PROMPT,
@@ -91,6 +93,8 @@ export class RunEngine {
   private queue: Promise<void> = Promise.resolve();
   /** Grill rounds whose resume was sent, so a repeated command never runs one twice. */
   private resumedRounds = new Set<string>();
+  /** Retried Attempts sent to resume their failed session (#218): one whose session is gone starts fresh. */
+  private retryResumed = new Set<string>();
 
   constructor(private readonly opts: RunEngineOptions) {}
 
@@ -278,23 +282,40 @@ export class RunEngine {
     const retryContext = attempt.retryContext as RetryContext | null;
     const base = { attemptId: attempt.id, runId, worktreePath: ctx.run.worktreePath ?? "", ...(await this.attachmentsToCheck(runId)) };
     if (node.kind === "agent" || node.kind === "grill") {
-      const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs);
-      const prompt = buildAgentPrompt({
-        instructions: node.instructions,
-        placementInstructions: node.extraInstructions,
-        batchInstructions: ctx.batchInstructions,
-        inputs,
-        outputs: outputs.map((o) => o.name),
-        grill: node.kind === "grill",
-        retryContext,
-      });
-      this.opts.links.send(machineId, "node.run", { ...base, kind: "agent", prompt, ...this.claudeOptions(node), env: this.agentEnv(node) });
+      // A retry resumes the failed session when that is cheaper than starting again (#218).
+      const previous = all.filter((a) => a.flowNodeId === node.id && a.id !== attempt.id).at(-1);
+      const resumeSessionId = retryContext ? resumableSession(previous, this.now()) : null;
+      if (resumeSessionId) {
+        this.retryResumed.add(attempt.id);
+        const prompt = buildRetryResumePrompt({ ...this.resultParts(node), retryContext });
+        this.opts.links.send(machineId, "node.run", { ...base, kind: "agent", prompt, resumeSessionId, ...this.claudeOptions(node), env: this.agentEnv(node) });
+      } else {
+        this.opts.links.send(machineId, "node.run", { ...base, kind: "agent", prompt: this.freshPrompt(ctx, node, inputs, retryContext), ...this.claudeOptions(node), env: this.agentEnv(node) });
+      }
     } else {
       const env = this.commandEnv(ctx, inputs);
       // The Host Agent turns it into $CLAUDERON_RETRY_CONTEXT_FILE (spec M3 §4).
       if (retryContext) env.CLAUDERON_RETRY_CONTEXT = renderRetryContext(retryContext);
       this.opts.links.send(machineId, "node.run", { ...base, kind: "command", command: node.command ?? "true", env });
     }
+  }
+
+  /** The Outputs an Agent or Grill Node reports, for the result contract. */
+  private resultParts(node: SnapshotNode) {
+    const outputs = activeOutputs(node.outputs, node.enabledOptionalOutputs);
+    return { outputs: outputs.map((o) => o.name), grill: node.kind === "grill", contextOutputs: outputs.filter((o) => o.type === "context").map((o) => o.name) };
+  }
+
+  /** The prompt of an Agent or Grill Node starting a new session (spec M1 §4.3). */
+  private freshPrompt(ctx: RunContext, node: SnapshotNode, inputs: readonly { name: string; value: unknown }[], retryContext: RetryContext | null): string {
+    return buildAgentPrompt({
+      instructions: node.instructions,
+      placementInstructions: node.extraInstructions,
+      batchInstructions: ctx.batchInstructions,
+      inputs,
+      ...this.resultParts(node),
+      retryContext,
+    });
   }
 
   /** What an Input Node emits: the Ticket's issue, the Run's own branch, or the value given at Start. */
@@ -448,6 +469,23 @@ export class RunEngine {
         }
         return;
       }
+      if (result.sessionGone && this.retryResumed.delete(attempt.id) && ctx.run.machineId) {
+        // The failed session is gone: the same retried Attempt starts a fresh session instead (#218).
+        const attempts = (await attemptsOfRun(this.opts.db, ctx.run.id)).filter((a) => !a.superseded);
+        const prompt = this.freshPrompt(ctx, node, this.inputsOf(ctx.snapshot, node, attempts), attempt.retryContext as RetryContext | null);
+        this.opts.links.send(ctx.run.machineId, "node.run", {
+          attemptId: attempt.id,
+          runId: ctx.run.id,
+          worktreePath: ctx.run.worktreePath ?? "",
+          kind: "agent",
+          prompt,
+          ...this.claudeOptions(node),
+          env: this.agentEnv(node),
+          ...(await this.attachmentsToCheck(ctx.run.id)),
+        });
+        return;
+      }
+      this.retryResumed.delete(attempt.id);
       if (result.error) {
         return this.failAttempt(ctx, attempt.id, this.hide(result.error), end);
       }

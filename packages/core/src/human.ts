@@ -111,7 +111,11 @@ export const WRITING = [
  * The result contract of M0 §6 at the end of an Agent or Grill prompt. A
  * Grill Node may finish with questions instead of its Outputs.
  */
-export function resultContract(outputs: readonly string[], grill: boolean): string {
+/** How a `context` Output should read (#218): short, for the next Agent, not for people. */
+export const CONTEXT_WRITING =
+  "A context Output is for the next Agent in this Flow, so it does not explore the repository again: list the files that matter (with :line), the decisions already made and what you ruled out. Keep it under 300 words; no code.";
+
+export function resultContract(outputs: readonly string[], grill: boolean, contextOutputs: readonly string[] = []): string {
   const example = Object.fromEntries(outputs.filter((o) => o !== "branch").map((o) => [o, `<${o}>`]));
   const lines = [
     "## Result",
@@ -141,6 +145,7 @@ export function resultContract(outputs: readonly string[], grill: boolean): stri
     );
   }
   if (outputs.some((o) => o !== "branch")) lines.push("", ...WRITING);
+  for (const name of contextOutputs) if (outputs.includes(name)) lines.push("", `${name}: ${CONTEXT_WRITING}`);
   if (outputs.includes("branch")) lines.push("", "Commit your work on the current branch before you finish. The branch is reported for you; do not push.");
   return lines.join("\n");
 }

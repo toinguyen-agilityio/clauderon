@@ -1,5 +1,6 @@
 import type { NodeKind, NodeOutput, OutputType } from "./flow";
 import { renderRetryContext, resultContract, type RetryContext } from "./human";
+import { contextSize, type Turn } from "./inspector";
 
 // What the Run engine and the Host Agent agree on for running a Node (spec M1
 // §4): branch names, Agent prompts, the result contract of M0 §6 and the
@@ -63,6 +64,8 @@ export type PromptParts = {
   grill?: boolean;
   /** Set on a retried Attempt (RUN-7). */
   retryContext?: RetryContext | null;
+  /** The Outputs of type `context` (#218), told what to hold. */
+  contextOutputs?: readonly string[];
 };
 
 function render(value: unknown): string {
@@ -94,7 +97,37 @@ export function buildAgentPrompt(parts: PromptParts): string {
   for (const input of parts.inputs) sections.push(`## ${input.name}\n\n${render(input.value)}`);
   const retry = renderRetryContext(parts.retryContext);
   if (retry) sections.push(retry);
-  sections.push(resultContract(parts.outputs, parts.grill ?? false));
+  sections.push(resultContract(parts.outputs, parts.grill ?? false, parts.contextOutputs));
+  return `${sections.join("\n\n")}\n`;
+}
+
+/** A retry resumes the failed session only while its prompt cache is warm (#218). */
+export const RETRY_RESUME_WINDOW_MS = 5 * 60_000;
+/** ...and only while its context is small: every later turn re-reads all of it. */
+export const RETRY_RESUME_MAX_CONTEXT = 80_000;
+
+/**
+ * The Claude session a retried Agent or Grill Attempt resumes (#218), or null to start fresh:
+ * the Node's previous Attempt failed or was interrupted less than 5 minutes ago, kept its session
+ * and per-turn data, and its last turn's context is under 80k tokens. Otherwise a fresh session
+ * with the retry context is cheaper than re-reading a large one on every turn.
+ */
+export function resumableSession(
+  previous: { state: string; claudeSessionId: string | null; endedAt: Date | null; turns: readonly Turn[] | null } | undefined,
+  now: Date,
+): string | null {
+  if (!previous || (previous.state !== "failed" && previous.state !== "interrupted")) return null;
+  if (!previous.claudeSessionId || !previous.endedAt || !previous.turns?.length) return null;
+  if (now.getTime() - previous.endedAt.getTime() > RETRY_RESUME_WINDOW_MS) return null;
+  return contextSize(previous.turns.at(-1)!) < RETRY_RESUME_MAX_CONTEXT ? previous.claudeSessionId : null;
+}
+
+/** The prompt of a retry that resumes the failed session (#218): why it failed, then the result contract again. */
+export function buildRetryResumePrompt(parts: Pick<PromptParts, "outputs" | "grill" | "retryContext" | "contextOutputs">): string {
+  const sections = ["Your last attempt at this step did not finish. Fix what went wrong and complete the step."];
+  const retry = renderRetryContext(parts.retryContext);
+  if (retry) sections.push(retry);
+  sections.push(resultContract(parts.outputs, parts.grill ?? false, parts.contextOutputs));
   return `${sections.join("\n\n")}\n`;
 }
 
