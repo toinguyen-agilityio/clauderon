@@ -297,4 +297,65 @@ describe("Agent", () => {
       expect(gateway.attempts).toBe(1);
     }
   });
+
+  it("a link that ends without a close code stops the Agent when the Gateway no longer knows its token", async () => {
+    const unpaired: number[] = [];
+    let known = true;
+    agent = new Agent({
+      url: "ws://gateway.test",
+      token: "machine-token",
+      clock,
+      connect: gateway.connector,
+      facts,
+      state,
+      processId: "proc-1",
+      version: "0.1.0",
+      log: () => {},
+      onUnpaired: (c) => void unpaired.push(c),
+      isUnpaired: async () => !known,
+    });
+    await agent.start();
+    await settle();
+    // Still paired: a lost connection is retried as before.
+    gateway.socket.close(1006);
+    await settle();
+    await clock.advance(1_000);
+    expect(gateway.attempts).toBe(2);
+    expect(unpaired).toEqual([]);
+    // Unpaired or removed: the refusal's code never arrived, but the check says so.
+    known = false;
+    gateway.socket.close(1006);
+    await settle();
+    await clock.advance(60_000);
+    expect(unpaired).toEqual([CloseCode.Unauthorized]);
+    expect(gateway.attempts).toBe(2);
+  });
+
+  it("a link that dropped after its welcome is retried without asking whether the token is still paired", async () => {
+    let asked = 0;
+    agent = new Agent({
+      url: "ws://gateway.test",
+      token: "machine-token",
+      clock,
+      connect: gateway.connector,
+      facts,
+      state,
+      processId: "proc-1",
+      version: "0.1.0",
+      log: () => {},
+      isUnpaired: async () => {
+        asked++;
+        return true;
+      },
+    });
+    await agent.start();
+    await settle();
+    gateway.welcome();
+    await settle();
+    gateway.socket.close(1006);
+    await settle();
+    await clock.advance(1_000);
+    expect(asked).toBe(0);
+    expect(gateway.attempts).toBe(2);
+  });
 });

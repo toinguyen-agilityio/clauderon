@@ -171,6 +171,8 @@ async function runCommand(): Promise<void> {
       // The Gateway asks for the logins (and so the doctor) when a new Agent process says hello.
       await maybeUpdate();
     },
+    // A close that lost its code (1006 behind a proxy) must not hide that this Machine was unpaired or removed.
+    isUnpaired: async () => (await gatewayOf(paired))?.state === "unpaired",
     onUnpaired: (code) => {
       log(`The Gateway no longer accepts this computer (${code}): it was unpaired or another computer was paired. Run pair again.`);
       // A clean exit: a service restarts the Agent only after a crash.
