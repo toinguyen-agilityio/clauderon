@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Avatar } from "../../../components/brand";
-import { ago } from "../../../components/format";
+import { ago, formatTime } from "../../../components/format";
 import { Icon } from "../../../components/icons";
 import { viewMembers, type MemberRow } from "../../../server/members";
 import { deps, requireMember } from "../../../server/runtime";
@@ -96,7 +96,7 @@ export default async function MembersPage() {
                       </span>
                     </td>
                     <td className="small nowrap">
-                      {m.lastSignInAt ? <span title={m.lastSignInAt.toISOString()}>{ago(m.lastSignInAt, now)}</span> : <span className="faint">Never</span>}
+                      {m.lastSignInAt ? <span title={formatTime(m.lastSignInAt)}>{ago(m.lastSignInAt, now)}</span> : <span className="faint">Never</span>}
                     </td>
                     <td>
                       <MachineCell machine={m.machine} />

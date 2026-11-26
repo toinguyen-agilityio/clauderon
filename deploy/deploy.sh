@@ -90,7 +90,10 @@ wait_for() {
 
 up() {
   preflight
-  say "Building and starting the stack (migrations, Gateway, web)"
+  # The image has no .git, so the release tag reaches the web app as an env.
+  APP_VERSION="$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || echo dev)"
+  export APP_VERSION
+  say "Building and starting the stack ($APP_VERSION: migrations, Gateway, web)"
   compose up -d --build --remove-orphans
   wait_for "http://127.0.0.1:$(web_port)/sign-in" || { compose logs --tail 30 web gateway; die "the web app did not come up"; }
 

@@ -8,7 +8,26 @@ export function ago(date: Date | null, now: Date = new Date()): string {
   return `${Math.round(seconds / 86400)} d ago`;
 }
 
-export const formatTime = (date: Date | null) => (date ? date.toISOString().replace("T", " ").slice(0, 16) + " UTC" : "—");
+/** One fixed zone for every Member, so server and browser renders match whatever their own zone is. */
+export const APP_TIME_ZONE = "Asia/Ho_Chi_Minh";
+export const APP_TIME_ZONE_LABEL = "GMT+7";
+
+const timeParts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: APP_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** "2026-11-26 09:15 (GMT+7)": an absolute time in the app's zone. */
+export function formatTime(date: Date | null): string {
+  if (!date) return "—";
+  const part = Object.fromEntries(timeParts.formatToParts(date).map((p) => [p.type, p.value]));
+  return `${part.year}-${part.month}-${part.day} ${part.hour}:${part.minute} (${APP_TIME_ZONE_LABEL})`;
+}
 
 export function duration(ms: number | null): string {
   if (ms === null) return "";
