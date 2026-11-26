@@ -92,7 +92,7 @@ export function readEnabled(storage: Pick<Storage, "getItem"> | null): boolean {
   }
 }
 
-/** The Projects page switch: whether it is on, whether it can be used, and why not. */
+/** The Projects page card: whether it is on, whether it can be used, and why not. */
 export function switchState(enabled: boolean, permission: NotifyPermission): { label: string; on: boolean; disabled: boolean; hint: string | null } {
   if (permission === "unsupported") return { label: "Notifications", on: false, disabled: true, hint: "This browser cannot show notifications." };
   if (permission === "denied") {

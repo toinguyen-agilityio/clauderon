@@ -67,8 +67,9 @@ export default async function ProjectsPage() {
           <h1>Projects</h1>
           <p className="sub">Each Project is one GitHub repository and its base branch. Its open issues show up as Tickets, read from GitHub in the background.</p>
         </div>
-        <NotificationsToggle />
       </div>
+
+      <NotificationsToggle />
 
       <GitHubAccess access={access} canManage={canManage} now={now} />
 
