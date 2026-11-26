@@ -551,6 +551,9 @@ describe("Start dialog (RUN-1, POD-5, TIC-7, TIC-9)", () => {
     if (!started.ok) throw new Error(started.error);
     const [run] = await db.select().from(schema.run).where(sql`${schema.run.id} = ${started.runIds[0]!}`);
     expect(run).toMatchObject({ ticketId: null, projectId: project!.id, title: `From a branch on ${branch}`, inputValue: { type: "branch", value: { branch } } });
+    // The Runs list says what it started from, in place of a Ticket number.
+    const listed = (await viewRuns(deps, {}, 1)).rows.find((r) => r.id === run!.id);
+    expect(listed).toMatchObject({ ticketNumber: null, inputType: "branch" });
   });
 
   describe("a plan Flow with links and attached files (ADR 0011)", () => {

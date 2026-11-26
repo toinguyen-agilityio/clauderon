@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Avatar } from "../../../components/brand";
 import { ago, formatTime } from "../../../components/format";
 import { Icon } from "../../../components/icons";
+import { tagColor } from "../../../components/state-pill";
 import { viewMembers, type MemberRow } from "../../../server/members";
 import { deps, requireMember } from "../../../server/runtime";
 import { MachineStatusChip } from "../machines/machine-parts";
@@ -16,15 +17,15 @@ const STATUS: Record<MemberRow["status"], [tone: string, label: string, hint: st
 };
 
 function MachineCell({ machine }: { machine: MemberRow["machine"] }) {
-  if (!machine) return <span className="faint">No Machine</span>;
+  if (!machine) return <span className="faint small">No Machine yet</span>;
   const missing = machine.paired ? [!machine.claudeLoggedIn && "Claude Code", !machine.ghLoggedIn && "gh"].filter(Boolean) : [];
   return (
-    <div className="members-machine">
+    <>
       <Link href={`/machines/${machine.id}`} className="members-machine-link">
         <MachineStatusChip connected={machine.connected} paired={machine.paired} />
       </Link>
-      {missing.length > 0 && <span className="faint small">{missing.join(" and ")} not logged in</span>}
-    </div>
+      {missing.length > 0 && <span className="mem-missing small">{missing.join(" and ")} not logged in</span>}
+    </>
   );
 }
 
@@ -32,103 +33,119 @@ export default async function MembersPage() {
   const viewer = await requireMember();
   const { rows, canManage, viewerEmail } = await viewMembers(deps(), viewer);
   const now = new Date();
+  const team = rows.filter((r) => r.status !== "removed");
+  const removed = rows.filter((r) => r.status === "removed");
+  const online = team.filter((r) => r.machine?.connected).length;
+  const cols = canManage ? 5 : 4;
+
+  const row = (m: MemberRow) => {
+    const [tone, label, hint] = STATUS[m.status];
+    const who = m.name ?? m.email;
+    const you = m.email === viewerEmail;
+    return (
+      <tr key={m.email} className={`tk-row tone-${tone} mem-row${m.status === "removed" ? " members-removed" : ""}`} style={{ "--c": tagColor(m.email) } as React.CSSProperties}>
+        <td className="tk-stub mem-stub">
+          <Avatar name={m.name} email={m.email} picture={m.pictureUrl} />
+        </td>
+        <td>
+          <div className="members-id">
+            <span className="members-name">
+              {m.name ?? <span className="faint">No name yet</span>}
+              {you && <span className="mem-you">you</span>}
+              {m.operator && (
+                <span className="tag mem-owner" title="Set in the app's configuration; manages members and Projects">
+                  Owner
+                </span>
+              )}
+            </span>
+            <span className="mono faint">{m.email}</span>
+          </div>
+        </td>
+        <td className="nowrap">
+          <span className={`pill ${tone}`} title={hint}>
+            {label}
+          </span>
+          <div className="mem-sub">
+            {m.lastSignInAt ? <span title={formatTime(m.lastSignInAt)}>Signed in {ago(m.lastSignInAt, now)}</span> : "Never signed in"}
+          </div>
+        </td>
+        <td>
+          <div className="members-machine">
+            <MachineCell machine={m.machine} />
+            {m.machine && m.machine.activeRuns > 0 && (
+              <Link className="members-runs" href={`/runs?machine=${m.machine.id}`} title={`Open ${who}'s Runs`}>
+                {Icon.runs}
+                {m.machine.activeRuns} active {m.machine.activeRuns === 1 ? "Run" : "Runs"}
+              </Link>
+            )}
+          </div>
+        </td>
+        {canManage && (
+          <td className="actions">
+            <div className="row members-actions">
+              {m.status === "removed" && m.machine ? (
+                <RemoveMachine machineId={m.machine.id} who={who} />
+              ) : (
+                !m.operator && <RemoveMember email={m.email} who={who} hasMachine={m.machine !== null} />
+              )}
+            </div>
+          </td>
+        )}
+      </tr>
+    );
+  };
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Members</h1>
-          <p className="sub">
-            Everyone who can sign in with Google, and their Machine.{" "}
-            {canManage
-              ? "Removing a member ends their sessions at once and removes their Machine; their Runs and audit entries are kept."
-              : "Owners add and remove members."}
-          </p>
+          <p className="sub">Everyone who can sign in with Google, and the Machine their Runs run on. {canManage ? "" : "Owners add and remove members."}</p>
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-head members-head">
-          <h2>
-            Team <span className="faint small num">{rows.filter((r) => r.status !== "removed").length}</span>
+      <section className="tk-board" aria-label="Members">
+        <div className="tk-toolbar members-head">
+          <h2 className="mem-count">
+            Team <span className="n">{team.length}</span>
+            <span className="mem-online">
+              <i aria-hidden />
+              {online} online
+            </span>
           </h2>
-          {canManage && <AddEmailForm />}
+          {canManage && (
+            <div className="tk-tools">
+              <AddEmailForm />
+            </div>
+          )}
         </div>
         <div className="tbl-wrap">
-          <table className="tbl members">
+          <table className="tbl tk-table members">
             <thead>
               <tr>
+                <th className="tk-stub">
+                  <span className="sr-only">Photo</span>
+                </th>
                 <th>Member</th>
                 <th>Status</th>
-                <th>Last sign-in</th>
                 <th>Machine</th>
-                <th>Active Runs</th>
                 {canManage && <th aria-label="Actions" />}
               </tr>
             </thead>
-            <tbody>
-              {rows.map((m) => {
-                const [tone, label, hint] = STATUS[m.status];
-                const who = m.name ?? m.email;
-                const you = m.email === viewerEmail;
-                return (
-                  <tr key={m.email} className={m.status === "removed" ? "members-removed" : undefined}>
-                    <td>
-                      <div className="members-who">
-                        <Avatar name={m.name} email={m.email} picture={m.pictureUrl} />
-                        <div className="members-id">
-                          <span className="members-name">
-                            {m.name ?? <span className="faint">No name yet</span>}
-                            {you && <span className="faint small"> (you)</span>}
-                          </span>
-                          <span className="mono faint">{m.email}</span>
-                        </div>
-                        {m.operator && (
-                          <span className="tag" title="Set in the app's configuration; manages members and Projects">
-                            Owner
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`pill ${tone}`} title={hint}>
-                        {label}
-                      </span>
-                    </td>
-                    <td className="small nowrap">
-                      {m.lastSignInAt ? <span title={formatTime(m.lastSignInAt)}>{ago(m.lastSignInAt, now)}</span> : <span className="faint">Never</span>}
-                    </td>
-                    <td>
-                      <MachineCell machine={m.machine} />
-                    </td>
-                    <td className="nowrap">
-                      {m.machine && m.machine.activeRuns > 0 ? (
-                        <Link className="members-runs" href={`/runs?machine=${m.machine.id}`} title={`Open ${who}'s Runs`}>
-                          {Icon.runs}
-                          {m.machine.activeRuns} {m.machine.activeRuns === 1 ? "Run" : "Runs"}
-                        </Link>
-                      ) : (
-                        <span className="faint">None</span>
-                      )}
-                    </td>
-                    {canManage && (
-                      <td className="actions">
-                        <div className="row members-actions">
-                          {m.status === "removed" && m.machine ? (
-                            <RemoveMachine machineId={m.machine.id} who={who} />
-                          ) : (
-                            !m.operator && <RemoveMember email={m.email} who={who} hasMachine={m.machine !== null} />
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
+            <tbody>{team.map(row)}</tbody>
+            {removed.length > 0 && (
+              <tbody>
+                <tr className="mem-group">
+                  <th colSpan={cols} scope="colgroup">
+                    No longer on the team <span className="faint">Their Machine is still listed until it is removed.</span>
+                  </th>
+                </tr>
+                {removed.map(row)}
+              </tbody>
+            )}
           </table>
         </div>
-      </div>
+      </section>
     </>
   );
 }

@@ -23,6 +23,21 @@ const TICKET: Record<string, string> = {
   Closed: "",
 };
 
+/** A Run state's tone (pill class) and label, for places that show it without a pill. */
+export const runStateLook = (state: string) => RUN[state] ?? ["", state];
+
+/** A Ticket Status's tone (pill class). */
+export const ticketTone = (status: string) => TICKET[status] ?? "";
+
+const TAG_COLORS = ["--t-branch", "--t-plan", "--t-shot", "--t-summary", "--t-pr", "--intr", "--t-test"];
+
+/** A stable colour for a name (a label, a repository), so the same name always gets the same colour. */
+export function tagColor(name: string) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return `var(${TAG_COLORS[Math.abs(h) % TAG_COLORS.length]})`;
+}
+
 export function StatePill({ state }: { state: string }) {
   const [tone, label] = RUN[state] ?? ["", state];
   return <span className={`pill ${tone}`}>{label}</span>;

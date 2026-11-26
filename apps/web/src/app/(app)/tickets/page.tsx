@@ -2,6 +2,9 @@ import Link from "next/link";
 import { getMachineOfMember } from "@clauderon/db";
 import { deps, requireMember } from "../../../server/runtime";
 import { ticketViewParam, viewTickets, type TicketView } from "../../../server/tickets";
+import { Icon } from "../../../components/icons";
+import { ago } from "../../../components/format";
+import { tagColor } from "../../../components/state-pill";
 import { FilterLink, FilterResults, TicketFilters, TicketSearch } from "./ticket-filters";
 import { TicketTable } from "./ticket-table";
 import { TicketsSync } from "./tickets-sync";
@@ -32,14 +35,23 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
   const perProject = (id: string) => all.filter((r) => r.projectId === id).length;
   const failed = projects.filter((p) => p.syncError);
 
+  // The newest successful sync of any Project, for the "Synced … ago" line.
+  const lastSynced = projects.reduce<Date | null>((d, p) => (p.lastSyncedAt && (!d || p.lastSyncedAt > d) ? p.lastSyncedAt : d), null);
+
   return (
     <>
       <TicketsSync />
       <div className="page-head">
         <div>
           <h1>Tickets</h1>
-          <p className="sub">GitHub issues of every Project, synced from GitHub in the background, at most once a minute. Status comes from their Runs and pull requests. Shows open issues by default; pick Closed for the closed ones.</p>
+          <p className="sub">GitHub issues from your Projects. Select the ones to work on and start Runs on your Machine.</p>
         </div>
+        {projects.length > 0 && (
+          <p className="tk-synced small" title="Tickets sync from GitHub in the background, at most once a minute.">
+            {Icon.sync}
+            {lastSynced ? `Synced from GitHub ${ago(lastSynced)}` : "Not synced from GitHub yet"}
+          </p>
+        )}
       </div>
 
       {!(machine?.tokenHash && machine.claudeLoggedIn && machine.ghLoggedIn) && (
@@ -69,31 +81,35 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
         </div>
       ) : (
         <TicketFilters>
-          <div className="row between">
-            <nav className="seg" aria-label="Project">
-              <FilterLink href={href({ project: undefined })} className={!search.project ? "on" : ""}>
-                All <span className="faint num">{all.length}</span>
-              </FilterLink>
-              {projects.map((p) => (
-                <FilterLink key={p.id} href={href({ project: p.id })} className={search.project === p.id ? "on" : ""}>
-                  {p.repo} <span className="faint num">{perProject(p.id)}</span>
+          <section className="tk-board" aria-label="Tickets">
+            <div className="tk-toolbar">
+              <nav className="tk-tabs" aria-label="Project">
+                <FilterLink href={href({ project: undefined })} className={!search.project ? "on" : ""} current={!search.project}>
+                  All projects <span className="n">{all.length}</span>
                 </FilterLink>
-              ))}
-            </nav>
-            <TicketSearch project={search.project} status={view === "Closed" ? view : undefined} q={search.q} />
-          </div>
+                {projects.map((p) => (
+                  <FilterLink key={p.id} href={href({ project: p.id })} className={search.project === p.id ? "on" : ""} current={search.project === p.id}>
+                    <i aria-hidden style={{ background: tagColor(p.repo) }} />
+                  {p.repo} <span className="n">{perProject(p.id)}</span>
+                  </FilterLink>
+                ))}
+              </nav>
+              <div className="tk-tools">
+                <nav className="seg" aria-label="Ticket Status">
+                  {VIEWS.map((v) => (
+                    <FilterLink key={v} className={view === v ? "on" : ""} href={href({ status: v })} current={view === v}>
+                      {v} <span className="n">{views[v]}</span>
+                    </FilterLink>
+                  ))}
+                </nav>
+                <TicketSearch project={search.project} status={view === "Closed" ? view : undefined} q={search.q} />
+              </div>
+            </div>
 
-          <nav className="chips" aria-label="Ticket Status">
-            {VIEWS.map((v) => (
-              <FilterLink key={v} className={`fchip ${view === v ? "on" : ""}`} href={href({ status: v })}>
-                {v} <span className="n">{views[v]}</span>
-              </FilterLink>
-            ))}
-          </nav>
-
-          <FilterResults>
-            <TicketTable rows={rows} />
-          </FilterResults>
+            <FilterResults>
+              <TicketTable rows={rows} searched={!!search.q} view={view} />
+            </FilterResults>
+          </section>
         </TicketFilters>
       )}
     </>
