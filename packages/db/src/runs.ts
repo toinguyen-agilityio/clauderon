@@ -563,13 +563,15 @@ const runListColumns = {
   pullRequestState: run.pullRequestState,
 };
 
-/** The Runs list (TRK-7): filters combine; newest first; paginated. */
-export async function listRuns(db: Db, filters: RunFilters, page = 1) {
+/** The Runs list (TRK-7): filters combine; newest first; paginated, with the page clamped to the last one. */
+export async function listRuns(db: Db, filters: RunFilters, page = 1, size = RUNS_PAGE_SIZE) {
   const conditions: SQL[] = [];
   if (filters.state) conditions.push(eq(run.state, filters.state));
   if (filters.flowId) conditions.push(eq(run.flowId, filters.flowId));
   if (filters.machineId) conditions.push(eq(run.machineId, filters.machineId));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const [{ total } = { total: 0 }] = await db.select({ total: sql<number>`count(*)::int` }).from(run).where(where);
+  const current = Math.min(Math.max(1, page), Math.max(1, Math.ceil(total / size)));
   const rows = await db
     .select(runListColumns)
     .from(run)
@@ -579,10 +581,9 @@ export async function listRuns(db: Db, filters: RunFilters, page = 1) {
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(where)
     .orderBy(desc(run.queuedAt), desc(run.id))
-    .limit(RUNS_PAGE_SIZE + 1)
-    .offset((Math.max(1, page) - 1) * RUNS_PAGE_SIZE);
-  const [{ total } = { total: 0 }] = await db.select({ total: sql<number>`count(*)::int` }).from(run).where(where);
-  return { rows: rows.slice(0, RUNS_PAGE_SIZE), hasMore: rows.length > RUNS_PAGE_SIZE, total };
+    .limit(size + 1)
+    .offset((current - 1) * size);
+  return { rows: rows.slice(0, size), hasMore: rows.length > size, total, page: current };
 }
 
 /**

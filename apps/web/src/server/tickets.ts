@@ -1,5 +1,6 @@
 import { isActive, ticketKeys, ticketStatus, type PullRequestState, type TicketStatus } from "@clauderon/core";
 import { listProjects, listTicketsWithRuns } from "@clauderon/db";
+import { pageOf, type Paging } from "../components/paging";
 import type { AppDeps } from "./deps";
 
 export type TicketFilters = {
@@ -41,7 +42,7 @@ export function ticketViewParam(status: string | undefined): TicketView {
  * The Tickets page (TIC-1, TIC-2, TIC-3, TIC-6): key, title, labels and the
  * derived Ticket Status; search by title or key, filter by Project and status.
  */
-export async function viewTickets(deps: AppDeps, filters: TicketFilters) {
+export async function viewTickets(deps: AppDeps, filters: TicketFilters, paging?: Paging) {
   const [projects, tickets] = await Promise.all([listProjects(deps.db), listTicketsWithRuns(deps.db)]);
   const keyOf = ticketKeys(projects);
   const q = filters.q?.trim().toLowerCase() ?? "";
@@ -76,5 +77,8 @@ export async function viewTickets(deps: AppDeps, filters: TicketFilters) {
 
   const inView = (r: TicketRow) => !filters.view || (filters.view === "Closed") === (r.status === "Closed");
   const views: Record<TicketView, number> = { Open: matching.filter((r) => r.status !== "Closed").length, Closed: counts.Closed ?? 0 };
-  return { projects, all: rows, counts, views, total: matching.length, rows: matching.filter((r) => inView(r) && (!filters.status || r.status === filters.status)) };
+  const listed = matching.filter((r) => inView(r) && (!filters.status || r.status === filters.status));
+  // Without paging (tests, callers that need them all), every listed Ticket.
+  const shown = paging ? pageOf(listed, paging) : { rows: listed, page: 1, total: listed.length };
+  return { projects, all: rows, counts, views, total: matching.length, listed: shown.total, page: shown.page, rows: shown.rows };
 }

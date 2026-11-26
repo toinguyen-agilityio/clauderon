@@ -27,6 +27,7 @@ import { enableRepository, enableableRepositories, removeRepository, syncAllProj
 import { cancelRunAs, parsePullRequestTab, viewPullRequests, viewRun, viewRuns } from "../src/server/runs";
 import { pullRequestStartDialog, startDialog, startFromForm, startFromInput, startFromPullRequests, startRuns } from "../src/server/start";
 import { ticketViewParam, viewTickets } from "../src/server/tickets";
+import { parsePaging } from "../src/components/paging";
 
 let test: TestDatabase;
 let db: Db;
@@ -501,6 +502,25 @@ describe("Tickets page (TIC-1, TIC-2, TIC-3, TIC-7)", () => {
     expect((await viewTickets(deps, { status: "Closed" })).rows.map((r) => r.key)).toEqual(["api#9"]);
   });
 
+  it("pages the listed Tickets, clamping a page past the end to the last one", async () => {
+    const web = await projectRow(db, "acme", "web");
+    for (let n = 1; n <= 12; n++) await ticketRow(db, web.id, n);
+    const first = await viewTickets(deps, {}, { page: 1, size: 10 });
+    expect(first).toMatchObject({ listed: 12, page: 1 });
+    expect(first.rows).toHaveLength(10);
+    const last = await viewTickets(deps, {}, { page: 9, size: 10 });
+    expect(last).toMatchObject({ listed: 12, page: 2 });
+    expect(last.rows).toHaveLength(2);
+    expect(new Set([...first.rows, ...last.rows].map((r) => r.id)).size).toBe(12);
+  });
+
+  it("reads page and page size from the URL, keeping only offered sizes", () => {
+    expect(parsePaging({})).toEqual({ page: 1, size: 20 });
+    expect(parsePaging({ page: "3", size: "50" })).toEqual({ page: 3, size: 50 });
+    expect(parsePaging({ page: "-2", size: "7" })).toEqual({ page: 1, size: 20 });
+    expect(parsePaging({ page: "x", size: "100" })).toEqual({ page: 1, size: 100 });
+  });
+
   it("a Ticket with an Active Run cannot be selected and names the Run", async () => {
     const ann = await memberRow(db, "ann@example.com");
     const machine = await machineRow(db, ann.id);
@@ -745,6 +765,9 @@ describe("Runs (TRK-1, TRK-2, TRK-7)", () => {
     expect(list.rows.map((r) => r.id)).toEqual([second.runIds[0], first.runIds[0]]);
     expect((await viewRuns(deps, { state: "failed", machineId: machine.id }, 1)).rows.map((r) => r.id)).toEqual([first.runIds[0]]);
     expect((await viewRuns(deps, { state: "failed", flowId: "00000000-0000-0000-0000-000000000000" }, 1)).rows).toEqual([]);
+    // One per page: the second page holds the older Run; a page past the end shows the last one.
+    expect((await viewRuns(deps, {}, 2, 1)).rows.map((r) => r.id)).toEqual([first.runIds[0]]);
+    expect(await viewRuns(deps, {}, 5, 1)).toMatchObject({ page: 2, total: 2, hasMore: false });
 
     const run = await viewRun(deps, first.runIds[0]!);
     if (run === "not-found") throw new Error("run not found");

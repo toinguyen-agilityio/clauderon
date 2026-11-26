@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { getMachineOfMember } from "@clauderon/db";
 import { deps, requireMember } from "../../../server/runtime";
 import { ticketViewParam, viewTickets, type TicketView } from "../../../server/tickets";
 import { Icon } from "../../../components/icons";
 import { ago } from "../../../components/format";
+import { Pager } from "../../../components/pager";
+import { parsePaging } from "../../../components/paging";
 import { tagColor } from "../../../components/state-pill";
 import { FilterLink, FilterResults, TicketFilters, TicketSearch } from "./ticket-filters";
 import { TicketTable } from "./ticket-table";
@@ -13,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 const VIEWS: TicketView[] = ["Open", "Closed"];
 
-type Search = { project?: string; q?: string; status?: string };
+type Search = { project?: string; q?: string; status?: string; page?: string; size?: string };
 
 export default async function TicketsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const member = await requireMember();
@@ -21,12 +24,14 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
   // Open Tickets by default: every issue still open on GitHub, whatever its Runs.
   const view = ticketViewParam(search.status);
   // Render from the database; TicketsSync pulls GitHub afterwards (at most once a minute per Project).
-  const [{ projects, all, views, rows }, machine] = await Promise.all([
-    viewTickets(deps(), { projectId: search.project, q: search.q, view }),
+  const paging = parsePaging(search);
+  const [{ projects, all, views, rows, listed, page }, machine] = await Promise.all([
+    viewTickets(deps(), { projectId: search.project, q: search.q, view }, paging),
     getMachineOfMember(deps().db, member.id),
   ]);
   const href = (change: Search) => {
-    const next = { ...search, ...change };
+    // A new filter starts again at page 1; the page size stays.
+    const next = { ...search, page: undefined, ...change };
     // Open is the default, so its link carries no status.
     if (next.status === "Open") next.status = undefined;
     const query = new URLSearchParams(Object.entries(next).filter(([, v]) => v) as [string, string][]);
@@ -102,13 +107,16 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
                     </FilterLink>
                   ))}
                 </nav>
-                <TicketSearch project={search.project} status={view === "Closed" ? view : undefined} q={search.q} />
+                <TicketSearch project={search.project} status={view === "Closed" ? view : undefined} size={search.size} q={search.q} />
               </div>
             </div>
 
             <FilterResults>
               <TicketTable rows={rows} searched={!!search.q} view={view} />
             </FilterResults>
+            <Suspense>
+              <Pager page={page} size={paging.size} total={listed} />
+            </Suspense>
           </section>
         </TicketFilters>
       )}

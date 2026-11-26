@@ -304,7 +304,11 @@ a.stat.on { border-color: var(--accent-text); }
 .selbar .btn { border-color: transparent; }
 .selbar .btn.ghost { color: var(--bg); }
 .selbar .btn.ghost:hover { background: color-mix(in srgb, var(--bg) 15%, transparent); }
-.pager { display: flex; gap: 8px; justify-content: flex-end; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+.pager { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid var(--line); }
+.pager-range { margin-right: auto; }
+.pager-size { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
+.pager-size .select { width: auto; height: 30px; padding-top: 0; padding-bottom: 0; }
+.pager .btn[aria-disabled] { opacity: 0.45; pointer-events: none; }
 
 /* dialogs */
 dialog.modal { text-align: left; white-space: normal; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg); box-shadow: var(--shadow); width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }

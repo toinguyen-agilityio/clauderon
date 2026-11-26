@@ -68,9 +68,9 @@ export function parseRunFilters(params: { state?: string; flow?: string; machine
 }
 
 /** The Runs list (TRK-7): filters combine; newest first; paginated. */
-export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number) {
+export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number, size?: number) {
   const [result, projects, flows, machines, counts] = await Promise.all([
-    listRuns(deps.db, filters, page),
+    listRuns(deps.db, filters, page, size),
     listProjects(deps.db),
     listFlows(deps.db),
     listMachines(deps.db),

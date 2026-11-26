@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Avatar } from "../../../components/brand";
 import { ago, duration } from "../../../components/format";
+import { Pager } from "../../../components/pager";
+import { parsePaging } from "../../../components/paging";
 import { outputColor, runStateLook, StatePill, tagColor } from "../../../components/state-pill";
 import { parseRunFilters, viewRuns } from "../../../server/runs";
 import { deps, requireMember } from "../../../server/runtime";
@@ -9,7 +11,7 @@ import { FilterSelect } from "./filters";
 
 export const dynamic = "force-dynamic";
 
-type Search = { state?: string; flow?: string; machine?: string; page?: string };
+type Search = { state?: string; flow?: string; machine?: string; page?: string; size?: string };
 
 const SUMMARY = ["running", "queued", "failed", "succeeded"] as const;
 const STATE_OPTIONS = [
@@ -25,9 +27,9 @@ const STATE_OPTIONS = [
 export default async function RunsPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requireMember();
   const search = await searchParams;
-  const page = Math.max(1, Number(search.page) || 1);
+  const paging = parsePaging(search);
   const filters = parseRunFilters(search);
-  const { rows, hasMore, total, counts, flows, machines } = await viewRuns(deps(), filters, page);
+  const { rows, total, page, counts, flows, machines } = await viewRuns(deps(), filters, paging.page, paging.size);
   const now = new Date();
   const href = (change: Search) => {
     const query = new URLSearchParams(Object.entries({ ...search, ...change }).filter(([, v]) => v) as [string, string][]);
@@ -151,21 +153,9 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
             </tbody>
           </table>
         </div>
-        {(page > 1 || hasMore) && (
-          <div className="pager">
-            {page > 1 && (
-              <Link className="btn sm" href={href({ page: String(page - 1) })}>
-                Newer
-              </Link>
-            )}
-            <span className="faint small">Page {page}</span>
-            {hasMore && (
-              <Link className="btn sm" href={href({ page: String(page + 1) })}>
-                Older
-              </Link>
-            )}
-          </div>
-        )}
+        <Suspense>
+          <Pager page={page} size={paging.size} total={total} prev="Newer" next="Older" />
+        </Suspense>
       </section>
     </>
   );
