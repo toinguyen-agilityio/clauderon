@@ -1781,3 +1781,64 @@ a.audit-id:hover { text-decoration: none; background: color-mix(in srgb, var(--a
   .rh-body::before { display: none; }
   .rh-time::before { content: ""; position: absolute; left: -6px; top: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--panel); border: 2px solid var(--tone); box-sizing: border-box; }
 }
+
+/* Needs you: a desk of decision slips. Each says what kind of decision it is, which Run it holds and how long it
+   has waited (amber past an hour, red past a day), then what to review beside the decision itself. */
+.ny-tally { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 13px; color: var(--fg3); }
+.ny-tally b { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--heading); font-variant-numeric: tabular-nums; }
+.ny-tally .is-slow { color: var(--wait); font-weight: 600; }
+.ny-tally .is-late { color: var(--fail); font-weight: 600; }
+
+.ny-list { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.ny { --k: var(--wait); overflow: hidden; }
+.ny.k-grill { --k: var(--violet); }
+.ny.k-turns { --k: var(--intr); }
+.ny-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 20px 22px 18px; }
+.ny-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: color-mix(in srgb, var(--k) 14%, transparent); color: var(--k); font-family: var(--font-mono); font-size: 18px; font-weight: 700; }
+.ny-icon svg { width: 18px; height: 18px; }
+.ny-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ny-kind { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--k); }
+.ny-title h2 { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.ny-ctx { margin-top: 4px; min-width: 0; font-size: 14px; color: var(--fg); overflow-wrap: anywhere; }
+.ny-key { margin-right: 8px; font-family: var(--font-mono); font-size: 12.5px; }
+.ny-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; font-size: 12.5px; color: var(--fg3); }
+.ny-meta b { color: var(--fg2); font-weight: 600; }
+.ny-by { display: inline-flex; align-items: center; gap: 6px; }
+.ny-by .avatar { width: 20px; height: 20px; font-size: 9px; }
+.ny-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.ny-wait { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; color: var(--fg); }
+.ny-wait-l { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg3); }
+.ny-wait time { margin-top: 3px; font-family: var(--font-mono); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ny-wait.is-slow time { color: var(--wait); }
+.ny-wait.is-late time { color: var(--fail); }
+
+.ny-body { border-top: 1px solid var(--line); }
+/* The app-wide summary chevron (::before) leads the bar. */
+.ny-body > summary { width: 100%; padding: 11px 22px; font-size: 13px; font-weight: 600; color: var(--accent-text); }
+.ny-body > summary:hover { background: var(--hover); }
+.ny-body[open] > summary { border-bottom: 1px solid var(--line); }
+.ny-split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); }
+.ny-review { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 22px 22px; }
+.ny-ask { margin: 0; padding: 8px 12px; border-left: 3px solid var(--k); background: var(--code-bg); border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: 13.5px; color: var(--fg2); white-space: pre-wrap; }
+.ny-subject { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ny-decide { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 22px 22px; background: var(--sunk); }
+.ny-split .ny-decide { border-left: 1px solid var(--line); }
+.ny-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg3); }
+.ny-decide .textarea { background: var(--panel); }
+
+.ny-clear { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 48px 20px; text-align: center; }
+.ny-clear-mark { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 6px; border-radius: 50%; background: var(--ok-bg); color: var(--ok); }
+.ny-clear-mark svg { width: 20px; height: 20px; }
+.ny-clear b { font-size: 16px; color: var(--heading); }
+.ny-clear p { max-width: 46ch; color: var(--fg2); font-size: 13.5px; }
+
+@media (max-width: 760px) {
+  .ny-head { grid-template-columns: auto minmax(0, 1fr); padding: 16px; gap: 12px; }
+  .ny-side { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
+  .ny-wait { flex-direction: row; align-items: baseline; gap: 8px; }
+  .ny-wait time { font-size: 15px; }
+  .ny-body > summary { padding: 11px 16px; }
+  .ny-split { grid-template-columns: minmax(0, 1fr); }
+  .ny-split .ny-decide { border-left: 0; border-top: 1px solid var(--line); }
+  .ny-review, .ny-decide { padding: 16px; }
+}
