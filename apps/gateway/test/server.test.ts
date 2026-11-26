@@ -59,6 +59,12 @@ function status(pairingId: string, token: string) {
 }
 
 describe("Gateway server over real HTTP and WebSockets", () => {
+  it("ADR 0006: a token the Gateway does not know is closed with 4401, which a real client reads as such", async () => {
+    const socket = new WebSocket(`${ws}/agent`, { headers: { authorization: "Bearer not-a-token" } });
+    const code = await new Promise<number>((resolve) => socket.once("close", resolve));
+    expect(code).toBe(CloseCode.Unauthorized);
+  });
+
   it("ADR 0006: pairs an Agent end to end: code, approval, then the token opens /agent", async () => {
     const ann = await memberRow(db, "ann@example.com", "Ann");
     const token = randomBytes(32).toString("hex");

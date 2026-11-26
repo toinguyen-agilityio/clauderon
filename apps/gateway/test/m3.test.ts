@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { FEEDBACK_HEADING, type FlowSnapshot } from "@clauderon/core";
 import {
   attemptsOfRun,
@@ -438,6 +438,16 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     expect(stored!.connected).toBe(false);
   });
 
+  it("ADR 0007: Update agent closes the Agent's link with a close it reconnects after, and interrupts nothing", async () => {
+    const { agent, flush, start, gateway, machine } = await setup();
+    scriptPlanAndDeliver(agent, { hold: holdCode });
+    const [runId] = await start([0], "basic-ticket-delivery");
+    await gateway.machines.command({ type: "machine.updateAgent", machineId: machine.id });
+    await flush();
+    expect(agent.closeCode).toBe(4408);
+    expect(await getRun(db, runId!)).toMatchObject({ state: "running" });
+  });
+
   it("T3-11 (A5): restart the Gateway mid-Run; the Agent reconnects within 30 s listing the Attempt as live; the Run succeeds", async () => {
     const { agent, flush, start, gatewaySide } = await setup();
     scriptPlanAndDeliver(agent, { hold: holdCode });
@@ -484,5 +494,128 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     await clock.advance(2_000);
     await booted.engine.idle();
     expect(await getRun(db, runId!)).toMatchObject({ state: "interrupted", failureReason: "Machine unreachable" });
+  });
+});
+
+describe("Needs you updates live (#197)", () => {
+  it("needs.changed goes out when a Run reaches Grill or Approve, not when other Nodes start and finish", async () => {
+    const { ann, gateway, agent, flush, start } = await setup();
+    const needsChanged = vi.spyOn(gateway.live, "needsChanged");
+    const runChanged = vi.spyOn(gateway.live, "runChanged");
+    scriptPlanAndDeliver(agent, { grillRounds: 1 });
+    const [runId] = await start();
+    // Grill asked a round.
+    expect(needsChanged).toHaveBeenCalledTimes(1);
+
+    const grill = await openRequest(runId!);
+    await respondToHuman(db, grill.request.id, ann.email, { decision: "answer", answers: { q1: "Use the ledger" } }, new Date());
+    await gateway.engine.resume(runId!);
+    await flush();
+    // The plan reached Approve a plan.
+    expect(needsChanged).toHaveBeenCalledTimes(2);
+
+    const approve = await openRequest(runId!);
+    await respondToHuman(db, approve.request.id, ann.email, { decision: "approve" }, new Date());
+    runChanged.mockClear();
+    await gateway.engine.resume(runId!);
+    await flush();
+    // Code, tests, screenshots and the pull request changed the Run many times; only Approve the pull request counts.
+    expect(runChanged.mock.calls.length).toBeGreaterThan(3);
+    expect(needsChanged).toHaveBeenCalledTimes(3);
+  });
+
+  it("a lost Machine interrupts its running Run without needs.changed and leaves its waiting Run on Needs you", async () => {
+    const { agent, clock, flush, gateway, start } = await setup(2, 2);
+    // Code a change never answers, so its Run stays running.
+    scriptPlanAndDeliver(agent, { hold: (run) => run.kind === "agent" && !run.prompt?.includes('"questions"') });
+    const [running] = await start([0], "basic-ticket-delivery");
+    const [waiting] = await start([1], "plan-and-deliver");
+    expect((await getRun(db, waiting!))!.state).toBe("waiting_for_human");
+    const needsChanged = vi.spyOn(gateway.live, "needsChanged");
+
+    agent.stopBeating();
+    await clock.advance(31_000);
+    await flush();
+    expect((await getRun(db, running!))!.state).toBe("interrupted");
+    expect((await getRun(db, waiting!))!.state).toBe("waiting_for_human");
+    expect(needsChanged).not.toHaveBeenCalled();
+  });
+
+  it("the web app's needs.changed command reaches every subscribed browser", async () => {
+    const { gateway } = await setup();
+    const needsChanged = vi.spyOn(gateway.live, "needsChanged");
+    await gateway.machines.command({ type: "needs.changed" });
+    expect(needsChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Starter notifications (#198)", () => {
+  type Sent = { email: string; kind: string; nodeName?: string; request?: string; actor?: string };
+  const sent = (spy: { mock: { calls: [string, Record<string, unknown>][] } }): Sent[] =>
+    spy.mock.calls.map(([email, e]) => ({
+      email,
+      kind: e.kind as string,
+      ...(e.nodeName ? { nodeName: e.nodeName as string } : {}),
+      ...(e.request ? { request: e.request as string } : {}),
+      ...(e.actor ? { actor: e.actor as string } : {}),
+    }));
+
+  it("tells the Starter when the Run reaches Grill or Approve and when it succeeds, and not on other changes", async () => {
+    const { ann, bo, gateway, agent, flush, start } = await setup();
+    const notify = vi.spyOn(gateway.hub, "notifyMember");
+    scriptPlanAndDeliver(agent, { grillRounds: 1 });
+    const [runId] = await start();
+    const answer = async (action: Parameters<typeof respondToHuman>[3]) => {
+      const r = await openRequest(runId!);
+      await respondToHuman(db, r.request.id, bo.email, action, new Date());
+      await gateway.engine.resume(runId!);
+      await flush();
+    };
+    await answer({ decision: "answer", answers: { q1: "Use the ledger" } });
+    await answer({ decision: "approve" });
+    await answer({ decision: "approve" });
+
+    expect(sent(notify)).toEqual([
+      { email: ann.email, kind: "needs_human", nodeName: "Grill a plan", request: "grill" },
+      { email: ann.email, kind: "needs_human", nodeName: "Approve a plan", request: "approve" },
+      { email: ann.email, kind: "needs_human", nodeName: "Approve the pull request", request: "approve" },
+      { email: ann.email, kind: "succeeded" },
+    ]);
+    expect(notify.mock.calls[0]![1]).toMatchObject({ type: "notify", runId, ticketKey: "web#411", ticketTitle: "Ticket 411", flowName: "Plan and deliver" });
+  });
+
+  it("tells the Starter when the Run fails, naming the Node that failed", async () => {
+    const { ann, gateway, agent, start } = await setup();
+    const notify = vi.spyOn(gateway.hub, "notifyMember");
+    scriptPlanAndDeliver(agent, { testExits: [1] });
+    const [runId] = await start([0], "basic-ticket-delivery");
+    expect((await getRun(db, runId!))!.state).toBe("failed");
+    expect(sent(notify)).toEqual([{ email: ann.email, kind: "failed", nodeName: "Run tests" }]);
+  });
+
+  it("tells the Starter when a lost Machine interrupts their Run", async () => {
+    const { ann, agent, clock, flush, gateway, start } = await setup();
+    scriptPlanAndDeliver(agent, { hold: (run) => run.kind === "agent" && !run.prompt?.includes('"questions"') });
+    const [runId] = await start([0], "basic-ticket-delivery");
+    const notify = vi.spyOn(gateway.hub, "notifyMember");
+    agent.stopBeating();
+    await clock.advance(31_000);
+    await flush();
+    expect((await getRun(db, runId!))!.state).toBe("interrupted");
+    expect(sent(notify)).toEqual([{ email: ann.email, kind: "interrupted", nodeName: "Code a change" }]);
+  });
+
+  it("the web app's member.notify reaches the named Member with the actor's name and the Node", async () => {
+    const { ann, bo, gateway, agent, start } = await setup();
+    scriptPlanAndDeliver(agent);
+    const [runId] = await start();
+    const notify = vi.spyOn(gateway.hub, "notifyMember");
+    const request = await openRequest(runId!);
+    await gateway.machines.command({ type: "member.notify", memberEmail: ann.email, kind: "rejected", runId: runId!, actorEmail: bo.email, flowNodeId: request.flowNodeId });
+    expect(sent(notify)).toEqual([{ email: ann.email, kind: "rejected", nodeName: "Approve a plan", actor: "Bo" }]);
+
+    notify.mockClear();
+    await gateway.machines.command({ type: "member.notify", memberEmail: ann.email, kind: "cancelled", runId: runId!, actorEmail: "nobody@example.com" });
+    expect(sent(notify)).toEqual([{ email: ann.email, kind: "cancelled", nodeName: "Approve a plan", actor: "nobody@example.com" }]);
   });
 });

@@ -38,9 +38,12 @@ import {
   respondToHuman,
   retryRun,
   retryableNodes,
+  runNotice,
   runStateCounts,
+  normalizeEmail,
   type AuditFilters,
   type HumanAction,
+  type MemberNotifyKind,
   type RunFilters,
 } from "@clauderon/db";
 import type { AppDeps, Viewer } from "./deps";
@@ -221,7 +224,21 @@ export async function cancelRunAs(deps: AppDeps, viewer: Viewer, runId: string):
   const result = await cancelRun(deps.db, runId, viewer.email, deps.clock.now());
   if (!result.ok) return result.reason === "not-found" ? "not-found" : { ok: false, reason: "ended" };
   if (result.machineId) await deps.command({ type: "run.cancel", machineId: result.machineId, runId, attemptIds: result.cancelledAttemptIds });
+  if (result.from === "waiting_for_human") await deps.command({ type: "needs.changed" });
+  await notifyStarter(deps, viewer, "cancelled", runId);
   return { ok: true };
+}
+
+const NOTIFY_OF_DECISION = { approve: "approved", reject: "rejected", answer: "answered" } as const;
+
+/**
+ * Tells the Run's Starter that another Member acted on it (#198), through the
+ * Gateway's sockets. The Starter's own actions are never notified.
+ */
+async function notifyStarter(deps: AppDeps, viewer: Viewer, kind: MemberNotifyKind, runId: string, flowNodeId?: string): Promise<void> {
+  const notice = await runNotice(deps.db, runId, null);
+  if (!notice || normalizeEmail(notice.starterEmail) === normalizeEmail(viewer.email)) return;
+  await deps.command({ type: "member.notify", memberEmail: notice.starterEmail, kind, runId, actorEmail: viewer.email, ...(flowNodeId ? { flowNodeId } : {}) });
 }
 
 export type RespondOutcome = { ok: true } | { ok: false; error: string } | "not-found";
@@ -243,6 +260,9 @@ export async function respondAs(deps: AppDeps, viewer: Viewer, requestId: string
       result.decision === "reject" ? { type: "schedule", machineId: result.machineId } : { type: "run.resume", machineId: result.machineId, runId: result.runId },
     );
   }
+  // The request left every open Needs you page, whatever the decision and even without a Machine.
+  await deps.command({ type: "needs.changed" });
+  await notifyStarter(deps, viewer, NOTIFY_OF_DECISION[result.decision], result.runId, result.flowNodeId);
   return { ok: true };
 }
 
@@ -265,6 +285,7 @@ export async function retryAs(deps: AppDeps, viewer: Viewer, runId: string, flow
     return { ok: false, error: errors[result.reason] };
   }
   await deps.command({ type: "schedule", machineId: result.machineId });
+  await notifyStarter(deps, viewer, "retried", runId, flowNodeId);
   return { ok: true };
 }
 

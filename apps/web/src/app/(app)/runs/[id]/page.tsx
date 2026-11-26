@@ -6,7 +6,7 @@ import { ago, duration, formatTime, tokens } from "../../../../components/format
 import { Icon } from "../../../../components/icons";
 import { StatePill } from "../../../../components/state-pill";
 import { viewRun } from "../../../../server/runs";
-import { deps, gatewayUrl, requireMember } from "../../../../server/runtime";
+import { deps, requireMember } from "../../../../server/runtime";
 import { DISK_ADVICE, diskFree } from "../../machines/machine-parts";
 import { CancelRun } from "./cancel-run";
 import { RunLive } from "./run-live";
@@ -189,7 +189,6 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
 
       <div className="card">
         <RunLive
-          gatewayUrl={gatewayUrl()}
           runId={r.id}
           snapshot={run.snapshot}
           timeline={run.timeline}

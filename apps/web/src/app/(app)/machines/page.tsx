@@ -50,7 +50,7 @@ export default async function MachinesPage({ searchParams }: { searchParams: Pro
         </div>
       ) : (
         <div className="card card-pad stack" data-testid="pair">
-          <span className="eyebrow">{mine?.paired ? "Pair another computer" : "Pair your computer"}</span>
+          <span className="eyebrow">{mine?.paired ? "Connect another computer" : "Connect your computer"}</span>
           <span className="small muted">
             Run this in a terminal on that computer. It needs Node 22, git and gh; it logs you in to GitHub if needed, opens this page to
             approve, and keeps the Agent running whenever you are logged in.

@@ -19,7 +19,7 @@ import {
   lookUpPairing,
   removeMachine,
   setMyMachineSettings,
-  unpairMyMachine,
+  updateMyAgent,
   viewMachine,
   viewMachines,
 } from "../src/server/machines";
@@ -142,15 +142,14 @@ describe("Machines (ADR 0006)", () => {
     expect(commands).toEqual([{ type: "machine.checkLogins", machineId: machine.id }]);
   });
 
-  it("Unpair stops the token and tells the Gateway; the Machine and its Slots stay", async () => {
+  it("Update agent asks the Gateway to close the Agent's link, for the owner only", async () => {
     const ann = await memberRow(db, "ann@example.com");
     const bob = await memberRow(db, "bob@example.com");
-    const machine = await machineRow(db, ann.id, { slots: 4 });
-    expect(await unpairMyMachine(deps, bob, machine.id)).toBe("not-found");
-    expect(await unpairMyMachine(deps, ann, machine.id)).toEqual({ ok: true });
-    expect((await db.select().from(schema.machine))[0]).toMatchObject({ tokenHash: null, connected: false, slots: 4 });
-    expect(commands).toEqual([{ type: "machine.repaired", machineId: machine.id }]);
-    expect((await viewMachines(deps, ann)).mine).toMatchObject({ paired: false, ready: false });
+    const machine = await machineRow(db, ann.id);
+    expect(await updateMyAgent(deps, bob, machine.id)).toBe("not-found");
+    expect(commands).toEqual([]);
+    expect(await updateMyAgent(deps, ann, machine.id)).toEqual({ ok: true });
+    expect(commands).toEqual([{ type: "machine.updateAgent", machineId: machine.id }]);
   });
 
   it("Remove is refused while a Run is Active, then deletes the row and keeps the ended Runs", async () => {
@@ -832,7 +831,11 @@ describe("Cancel (RUN-8, MEM-2)", () => {
     expect(await cancelRunAs(deps, bob, runId)).toEqual({ ok: true });
     expect((await db.select().from(schema.run))[0]).toMatchObject({ state: "cancelled", endedAt: deps.clock.now() });
     expect((await db.select().from(schema.attempt))[0]).toMatchObject({ id: attempt!.id, state: "cancelled" });
-    expect(commands).toEqual([{ type: "run.cancel", machineId: machine.id, runId, attemptIds: [attempt!.id] }]);
+    expect(commands).toEqual([
+      { type: "run.cancel", machineId: machine.id, runId, attemptIds: [attempt!.id] },
+      // Ann started it: she is told Bob cancelled it (#198).
+      { type: "member.notify", memberEmail: "ann@example.com", kind: "cancelled", runId, actorEmail: "bob@example.com" },
+    ]);
     expect(await actions()).toContain("run.cancel");
 
     expect(await cancelRunAs(deps, ann, runId)).toEqual({ ok: false, reason: "ended" });

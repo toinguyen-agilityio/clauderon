@@ -8,12 +8,14 @@ import {
   lookUpPairing,
   removeMachine,
   setMyMachineSettings,
-  unpairMyMachine,
+  updateMyAgent,
   type PairingPreview,
 } from "../../../server/machines";
 import { deps, requireMember } from "../../../server/runtime";
 
 export type MachineFormState = { error: string | null };
+
+export type UpdateFormState = { error: string | null; asked: boolean };
 
 export type PairFormState = { error: string | null; pairing: PairingPreview | null };
 
@@ -41,6 +43,14 @@ export async function checkLoginsAction(_state: MachineFormState, form: FormData
   return { error: null };
 }
 
+export async function updateAgentAction(_state: UpdateFormState, form: FormData): Promise<UpdateFormState> {
+  const member = await requireMember();
+  const result = await updateMyAgent(deps(), member, String(form.get("machineId") ?? ""));
+  if (result === "not-found") notFound();
+  revalidatePath("/machines", "layout");
+  return { error: null, asked: true };
+}
+
 export type SettingsFormState = { error: string | null; saved: boolean };
 
 export async function setSettingsAction(_state: SettingsFormState, form: FormData): Promise<SettingsFormState> {
@@ -52,14 +62,6 @@ export async function setSettingsAction(_state: SettingsFormState, form: FormDat
   if (result === "not-found") notFound();
   revalidatePath("/machines", "layout");
   return result.ok ? { error: null, saved: true } : { error: result.error, saved: false };
-}
-
-export async function unpairAction(_state: MachineFormState, form: FormData): Promise<MachineFormState> {
-  const member = await requireMember();
-  const result = await unpairMyMachine(deps(), member, String(form.get("machineId") ?? ""));
-  if (result === "not-found") notFound();
-  revalidatePath("/machines", "layout");
-  return { error: null };
 }
 
 /** Remove a Machine, then back to the Machines page. */

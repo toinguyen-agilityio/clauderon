@@ -50,8 +50,9 @@ import {
   type Db,
   type Machine,
 } from "@clauderon/db";
-import type { MessageType, Payload } from "@clauderon/protocol";
+import type { MessageType, NotifyKind, Payload } from "@clauderon/protocol";
 import type { LiveHub } from "./live-hub";
+import type { NoticeOptions } from "./notices";
 
 /** Sends a numbered message to one Machine's Agent. */
 export type Sender = { send<T extends MessageType>(machineId: string, type: T, payload: Payload<T>): unknown };
@@ -61,6 +62,8 @@ export type RunEngineOptions = {
   links: Sender;
   clock: Clock;
   live: LiveHub;
+  /** Browser notifications for a Run's Starter (#198). */
+  notices?: { send(kind: NotifyKind, runId: string, options?: NoticeOptions): Promise<void> };
   /** The app's own secrets, masked again before a log line is stored (NFR-1). */
   secrets: readonly string[];
   log?: (message: string) => void;
@@ -225,7 +228,10 @@ export class RunEngine {
     const next = nextNode(snapshotFlow(ctx.snapshot), views);
 
     if (next === "done") {
-      if (await moveRun(this.opts.db, runId, "running", { state: "succeeded", endedAt: this.now() })) await this.ended(runId, machineId);
+      if (await moveRun(this.opts.db, runId, "running", { state: "succeeded", endedAt: this.now() })) {
+        await this.notify("succeeded", runId, { flowNodeId: null });
+        await this.ended(runId, machineId);
+      }
       return;
     }
 
@@ -257,8 +263,12 @@ export class RunEngine {
     if (node.kind === "approve") {
       // Waits for a person with the input it passes through (spec M3 §2.1); no timeout.
       const input = inputs[0] ?? null;
-      await askHuman(this.opts.db, { runId, attemptId: attempt.id, kind: "approve", questions: { input }, now: this.now() });
+      const round = await askHuman(this.opts.db, { runId, attemptId: attempt.id, kind: "approve", questions: { input }, now: this.now() });
       this.opts.live.runChanged(runId);
+      if (round !== null) {
+        this.opts.live.needsChanged();
+        await this.notify("needs_human", runId, { flowNodeId: node.id, request: "approve" });
+      }
       return;
     }
 
@@ -422,8 +432,12 @@ export class RunEngine {
         const asked = parseGrillQuestions(result.result);
         if (asked && !asked.ok) return this.failAttempt(ctx, attempt.id, asked.reason, end);
         if (asked?.ok) {
-          await askHuman(this.opts.db, { runId: ctx.run.id, attemptId: attempt.id, kind: "grill", questions: asked.questions, claudeSessionId: end.claudeSessionId, now: this.now() });
+          const round = await askHuman(this.opts.db, { runId: ctx.run.id, attemptId: attempt.id, kind: "grill", questions: asked.questions, claudeSessionId: end.claudeSessionId, now: this.now() });
           this.opts.live.runChanged(ctx.run.id);
+          if (round !== null) {
+            this.opts.live.needsChanged();
+            await this.notify("needs_human", ctx.run.id, { flowNodeId: node.id, request: "grill" });
+          }
           return;
         }
       }
@@ -452,15 +466,23 @@ export class RunEngine {
 
   private async failAttempt(ctx: RunContext, attemptId: string, reason: string, end: { endedAt: Date; exitCode: number; claudeSessionId: string | null }) {
     await finishAttempt(this.opts.db, attemptId, { state: "failed", ...end, error: reason });
-    await this.fail(ctx.run.id, reason);
+    // The notification names the Node that failed.
+    await this.fail(ctx.run.id, reason, (await getAttempt(this.opts.db, attemptId))?.flowNodeId ?? null);
   }
 
-  private async fail(runId: string, reason: string): Promise<void> {
+  /** `flowNodeId` is the Node the notification names; a Run that fails before any Node names none. */
+  private async fail(runId: string, reason: string, flowNodeId: string | null = null): Promise<void> {
     const ctx = await getRunContext(this.opts.db, runId);
     if (!ctx?.run.machineId) return;
     if (await moveRun(this.opts.db, runId, "running", { state: "failed", endedAt: this.now(), failureReason: reason })) {
+      await this.notify("failed", runId, { flowNodeId });
       await this.ended(runId, ctx.run.machineId);
     }
+  }
+
+  /** Tells the Run's Starter (#198); never fails the work it is part of. */
+  private async notify(kind: NotifyKind, runId: string, options: NoticeOptions): Promise<void> {
+    await this.opts.notices?.send(kind, runId, options).catch((error: unknown) => this.log(`notify: ${String(error)}`));
   }
 
   /** A Run ended: remove its worktree if it is done with it, and free its Slot for the next one (RUN-16, POD-3). */
@@ -504,6 +526,7 @@ export class RunEngine {
       killed.push(...attempts);
       if (r.machineId) machines.add(r.machineId);
       this.opts.live.runChanged(r.id);
+      await this.notify("interrupted", r.id, {});
     }
     // Their Slots are free now; Queued Runs start if their Machine is there.
     for (const machineId of machines) await this.scheduleNow(machineId);

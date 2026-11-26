@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BrowserEvent } from "@clauderon/protocol";
 import { closeOnBackdrop } from "../../../components/dialog";
-import { useGatewaySocket } from "../../../components/gateway-socket";
+import { useShellSocket } from "../../../components/shell-socket";
 import { Icon } from "../../../components/icons";
 import { outputColor } from "../../../components/state-pill";
 import { FlowCanvas, type CanvasEdge, type CanvasNode } from "./[id]/flow-canvas";
@@ -84,11 +84,11 @@ function Composer({
  * drafts it through the Gateway, and they preview it, ask for changes or create it with the
  * ordinary import. The draft lives only in this dialog.
  */
-export function BuildFlow({ gatewayUrl, availability }: { gatewayUrl: string; availability: BuildAvailability }) {
+export function BuildFlow({ availability }: { availability: BuildAvailability }) {
   const router = useRouter();
   const ref = useRef<HTMLDialogElement>(null);
-  const [open, setOpen] = useState(false);
-  const socket = useGatewaySocket(gatewayUrl, open);
+  // The shell's socket (#198); the Gateway forgets this tab's drafts when it drops.
+  const socket = useShellSocket();
   const [draftId, setDraftId] = useState("");
   const [phase, setPhase] = useState<Phase>("describe");
   const [description, setDescription] = useState("");
@@ -149,7 +149,6 @@ export function BuildFlow({ gatewayUrl, availability }: { gatewayUrl: string; av
     setDraft(null);
     setNote("");
     setError(null);
-    setOpen(true);
     ref.current?.showModal();
     // showModal focuses the Close button first; start in the description instead.
     requestAnimationFrame(() => document.getElementById("build-flow-description")?.focus());
@@ -212,9 +211,10 @@ export function BuildFlow({ gatewayUrl, availability }: { gatewayUrl: string; av
         disabled={!availability.ok}
         title={availability.ok ? `Claude Code drafts a Flow on ${availability.machine}` : availability.reason}
       >
+        {Icon.sparkle}
         Build with Agent
       </button>
-      <dialog ref={ref} {...closeOnBackdrop} onClose={() => setOpen(false)} className="modal wide" aria-labelledby="build-flow-title">
+      <dialog ref={ref} {...closeOnBackdrop} className="modal wide" aria-labelledby="build-flow-title">
         <div className="modal-in">
           <div className="modal-h">
             <div>

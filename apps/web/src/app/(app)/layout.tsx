@@ -4,11 +4,14 @@ import { signOut } from "../../auth";
 import { Avatar, Brand } from "../../components/brand";
 import { Icon } from "../../components/icons";
 import { NeedsYouProvider } from "../../components/needs-you-live";
+import { NotificationsProvider } from "../../components/notifications-live";
+import { ShellSocketProvider } from "../../components/shell-socket";
 import { needsYouAction } from "./actions";
 import { MobileShell } from "../../components/mobile-shell";
 import { SideNav } from "../../components/side-nav";
 import { needsYouCount } from "../../server/runs";
-import { deps, requireMember } from "../../server/runtime";
+import { deps, gatewayUrl, requireMember } from "../../server/runtime";
+import { appVersion } from "../../server/version";
 
 /** The signed-in shell of the prototype: left rail, work area on the right. */
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -16,6 +19,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const needsYou = await needsYouCount(deps());
 
   return (
+    <ShellSocketProvider gatewayUrl={gatewayUrl()}>
+    <NotificationsProvider>
     <div className="shell">
       <NeedsYouProvider initial={needsYou} load={needsYouAction}>
       <MobileShell needsYou={needsYou}>
@@ -42,6 +47,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               </button>
             </form>
           </div>
+          <div className="small faint" title="App version">{appVersion(process.env)}</div>
         </div>
       </MobileShell>
       </NeedsYouProvider>
@@ -49,5 +55,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <div className="view">{children}</div>
       </main>
     </div>
+    </NotificationsProvider>
+    </ShellSocketProvider>
   );
 }

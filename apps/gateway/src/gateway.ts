@@ -7,6 +7,7 @@ import { LogRetention } from "./log-retention";
 import { MachineLinks } from "./machine-link";
 import { MachineWatch } from "./machine-watch";
 import { MachineService } from "./machines";
+import { RunNotices } from "./notices";
 import { RunEngine } from "./run-engine";
 
 export type GatewayOptions = {
@@ -28,16 +29,18 @@ export function createGateway(opts: GatewayOptions) {
   const links = new MachineLinks({ db, clock, log });
   const drafts = new FlowDrafts({ db, links, clock, secrets: opts.appSecrets, log });
   const hub = new BrowserHub({ db, operators: opts.operators, sessionSecret: opts.sessionSecret, clock, live, drafts, log });
+  const notices = new RunNotices({ db, notifyMember: (email, event) => hub.notifyMember(email, event), log });
   const engine = new RunEngine({
     db,
     links,
     clock,
     live,
+    notices,
     secrets: opts.appSecrets,
     log,
   });
   const watch = new MachineWatch({ db, links, engine, clock, timeoutMs: opts.heartbeatTimeoutMs });
-  const machines = new MachineService({ db, links, engine, log });
+  const machines = new MachineService({ db, links, engine, live, notices, log });
   const retention = new LogRetention({ db, clock, log });
 
   links.on("machine.logins", (p, machineId) => machines.logins(p, machineId));
@@ -61,7 +64,7 @@ export function createGateway(opts: GatewayOptions) {
     await watch.start();
   };
 
-  return { links, hub, live, drafts, engine, machines, watch, retention, start };
+  return { links, hub, live, notices, drafts, engine, machines, watch, retention, start };
 }
 
 export type Gateway = ReturnType<typeof createGateway>;

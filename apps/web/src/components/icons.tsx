@@ -70,6 +70,16 @@ export const Icon = {
       <path d="M13.5 9.5A5.5 5.5 0 016.5 2.5a5.5 5.5 0 107 7z" />
     </svg>
   ),
+  bell: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 11.5V7a4 4 0 018 0v4.5l1 1H3l1-1zM6.75 14h2.5" />
+    </svg>
+  ),
+  bellOff: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 11.5V7a4 4 0 018 0v4.5l1 1H3l1-1zM6.75 14h2.5M2.5 2.5l11 11" />
+    </svg>
+  ),
   menu: (
     <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" aria-hidden="true">
       <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
@@ -105,6 +115,17 @@ export const Icon = {
   download: (
     <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M8 2.5v8M4.75 7.5L8 10.75l3.25-3.25M2.5 13.5h11" />
+    </svg>
+  ),
+  upload: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 10.75v-8M4.75 5.75L8 2.5l3.25 3.25M2.5 13.5h11" />
+    </svg>
+  ),
+  sparkle: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinejoin="round" aria-hidden="true">
+      <path d="M6.5 2.5l1.2 3.3 3.3 1.2-3.3 1.2-1.2 3.3-1.2-3.3L2 7l3.3-1.2z" />
+      <path d="M12 9.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" />
     </svg>
   ),
   copy: (

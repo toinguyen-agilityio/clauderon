@@ -53,6 +53,14 @@ export type AgentOptions = {
   onWelcome?: () => void | Promise<void>;
   /** The Gateway refused the token (unknown, or replaced by a new Pairing): the Agent has stopped. */
   onUnpaired?: (code: number) => void;
+  /**
+   * Asks the Gateway over HTTP whether the token is still paired. Used when a
+   * connection ends before the Gateway's welcome without the close code that
+   * says why (1006 behind some proxies): the refusal (4401/4403) may have been
+   * lost on the way, and reconnecting for ever would hide that the Machine was
+   * unpaired or removed.
+   */
+  isUnpaired?: () => Promise<boolean>;
 };
 
 /**
@@ -100,6 +108,19 @@ export class Agent {
     return envelope;
   }
 
+  /** A link that never got its welcome: stop if the Gateway no longer knows this Machine, else try again. */
+  private async reconnectUnlessUnpaired(): Promise<void> {
+    const unpaired = await this.opts.isUnpaired!().catch(() => false);
+    if (this.stopped) return;
+    if (unpaired) {
+      this.log("The Gateway no longer knows this Machine.");
+      this.stopped = true;
+      this.opts.onUnpaired?.(CloseCode.Unauthorized);
+      return;
+    }
+    this.scheduleReconnect();
+  }
+
   private async connect(): Promise<void> {
     this.reconnect = null;
     if (this.stopped) return;
@@ -120,6 +141,7 @@ export class Agent {
     socket.onClose((code) => {
       if (this.socket !== socket) return;
       this.log(`disconnected (${code})`);
+      const welcomed = this.welcomed;
       this.socket = null;
       this.welcomed = false;
       this.stopHeartbeat();
@@ -127,6 +149,10 @@ export class Agent {
         // Reconnecting cannot help: only a new Pairing can.
         this.stopped = true;
         this.opts.onUnpaired?.(code);
+        return;
+      }
+      if (!welcomed && this.opts.isUnpaired) {
+        void this.reconnectUnlessUnpaired();
         return;
       }
       this.scheduleReconnect();

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { isEntryKind, type FlowSnapshot } from "@clauderon/core";
 import { duration, formatTime, tokens } from "../../../../components/format";
-import { useGatewaySocket } from "../../../../components/gateway-socket";
+import { useShellSocket } from "../../../../components/shell-socket";
 import { HumanForm } from "../../../../components/human-form";
 import { OutputValue } from "../../../../components/output-value";
 import { MarkdownBody, MarkdownText } from "../../../../components/markdown-text";
@@ -42,7 +42,6 @@ function classify(line: Line): string {
  * backfilled from storage, then streamed.
  */
 export function RunLive({
-  gatewayUrl,
   runId,
   snapshot,
   timeline,
@@ -50,7 +49,6 @@ export function RunLive({
   retryable,
   retryContext,
 }: {
-  gatewayUrl: string;
   runId: string;
   /** The Flow as it was when the Run started, drawn above the Node's details. */
   snapshot: FlowSnapshot;
@@ -62,7 +60,7 @@ export function RunLive({
   retryContext: string | null;
 }) {
   const router = useRouter();
-  const socket = useGatewaySocket(gatewayUrl);
+  const socket = useShellSocket();
   const currentId = currentNodeId(timeline);
   const current = timeline.find((n) => n.id === currentId);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
@@ -131,12 +129,6 @@ export function RunLive({
               </span>
             )}
           </div>
-          {node.description && node.kind !== "command" && <MarkdownText text={node.description} />}
-          {node.description && node.kind === "command" && (
-            <p className="faint small mono" style={{ marginTop: 6, maxWidth: "75ch", whiteSpace: "pre-wrap" }}>
-              {node.description}
-            </p>
-          )}
         </div>
 
         {node.attempts.length > 1 && (
@@ -147,6 +139,66 @@ export function RunLive({
                 {a.superseded && <span className="faint"> · earlier pass</span>}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* The Node's brief: what it asks, when this attempt ran, and any decision on it. */}
+        {(node.description || attempt) && (
+          <div className="node-brief">
+            {node.description && node.kind !== "command" && <MarkdownText text={node.description} />}
+            {node.description && node.kind === "command" && (
+              <p className="faint small mono" style={{ margin: 0, maxWidth: "75ch", whiteSpace: "pre-wrap" }}>
+                {node.description}
+              </p>
+            )}
+            {attempt && (
+              <>
+                <dl className="kv small">
+                  <dt>Started</dt>
+                  <dd className="num">{formatTime(new Date(attempt.startedAt))}</dd>
+                  <dt>Duration</dt>
+                  <dd className="num">{attempt.endedAt ? duration(new Date(attempt.endedAt).getTime() - new Date(attempt.startedAt).getTime()) : "running…"}</dd>
+                  {(node.kind === "agent" || node.kind === "grill") && (
+                    <>
+                      <dt>Tokens</dt>
+                      <dd className="num">{attempt.inputTokens !== null ? `${tokens(attempt.inputTokens)} in · ${tokens(attempt.outputTokens ?? 0)} out` : "counting…"}</dd>
+                    </>
+                  )}
+                  {attempt.error && (
+                    <>
+                      <dt>Failure</dt>
+                      <dd style={{ color: "var(--fail)" }}>{attempt.error}</dd>
+                    </>
+                  )}
+                  {attempt.superseded && (
+                    <>
+                      <dt>Pass</dt>
+                      <dd className="faint">An earlier pass, replaced by a Retry</dd>
+                    </>
+                  )}
+                </dl>
+
+                {attempt.retryContext && (
+                  <details className="stack" style={{ gap: 6 }}>
+                    <summary className="eyebrow">
+                      Retry context
+                    </summary>
+                    <MarkdownText text={attempt.retryContext} />
+                  </details>
+                )}
+
+                {attempt.rounds.length > 0 && (
+                  <div className="stack" style={{ gap: 8 }}>
+                    <span className="eyebrow">{node.kind === "grill" ? "Rounds" : "Decision"}</span>
+                    <div className="qa">
+                      {attempt.rounds.map((r) => (
+                        <Round key={r.id} round={r} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -170,53 +222,8 @@ export function RunLive({
           </div>
         ) : (
           <>
-            <dl className="kv small">
-              <dt>Started</dt>
-              <dd className="num">{formatTime(new Date(attempt.startedAt))}</dd>
-              <dt>Duration</dt>
-              <dd className="num">{attempt.endedAt ? duration(new Date(attempt.endedAt).getTime() - new Date(attempt.startedAt).getTime()) : "running…"}</dd>
-              {(node.kind === "agent" || node.kind === "grill") && (
-                <>
-                  <dt>Tokens</dt>
-                  <dd className="num">{attempt.inputTokens !== null ? `${tokens(attempt.inputTokens)} in · ${tokens(attempt.outputTokens ?? 0)} out` : "counting…"}</dd>
-                </>
-              )}
-              {attempt.error && (
-                <>
-                  <dt>Failure</dt>
-                  <dd style={{ color: "var(--fail)" }}>{attempt.error}</dd>
-                </>
-              )}
-              {attempt.superseded && (
-                <>
-                  <dt>Pass</dt>
-                  <dd className="faint">An earlier pass, replaced by a Retry</dd>
-                </>
-              )}
-            </dl>
-
-            {attempt.retryContext && (
-              <details className="stack" style={{ gap: 6 }}>
-                <summary className="eyebrow">
-                  Retry context
-                </summary>
-                <MarkdownText text={attempt.retryContext} />
-              </details>
-            )}
-
-            {attempt.rounds.length > 0 && (
-              <div className="stack" style={{ gap: 8 }}>
-                <span className="eyebrow">{node.kind === "grill" ? "Rounds" : "Decision"}</span>
-                <div className="qa">
-                  {attempt.rounds.map((r) => (
-                    <Round key={r.id} round={r} />
-                  ))}
-                </div>
-              </div>
-            )}
-
             {!isEntryKind(node.kind) && (
-              <div className="att-tabs" role="tablist" aria-label="Node view">
+              <div className="seg" role="tablist" aria-label="Node view" style={{ alignSelf: "flex-start" }}>
                 <button type="button" role="tab" aria-selected={view === "log"} className={view === "log" ? "on" : ""} onClick={() => setView("log")}>
                   Log
                 </button>
@@ -315,13 +322,13 @@ function Round({ round }: { round: RoundView }) {
         ))}
       {response && "cancelled" in response && <span className="small faint">Closed by Cancel{who && ` · ${who}`}</span>}
       {response && "decision" in response && response.decision === "approve" && (
-        <div className="ans">
+        <div className="ans decision">
           <span className="who">{who}</span>
           Approved
         </div>
       )}
       {response && "decision" in response && response.decision === "reject" && (
-        <div className="ans">
+        <div className="ans decision">
           <span className="who">{who}</span>
           Rejected: {response.feedback}
         </div>

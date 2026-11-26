@@ -28,7 +28,7 @@ import { addToAllowlist } from "../src/server/access";
 import type { AppDeps } from "../src/server/deps";
 import { cloneMyFlow, deleteMyFlow, editorData, saveMyFlow } from "../src/server/flows";
 import { createMyNode, deleteMyNode, updateMyNode } from "../src/server/library";
-import { approveMyPairing, removeMachine, setMyMachineSettings, unpairMyMachine } from "../src/server/machines";
+import { approveMyPairing, removeMachine, setMyMachineSettings } from "../src/server/machines";
 import { removeMember } from "../src/server/members";
 import { cancelRunAs, needsYouCount, respondAs, retryAs, viewAudit, viewNeedsYou, viewRun } from "../src/server/runs";
 import { startRuns } from "../src/server/start";
@@ -61,6 +61,16 @@ beforeEach(async () => {
 });
 
 const audit = async () => db.select().from(schema.auditEntry);
+
+/** The `member.notify` the web app publishes when Bo acts on Ann's Run (#198). */
+const notifyAnn = (kind: string, runId: string, flowNodeId?: string) => ({
+  type: "member.notify",
+  memberEmail: "ann@example.com",
+  kind,
+  runId,
+  actorEmail: "bo@example.com",
+  ...(flowNodeId ? { flowNodeId } : {}),
+});
 
 async function fixture(ticketCount = 1, slots = 2) {
   const ann = await memberRow(db, "ann@example.com", "Ann");
@@ -110,7 +120,11 @@ describe("Approve and Reject (spec M3 §2.1)", () => {
     expect(a).toMatchObject({ state: "succeeded" });
     const outputs = await db.select().from(schema.output);
     expect(outputs).toEqual([expect.objectContaining({ attemptId: attempt.id, name: "plan", type: "plan", value: "1. Fix totals" })]);
-    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }]);
+    expect(commands).toEqual([
+      { type: "run.resume", machineId: f.machine.id, runId },
+      { type: "needs.changed" },
+      notifyAnn("approved", runId, nodeId("Approve a plan")),
+    ]);
     expect((await audit()).find((e) => e.action === "run.approve")).toMatchObject({ actorEmail: "bo@example.com", subjectId: runId });
   });
 
@@ -125,7 +139,7 @@ describe("Approve and Reject (spec M3 §2.1)", () => {
     expect(await getRun(db, runId)).toMatchObject({ state: "failed", failureReason: "Rejected at “Approve a plan”: Too broad." });
     const [stored] = await db.select().from(schema.humanRequest);
     expect(stored).toMatchObject({ response: { decision: "reject", feedback: "Too broad." }, respondedByEmail: "bo@example.com" });
-    expect(commands).toEqual([{ type: "schedule", machineId: f.machine.id }]);
+    expect(commands).toEqual([{ type: "schedule", machineId: f.machine.id }, { type: "needs.changed" }, notifyAnn("rejected", runId, nodeId("Approve a plan"))]);
     expect((await machineRunCounts(db, [f.machine.id])).get(f.machine.id)!.inUse).toBe(0);
   });
 
@@ -151,7 +165,7 @@ describe("Grill answers (spec M3 §2.2)", () => {
     expect((await getRun(db, runId))!.state).toBe("running");
     const [a] = await db.select().from(schema.attempt).where(sql`${schema.attempt.id} = ${attempt.id}`);
     expect(a).toMatchObject({ state: "running", claudeSessionId: "sess-1" });
-    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }]);
+    expect(commands).toEqual([{ type: "run.resume", machineId: f.machine.id, runId }, { type: "needs.changed" }]);
     expect((await audit()).map((e) => e.action)).toContain("run.answer");
 
     // The Run page shows the round, its answers and who answered.
@@ -237,6 +251,64 @@ describe("Needs you (RUN-5, spec M3 §3)", () => {
   });
 });
 
+describe("Needs you updates live (#197)", () => {
+  const decisions = [
+    ["approve", "Approve a plan", { decision: "approve" }],
+    ["reject", "Approve a plan", { decision: "reject", feedback: "No" }],
+    ["answer", "Grill a plan", { decision: "answer", answers: { q1: "a", q2: "b" } }],
+  ] as const;
+
+  it.each(decisions)("%s with the Run's Machine removed still tells open Needs you pages", async (_, node, action) => {
+    const f = await fixture();
+    const { runId, nodeId } = await planRun(f);
+    const { request } = await waitAt(runId, nodeId(node), node === "Grill a plan" ? "grill" : "approve");
+    await db.update(schema.run).set({ machineId: null }).where(sql`${schema.run.id} = ${runId}`);
+    expect(await respondAs(deps, f.bo, request.id, action)).toEqual({ ok: true });
+    const kind = { approve: "approved", reject: "rejected", answer: "answered" }[action.decision];
+    expect(commands).toEqual([{ type: "needs.changed" }, notifyAnn(kind, runId, nodeId(node))]);
+  });
+
+  it("a refused response tells nobody: the request is still open", async () => {
+    const f = await fixture();
+    const { runId, nodeId } = await planRun(f);
+    const { request } = await waitAt(runId, nodeId("Approve a plan"), "approve");
+    expect(await respondAs(deps, f.bo, request.id, { decision: "reject", feedback: " " })).toMatchObject({ ok: false });
+    expect(commands).toEqual([]);
+  });
+});
+
+describe("Starter notifications (#198)", () => {
+  it("the Starter's own approve, reject, answer, retry and cancel publish no member.notify", async () => {
+    const f = await fixture(3);
+    const own = (c: GatewayCommand) => c.type === "member.notify";
+
+    const approved = await planRun(f, 0);
+    const approve = await waitAt(approved.runId, approved.nodeId("Approve a plan"), "approve");
+    expect(await respondAs(deps, f.ann, approve.request.id, { decision: "approve" })).toEqual({ ok: true });
+
+    const rejected = await planRun(f, 1);
+    const reject = await waitAt(rejected.runId, rejected.nodeId("Approve a plan"), "approve");
+    expect(await respondAs(deps, f.ann, reject.request.id, { decision: "reject", feedback: "No." })).toEqual({ ok: true });
+    expect(await retryAs(deps, f.ann, rejected.runId, rejected.nodeId("Grill a plan"), "")).toEqual({ ok: true });
+
+    const answered = await planRun(f, 2);
+    const grill = await waitAt(answered.runId, answered.nodeId("Grill a plan"), "grill");
+    expect(await respondAs(deps, f.ann, grill.request.id, { decision: "answer", answers: { q1: "a", q2: "b" } })).toEqual({ ok: true });
+    expect(await cancelRunAs(deps, f.ann, answered.runId)).toEqual({ ok: true });
+
+    expect(commands.length).toBeGreaterThan(0);
+    expect(commands.filter(own)).toEqual([]);
+  });
+
+  it("a refused action notifies nobody", async () => {
+    const f = await fixture();
+    const { runId, nodeId } = await planRun(f);
+    expect(await retryAs(deps, f.bo, runId, nodeId("Grill a plan"), "")).toMatchObject({ ok: false });
+    expect(await cancelRunAs(deps, f.bo, "00000000-0000-0000-0000-000000000000")).toBe("not-found");
+    expect(commands).toEqual([]);
+  });
+});
+
 describe("Retry (RUN-7, RUN-9, spec M3 §4)", () => {
   async function failedRun(f: Awaited<ReturnType<typeof fixture>>) {
     const run = await planRun(f);
@@ -276,7 +348,7 @@ describe("Retry (RUN-7, RUN-9, spec M3 §4)", () => {
       loginsChecked: false,
       context: { feedback: "Keep the old API.", note: "Mind the rounding.", retriedBy: "bo@example.com", failure: { node: "Approve a plan", exitCode: null } },
     });
-    expect(commands).toEqual([{ type: "schedule", machineId: f.machine.id }]);
+    expect(commands).toEqual([{ type: "schedule", machineId: f.machine.id }, notifyAnn("retried", runId, nodeId("Grill a plan"))]);
     expect((await audit()).find((e) => e.action === "run.retry")).toMatchObject({
       actorEmail: "bo@example.com",
       detail: { node: "Grill a plan", note: "Mind the rounding.", from: "failed" },
@@ -317,7 +389,12 @@ describe("Cancel from every Active state (T3-8, RUN-8)", () => {
     }
     expect(await cancelRunAs(deps, f.bo, runId)).toEqual({ ok: true });
     expect((await getRun(db, runId))!.state).toBe("cancelled");
-    expect(commands).toEqual([{ type: "run.cancel", machineId: f.machine.id, runId, attemptIds: attemptId ? [attemptId] : [] }]);
+    // Only a Run that was waiting leaves the Needs you list.
+    expect(commands).toEqual([
+      { type: "run.cancel", machineId: f.machine.id, runId, attemptIds: attemptId ? [attemptId] : [] },
+      ...(from === "waiting_for_human" ? [{ type: "needs.changed" }] : []),
+      notifyAnn("cancelled", runId),
+    ]);
     if (from === "waiting_for_human") {
       const [request] = await db.select().from(schema.humanRequest);
       expect(request).toMatchObject({ response: { cancelled: true }, respondedByEmail: "bo@example.com" });
@@ -364,16 +441,15 @@ describe("Audit (T3-12, RUN-15, spec M3 §7)", () => {
     expect(await lastEntry("run.retry")).toMatchObject({ actorEmail: "bo@example.com", subjectId: b.runId, detail: { from: "interrupted" } });
   });
 
-  it("machine.pair, machine.settings, machine.unpair, machine.remove", async () => {
+  it("machine.pair, machine.settings, machine.remove", async () => {
     const cy = await memberRow(db, "cy@example.com");
     const pending = await createPairing(db, { tokenHash: hashToken("cy-token"), hostname: "cy-mac", os: "darwin", arch: "arm64" }, deps.clock.now());
     if (!pending.ok) throw new Error("pairing failed");
     const paired = await approveMyPairing(deps, cy, pending.pairing.code);
     if (!paired.ok) throw new Error("approve failed");
     await setMyMachineSettings(deps, cy, paired.machineId, { slots: 3 });
-    await unpairMyMachine(deps, cy, paired.machineId);
     await removeMachine(deps, cy, paired.machineId);
-    for (const action of ["machine.pair", "machine.settings", "machine.unpair", "machine.remove"]) {
+    for (const action of ["machine.pair", "machine.settings", "machine.remove"]) {
       expect(await lastEntry(action)).toMatchObject({ actorEmail: "cy@example.com", subjectType: "machine", subjectId: paired.machineId });
     }
   });

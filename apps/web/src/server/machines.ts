@@ -11,7 +11,6 @@ import {
   queuedRuns,
   recordAudit,
   slotRuns,
-  unpairMachine,
   updateMachineSettings,
   type Machine,
   type MachineRow,
@@ -118,6 +117,16 @@ export async function checkMyLogins(deps: AppDeps, viewer: Viewer, machineId: st
   return { ok: true };
 }
 
+/**
+ * Update the Agent now (ADR 0007): the owner's only. The Gateway closes the
+ * link; the Agent reconnects, sees the newer bundle and takes it once no Node runs.
+ */
+export async function updateMyAgent(deps: AppDeps, viewer: Viewer, machineId: string): Promise<{ ok: true } | "not-found"> {
+  if (!(await ownMachine(deps, viewer, machineId))) return "not-found";
+  await deps.command({ type: "machine.updateAgent", machineId });
+  return { ok: true };
+}
+
 export const MACHINE_NAME_MAX = 60;
 
 export type MachineSettingsInput = { name?: unknown; slots: unknown };
@@ -149,18 +158,6 @@ export async function setMyMachineSettings(
     detail: { from: { name: machine.name, slots: machine.slots }, to: settings },
   });
   await deps.command({ type: "schedule", machineId });
-  return { ok: true };
-}
-
-/**
- * Unpair my Machine (ADR 0006): its token stops working at once, its Agent is
- * disconnected and its Running Runs become Interrupted. Slots, queue and
- * history stay for the next Pairing.
- */
-export async function unpairMyMachine(deps: AppDeps, viewer: Viewer, machineId: string): Promise<{ ok: true } | "not-found"> {
-  if (!(await ownMachine(deps, viewer, machineId))) return "not-found";
-  await unpairMachine(deps.db, machineId, viewer.email);
-  await deps.command({ type: "machine.repaired", machineId });
   return { ok: true };
 }
 

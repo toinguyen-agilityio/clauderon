@@ -144,6 +144,8 @@ docker compose -f deploy/compose.yml --env-file deploy/.env.production up -d --b
 
 Migrations run before the new Gateway starts. A Gateway restart is a short drop: Runs keep going if each Agent reconnects within 30 seconds. After changes to `apps/host-agent`, Members pull and restart their Agent.
 
+The sidebar shows the release tag from `APP_VERSION`. `deploy/deploy.sh` sets it from the latest tag in this clone (`git fetch --tags` first); the plain `docker compose … up` above shows `dev` unless you export it, e.g. `APP_VERSION=$(git describe --tags --abbrev=0) docker compose …`.
+
 ## Rotating secrets
 
 - `SESSION_SECRET`: edit the env file and run `up -d`; everyone signs in again.

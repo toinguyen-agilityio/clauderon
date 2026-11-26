@@ -11,6 +11,8 @@ type LogLine = Extract<BrowserEvent, { type: "log" }>;
 export class LiveHub {
   private logs = new Map<string, Set<LinkSocket>>();
   private runs = new Map<string, Set<LinkSocket>>();
+  /** Sockets of Needs you pages and badges: told only when a Run enters or leaves `waiting_for_human`. */
+  private needs = new Set<LinkSocket>();
 
   constructor(private readonly db: Db) {}
 
@@ -33,10 +35,14 @@ export class LiveHub {
       case "subscribe.run":
         add(this.runs, request.runId, socket);
         return;
+      case "subscribe.needs":
+        this.needs.add(socket);
+        return;
     }
   }
 
   drop(socket: LinkSocket): void {
+    this.needs.delete(socket);
     for (const map of [this.logs, this.runs]) {
       for (const [key, set] of map) {
         set.delete(socket);
@@ -51,6 +57,11 @@ export class LiveHub {
 
   runChanged(runId: string): void {
     for (const socket of this.runs.get(runId) ?? []) send(socket, { type: "run.changed", runId });
+  }
+
+  /** A Run started or stopped waiting for a person. */
+  needsChanged(): void {
+    for (const socket of this.needs) send(socket, { type: "needs.changed" });
   }
 }
 

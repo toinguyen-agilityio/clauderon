@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ResumeBuffer, controlMessage, createGatewayTicket, parseEnvelope, serialize, verifyGatewayTicket } from "../src/index";
+import { NOTIFY_KINDS, ResumeBuffer, browserRequest, controlMessage, createGatewayTicket, notifyEvent, parseBrowserMessage, parseEnvelope, serialize, verifyGatewayTicket } from "../src/index";
 
 describe("gateway ticket", () => {
   const now = new Date("2026-11-16T09:00:00Z");
@@ -105,5 +105,30 @@ describe("heartbeat usage", () => {
     expect(parse({ at: "now", usage: { memoryUsedMb: 1, diskFreeGb: 65, cpuPercent: 3 } }).ok).toBe(true);
     expect(parse({ at: "now", usage: { memoryUsedMb: 1, cpuPercent: 3 } }).ok).toBe(true);
     expect(parse({ at: "now" }).ok).toBe(true);
+  });
+});
+
+describe("browser requests (#197)", () => {
+  it("accepts subscribe.needs and still refuses an unknown type", () => {
+    expect(parseBrowserMessage(browserRequest, JSON.stringify({ type: "subscribe.needs" }))).toEqual({ type: "subscribe.needs" });
+    expect(parseBrowserMessage(browserRequest, JSON.stringify({ type: "subscribe.everything" }))).toBeNull();
+  });
+});
+
+describe("notify browser event (#198)", () => {
+  const event = { type: "notify", kind: "rejected", runId: "r-1", ticketKey: "web#42", ticketTitle: "Fix totals", flowName: "Plan and deliver", nodeName: "Review plan", actor: "Jane" };
+
+  it("accepts every kind, with the optional Node, request and actor", () => {
+    for (const kind of NOTIFY_KINDS) expect(parseBrowserMessage(notifyEvent, JSON.stringify({ ...event, kind }))).toMatchObject({ kind });
+    const bare = { type: "notify", kind: "succeeded", runId: "r-1", ticketKey: "web#42", ticketTitle: "T", flowName: "F" };
+    expect(parseBrowserMessage(notifyEvent, JSON.stringify(bare))).toEqual(bare);
+    expect(parseBrowserMessage(notifyEvent, JSON.stringify({ ...event, kind: "needs_human", request: "grill" }))).toMatchObject({ request: "grill" });
+  });
+
+  it("refuses an unknown kind or request, and a missing field", () => {
+    expect(parseBrowserMessage(notifyEvent, JSON.stringify({ ...event, kind: "exploded" }))).toBeNull();
+    expect(parseBrowserMessage(notifyEvent, JSON.stringify({ ...event, request: "vote" }))).toBeNull();
+    const { ticketKey: _, ...missing } = event;
+    expect(parseBrowserMessage(notifyEvent, JSON.stringify(missing))).toBeNull();
   });
 });

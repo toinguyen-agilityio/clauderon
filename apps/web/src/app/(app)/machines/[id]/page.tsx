@@ -11,7 +11,7 @@ import { deps, pageWebUrl, requireMember } from "../../../../server/runtime";
 import { AutoRefresh } from "../auto-refresh";
 import { CmdBox } from "../cmd-box";
 import { DoctorCard } from "../doctor-card";
-import { CheckLogins, RemoveMachine, UnpairMachine } from "../machine-actions";
+import { CheckLogins, RemoveMachine, UpdateAgent } from "../machine-actions";
 import { claudeAccountLabel, defaultMachineName, machineName, MachineStatusChip, osLabel, DiskStatus, ReadyChip, ResourceMeter, resourceLabels, SlotBar, SlotChips } from "../machine-parts";
 import { MachineSettings } from "../machine-settings";
 import { PairingProgress } from "../pairing-progress";
@@ -46,6 +46,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   // ADR 0007: an old install (a clone run with tsx) cannot update itself; a bundle updates on its next connect.
   const legacy = isLegacyAgentVersion(machine.agentVersion);
   const updating = !legacy && latest && machine.agentVersion && !machine.agentVersion.endsWith("-dev") && machine.agentVersion !== latest.version;
+  const canUpdate = Boolean(updating && latest && machine.mine && machine.paired && machine.connected);
   const installCommand = machine.os === "win32" ? installCommandPs1(web) : installCommandSh(web);
   const owner = machine.owner.name ?? machine.owner.email;
   const name = machineName(machine);
@@ -84,9 +85,12 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     ["Disk", <span key="disk" className="stack" style={{ gap: 4 }}>{resources.disk.percent !== null && <ResourceMeter label="Disk" resource={resources.disk} />}<DiskStatus machine={machine} /></span>],
     [
       "Agent",
-      <span key="a" className="mono small">
-        {machine.agentVersion ?? "—"}
-        {updating && <span className="faint"> · updates to {latest.version} when idle</span>}
+      <span key="a" className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <span className="mono small">
+          {machine.agentVersion ?? "—"}
+          {updating && <span className="faint"> · updates to {latest.version} when idle</span>}
+        </span>
+        {canUpdate && latest && <UpdateAgent machineId={machine.id} latest={latest.version} />}
       </span>,
     ],
     ["Paired", ago(machine.pairedAt, now)],
@@ -289,7 +293,6 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      {machine.mine && machine.paired && <UnpairMachine machineId={machine.id} name={name} />}
       {canRemove && <RemoveMachine machineId={machine.id} name={name} />}
     </>
   );
