@@ -315,7 +315,13 @@ describe("Retry resumes the failed session (#218)", () => {
     scriptPlanAndDeliver(ctx.agent, script);
     const [runId] = await ctx.start([0], "basic-ticket-delivery");
     expect(await getRun(db, runId!)).toMatchObject({ state: "failed" });
-    await ctx.clock.advance(wait);
+    if (wait > 0) {
+      await ctx.clock.advance(wait);
+      // One long fake-clock jump outruns the heartbeat writes, so the watcher drops
+      // the Machine; its Agent says hello again, as the real one does.
+      ctx.reconnect();
+      await ctx.flush();
+    }
     const snapshot = (await getRun(db, runId!))!.flowSnapshot as FlowSnapshot;
     const code = snapshot.nodes.find((n) => n.name === "Code a change")!.id;
     const before = ctx.agent.of("node.run").length;
