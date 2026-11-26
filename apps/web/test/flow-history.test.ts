@@ -4,6 +4,7 @@ import { FakeClock, FakeGitHub, createTestDatabase, machineRow, memberRow, proje
 import type { AppDeps } from "../src/server/deps";
 import {
   cloneMyDeletedFlow,
+  compareSnapshots,
   cloneMyFlow,
   createMyFlow,
   deleteMyFlow,
@@ -12,6 +13,7 @@ import {
   viewDeletedFlows,
   viewFlowHistory,
   viewFlowVersion,
+  type SnapshotView,
 } from "../src/server/flows";
 import { updateMyNode } from "../src/server/library";
 
@@ -68,7 +70,36 @@ describe("Flow history on the Flows page (issue #181)", () => {
     const version = (await viewFlowVersion(deps, made.flowId, latest!.id))!;
     expect([version.before?.name, version.after.name]).toEqual(["Ship", "Ship 2"]);
     expect(version.after.nodes.length).toBeGreaterThan(0);
+    expect(version.after.links).toHaveLength(version.after.edges.length);
+    expect(version).toMatchObject({ count: 2, newerId: null });
+    expect(version.olderId).not.toBeNull();
+    const oldest = (await viewFlowVersion(deps, made.flowId, version.olderId!))!;
+    expect(oldest).toMatchObject({ before: null, olderId: null, newerId: latest!.id });
     expect(await viewFlowVersion(deps, made.flowId, crypto.randomUUID())).toBeNull();
+  });
+
+  it("compares two versions Node by Node and connection by connection", () => {
+    const node = (name: string, instructions = "Do it.", kind = "agent") => ({ name, kind, instructions, extraInstructions: "" });
+    const link = (from: string, to: string) => ({ from, output: "plan", to, input: "plan" });
+    const snap = (nodes: SnapshotView["nodes"], links: SnapshotView["links"]): SnapshotView => ({ name: "F", nodes, links, edges: links.map((l) => `${l.from} → ${l.to}`) });
+    const before = snap([node("Plan"), node("Review"), node("Old")], [link("Plan", "Review"), link("Plan", "Old")]);
+    const after = snap([node("Plan"), node("Review", "Look closer."), node("Test", "pnpm test", "command")], [link("Plan", "Review"), link("Review", "Test")]);
+    const diff = compareSnapshots(before, after);
+    expect(diff.nodes.map((n) => [n.name, n.status])).toEqual([
+      ["Plan", "same"],
+      ["Review", "changed"],
+      ["Test", "added"],
+      ["Old", "removed"],
+    ]);
+    expect(diff.nodes[1]!.fields).toEqual(["instructions"]);
+    expect(diff.links.map((l) => [l.link.to, l.status])).toEqual([
+      ["Review", "same"],
+      ["Test", "added"],
+      ["Old", "removed"],
+    ]);
+    // Two Nodes of one name pair up in order; the first version has nothing to compare against.
+    expect(compareSnapshots(snap([node("A"), node("A")], []), snap([node("A"), node("A", "New")], [])).nodes.map((n) => n.status)).toEqual(["same", "changed"]);
+    expect(compareSnapshots(null, after).nodes.every((n) => n.status === "same")).toBe(true);
   });
 
   it("deleted Flows are listed with who deleted them, and a version can be cloned", async () => {
