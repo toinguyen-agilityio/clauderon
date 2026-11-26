@@ -28,7 +28,7 @@ beforeAll(async () => {
 });
 afterAll(() => test.drop());
 beforeEach(async () => {
-  await db.execute(sql`truncate member, machine, pairing, project, ticket, batch, run, attempt, output, audit_entry, flow, node cascade`);
+  await db.execute(sql`truncate member, machine, pairing, project, ticket, batch, run, attempt, output, audit_entry, flow, flow_version, node cascade`);
   commands = [];
   deps = {
     db,
@@ -406,7 +406,7 @@ describe("Export and import a Flow (issue #98)", () => {
     const ann = await memberRow(db, "ann@example.com");
     const { json } = await exported(sample);
     const original = await loadFlowDetail(db, sample);
-    await db.execute(sql`truncate flow, node cascade`);
+    await db.execute(sql`truncate flow, flow_version, node cascade`);
     expect(await viewLibrary(deps)).toHaveLength(0);
 
     const result = await importMyFlow(deps, ann, json);
@@ -427,7 +427,7 @@ describe("Export and import a Flow (issue #98)", () => {
     const ann = await memberRow(db, "ann@example.com");
     const file = JSON.parse((await exported(sample)).json);
     file.nodes.find((n: { kind: string }) => n.kind === "input").outputs = [{ name: "shot", type: "screenshot", optional: false }];
-    await db.execute(sql`truncate flow, node cascade`);
+    await db.execute(sql`truncate flow, flow_version, node cascade`);
     expect(await importMyFlow(deps, ann, JSON.stringify(file))).toMatchObject({ ok: false });
     expect(await db.select().from(schema.node)).toHaveLength(0);
     expect(await db.select().from(schema.flow)).toHaveLength(0);

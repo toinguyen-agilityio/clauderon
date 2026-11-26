@@ -4,6 +4,7 @@ export * from "./flow";
 export * from "./flow-file";
 export * from "./node-file";
 export * from "./flow-draft";
+export * from "./flow-history";
 export * from "./github";
 export * from "./human";
 export * from "./inspector";
