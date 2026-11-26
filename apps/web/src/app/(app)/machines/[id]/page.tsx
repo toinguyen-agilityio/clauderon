@@ -11,9 +11,10 @@ import { deps, pageWebUrl, requireMember } from "../../../../server/runtime";
 import { AutoRefresh } from "../auto-refresh";
 import { CmdBox } from "../cmd-box";
 import { DoctorCard } from "../doctor-card";
-import { CheckLogins, RemoveMachine, UnpairMachine } from "../machine-actions";
+import { CheckLogins, RemoveMachine, UnpairMachine, UpdateAgent } from "../machine-actions";
 import { claudeAccountLabel, defaultMachineName, machineName, MachineStatusChip, osLabel, DiskStatus, ReadyChip, ResourceMeter, resourceLabels, SlotBar, SlotChips } from "../machine-parts";
 import { MachineSettings } from "../machine-settings";
+import { PairMachine } from "../pair-machine";
 import { PairingProgress } from "../pairing-progress";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   // ADR 0007: an old install (a clone run with tsx) cannot update itself; a bundle updates on its next connect.
   const legacy = isLegacyAgentVersion(machine.agentVersion);
   const updating = !legacy && latest && machine.agentVersion && !machine.agentVersion.endsWith("-dev") && machine.agentVersion !== latest.version;
+  const canUpdate = Boolean(updating && latest && machine.mine && machine.paired && machine.connected);
   const installCommand = machine.os === "win32" ? installCommandPs1(web) : installCommandSh(web);
   const owner = machine.owner.name ?? machine.owner.email;
   const name = machineName(machine);
@@ -84,9 +86,12 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     ["Disk", <span key="disk" className="stack" style={{ gap: 4 }}>{resources.disk.percent !== null && <ResourceMeter label="Disk" resource={resources.disk} />}<DiskStatus machine={machine} /></span>],
     [
       "Agent",
-      <span key="a" className="mono small">
-        {machine.agentVersion ?? "—"}
-        {updating && <span className="faint"> · updates to {latest.version} when idle</span>}
+      <span key="a" className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <span className="mono small">
+          {machine.agentVersion ?? "—"}
+          {updating && <span className="faint"> · updates to {latest.version} when idle</span>}
+        </span>
+        {canUpdate && latest && <UpdateAgent machineId={machine.id} latest={latest.version} />}
       </span>,
     ],
     ["Paired", ago(machine.pairedAt, now)],
@@ -125,6 +130,24 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
+      {machine.mine && !machine.paired && (
+        <div className="card card-pad stack" data-testid="machine-pair-again">
+          <span className="eyebrow">Pair this Machine again</span>
+          <span className="small muted">
+            This Machine is unpaired, so no Agent takes its Runs. Pairing starts on the computer: run this in a terminal on{" "}
+            <span className="mono">{machine.hostname ?? "that computer"}</span>, then approve it here. The Machine keeps its name, Slots, queue and
+            history.
+          </span>
+          <CmdBox command={installCommand} />
+          <details className="small">
+            <summary className="faint">The browser did not open? Enter the code</summary>
+            <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+              <span className="faint">Enter the code the install command shows in your terminal:</span>
+              <PairMachine />
+            </div>
+          </details>
+        </div>
+      )}
       {machine.mine && machine.paired && !machine.ready && <AutoRefresh everyMs={settingUp ? 2000 : 5000} />}
       {settingUp && <PairingProgress phase={connectedSincePairing ? "checking" : "connecting"} hostname={machine.hostname ?? "This computer"} />}
       {justReady && !settingUp && (

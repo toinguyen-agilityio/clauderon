@@ -35,6 +35,10 @@ export class MachineService {
       case "machine.checkLogins":
         this.opts.links.send(command.machineId, "machine.checkLogins", {});
         return;
+      case "machine.updateAgent":
+        // The Agent compares its version with the web app's whenever it reconnects, so a closed link is enough: it works with every Agent already out there.
+        this.opts.links.drop(command.machineId, "update requested");
+        return;
       case "machine.repaired":
         // The old computer cannot report any more: its Runs end as Interrupted.
         await this.opts.links.repaired(command.machineId);
