@@ -551,6 +551,10 @@ const runListColumns = {
   flowName: sql<string>`coalesce(${flow.name}, ${run.flowSnapshot}->>'name')`,
   ticketNumber: ticket.number,
   ticketTitle: runTitle,
+  /** What a Run without a Ticket started from (its Input Type); null for a Ticket's Run. */
+  inputType: sql<string | null>`${run.inputValue}->>'type'`,
+  /** The pull request a Run started from, for a `pull-request` Input. */
+  inputNumber: sql<number | null>`(${run.inputValue}->'value'->>'number')::int`,
   projectId: project.id,
   starterEmail: member.email,
   starterName: member.name,

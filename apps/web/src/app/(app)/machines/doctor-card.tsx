@@ -20,7 +20,7 @@ export function DoctorCard({ doctor, mine, now }: { doctor: MachineDoctor; mine:
   return (
     <div className="card card-pad stack" data-testid="machine-doctor">
       <div className="row between">
-        <span className="eyebrow">Health</span>
+        <h2 className="mach-card-h">Health</h2>
         <span className={`pill ${problems === 0 ? "ok plain" : checks.some((c) => c.status === "fail") ? "fail" : "wait"}`}>
           {problems === 0 ? "All good" : `${problems} to fix`}
         </span>

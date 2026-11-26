@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Icon } from "../../../components/icons";
 import { useRouter } from "next/navigation";
 import { createContext, use, useState, useTransition, type FormEvent, type ReactNode } from "react";
 
@@ -20,7 +21,7 @@ export function TicketFilters({ children }: { children: ReactNode }) {
   return <FiltersContext value={{ pending, target, go }}>{children}</FiltersContext>;
 }
 
-export function FilterLink({ href, className, children }: { href: string; className?: string; children: ReactNode }) {
+export function FilterLink({ href, className, current, children }: { href: string; className?: string; current?: boolean; children: ReactNode }) {
   const { pending, target, go } = use(FiltersContext);
   const loading = pending && target === href;
   return (
@@ -28,6 +29,7 @@ export function FilterLink({ href, className, children }: { href: string; classN
       href={href}
       className={`${className ?? ""}${loading ? " filter-pending" : ""}`}
       aria-busy={loading || undefined}
+      aria-current={current || undefined}
       onNavigate={(e) => {
         e.preventDefault();
         go(href);
@@ -53,14 +55,14 @@ export function TicketSearch({ project, status, q }: { project?: string; status?
     <form
       method="get"
       role="search"
-      className="filter-search"
-      style={{ width: "min(320px, 100%)" }}
+      className="filter-search tk-search"
       aria-busy={(pending && target === submitted) || undefined}
       onSubmit={submit}
     >
       {project && <input type="hidden" name="project" value={project} />}
       {status && <input type="hidden" name="status" value={status} />}
-      <input className="input" name="q" defaultValue={q ?? ""} placeholder="Search title or key…" aria-label="Search Tickets" />
+      {Icon.search}
+      <input className="input" type="search" name="q" defaultValue={q ?? ""} placeholder="Search title or #number" aria-label="Search Tickets" />
     </form>
   );
 }
