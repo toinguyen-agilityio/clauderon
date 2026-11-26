@@ -11,6 +11,8 @@ export const GATEWAY_COMMAND_CHANNEL = "gateway_command";
 export type GatewayCommand =
   /** Check the Machine's Claude Code and gh logins now. */
   | { type: "machine.checkLogins"; machineId: string }
+  /** Ask the Machine's Agent to take the web app's newest bundle now: its link is closed, and it checks for an update when it reconnects (ADR 0007). */
+  | { type: "machine.updateAgent"; machineId: string }
   /** The Machine was paired anew or unpaired: drop the connection of its old token (ADR 0006). */
   | { type: "machine.repaired"; machineId: string }
   /** Run the Slot scheduler for a Machine after Runs were queued. */
@@ -33,7 +35,7 @@ export type MemberNotifyKind = (typeof MEMBER_NOTIFY_KINDS)[number];
 
 export type CommandPublish = (command: GatewayCommand) => Promise<void>;
 
-const TYPES = new Set(["machine.checkLogins", "machine.repaired", "schedule", "run.cancel", "run.resume", "needs.changed", "member.notify"]);
+const TYPES = new Set(["machine.checkLogins", "machine.updateAgent", "machine.repaired", "schedule", "run.cancel", "run.resume", "needs.changed", "member.notify"]);
 
 export function notifyGatewayCommand(db: Db): CommandPublish {
   return async (command) => {

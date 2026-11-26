@@ -9,11 +9,14 @@ import {
   removeMachine,
   setMyMachineSettings,
   unpairMyMachine,
+  updateMyAgent,
   type PairingPreview,
 } from "../../../server/machines";
 import { deps, requireMember } from "../../../server/runtime";
 
 export type MachineFormState = { error: string | null };
+
+export type UpdateFormState = { error: string | null; asked: boolean };
 
 export type PairFormState = { error: string | null; pairing: PairingPreview | null };
 
@@ -39,6 +42,14 @@ export async function checkLoginsAction(_state: MachineFormState, form: FormData
   if (result === "not-found") notFound();
   revalidatePath("/machines", "layout");
   return { error: null };
+}
+
+export async function updateAgentAction(_state: UpdateFormState, form: FormData): Promise<UpdateFormState> {
+  const member = await requireMember();
+  const result = await updateMyAgent(deps(), member, String(form.get("machineId") ?? ""));
+  if (result === "not-found") notFound();
+  revalidatePath("/machines", "layout");
+  return { error: null, asked: true };
 }
 
 export type SettingsFormState = { error: string | null; saved: boolean };

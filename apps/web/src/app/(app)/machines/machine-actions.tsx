@@ -3,7 +3,8 @@
 import { useActionState, useRef } from "react";
 import { Icon } from "../../../components/icons";
 import { closeOnBackdrop } from "../../../components/dialog";
-import { checkLoginsAction, removeMachineAction, unpairAction, type MachineFormState } from "./actions";
+import { checkLoginsAction, removeMachineAction, unpairAction, updateAgentAction, type MachineFormState, type UpdateFormState } from "./actions";
+import { AutoRefresh } from "./auto-refresh";
 
 /** Check logins on the owner's own Machine (POD-5): its Agent answers once connected. */
 export function CheckLogins({ machineId, connected }: { machineId: string; connected: boolean }) {
@@ -15,6 +16,30 @@ export function CheckLogins({ machineId, connected }: { machineId: string; conne
         {Icon.sync}
         Check logins
       </button>
+    </form>
+  );
+}
+
+/**
+ * Update the owner's Agent now (ADR 0007). The Gateway closes its link; the
+ * Agent reconnects and takes the newest bundle once no Node runs. The button
+ * goes away when the version matches, so the page only polls after a click.
+ */
+export function UpdateAgent({ machineId, latest }: { machineId: string; latest: string }) {
+  const [state, action, pending] = useActionState<UpdateFormState, FormData>(updateAgentAction, { error: null, asked: false });
+  return (
+    <form action={action} className="row" style={{ gap: 6 }} data-testid="machine-update-agent">
+      <input type="hidden" name="machineId" value={machineId} />
+      <button type="submit" className="btn sm" disabled={pending || state.asked} title={`Update the Agent to ${latest} now, instead of at its next connect`}>
+        {pending ? Icon.spin : Icon.download}
+        {state.asked ? "Updating…" : "Update agent"}
+      </button>
+      {state.asked && (
+        <span className="faint small" role="status">
+          Asked the Agent. It updates once no Node is running.
+        </span>
+      )}
+      {state.asked && <AutoRefresh everyMs={5000} />}
     </form>
   );
 }

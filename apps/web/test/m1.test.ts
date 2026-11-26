@@ -20,6 +20,7 @@ import {
   removeMachine,
   setMyMachineSettings,
   unpairMyMachine,
+  updateMyAgent,
   viewMachine,
   viewMachines,
 } from "../src/server/machines";
@@ -140,6 +141,16 @@ describe("Machines (ADR 0006)", () => {
     expect(await checkMyLogins(deps, bob, machine.id)).toBe("not-found");
     expect(await checkMyLogins(deps, ann, machine.id)).toEqual({ ok: true });
     expect(commands).toEqual([{ type: "machine.checkLogins", machineId: machine.id }]);
+  });
+
+  it("Update agent asks the Gateway to close the Agent's link, for the owner only", async () => {
+    const ann = await memberRow(db, "ann@example.com");
+    const bob = await memberRow(db, "bob@example.com");
+    const machine = await machineRow(db, ann.id);
+    expect(await updateMyAgent(deps, bob, machine.id)).toBe("not-found");
+    expect(commands).toEqual([]);
+    expect(await updateMyAgent(deps, ann, machine.id)).toEqual({ ok: true });
+    expect(commands).toEqual([{ type: "machine.updateAgent", machineId: machine.id }]);
   });
 
   it("Unpair stops the token and tells the Gateway; the Machine and its Slots stay", async () => {

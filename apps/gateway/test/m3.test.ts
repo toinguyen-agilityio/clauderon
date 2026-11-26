@@ -438,6 +438,16 @@ describe("Interrupted and resilience (spec M3 §6)", () => {
     expect(stored!.connected).toBe(false);
   });
 
+  it("ADR 0007: Update agent closes the Agent's link with a close it reconnects after, and interrupts nothing", async () => {
+    const { agent, flush, start, gateway, machine } = await setup();
+    scriptPlanAndDeliver(agent, { hold: holdCode });
+    const [runId] = await start([0], "basic-ticket-delivery");
+    await gateway.machines.command({ type: "machine.updateAgent", machineId: machine.id });
+    await flush();
+    expect(agent.closeCode).toBe(4408);
+    expect(await getRun(db, runId!)).toMatchObject({ state: "running" });
+  });
+
   it("T3-11 (A5): restart the Gateway mid-Run; the Agent reconnects within 30 s listing the Attempt as live; the Run succeeds", async () => {
     const { agent, flush, start, gatewaySide } = await setup();
     scriptPlanAndDeliver(agent, { hold: holdCode });
