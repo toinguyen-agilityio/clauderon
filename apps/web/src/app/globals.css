@@ -170,6 +170,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .signin { min-height: 100%; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
 .signin-card { width: min(420px, 100%); display: flex; flex-direction: column; gap: 20px; padding: 28px; }
 .signin-card .brand { padding: 0; }
+/* .brand-name defaults to the dark sidebar's light text; on a white card it needs the heading color. */
+.signin-card .brand-name { color: var(--heading); }
 /* Sign-in page: a dark pitch with an example Run on the left, the form on the right. */
 .signin-split { min-height: 100%; display: grid; grid-template-columns: minmax(0, 52fr) minmax(0, 48fr); }
 .signin-hero { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 48px; padding: 48px 64px 40px; background: radial-gradient(600px 480px at 80% 8%, rgba(17, 105, 122, 0.45), transparent 70%), radial-gradient(520px 420px at 0% 100%, rgba(17, 105, 122, 0.25), transparent 70%), var(--side-bg); color: var(--side-fg); }
