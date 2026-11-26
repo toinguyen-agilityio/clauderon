@@ -832,7 +832,11 @@ describe("Cancel (RUN-8, MEM-2)", () => {
     expect(await cancelRunAs(deps, bob, runId)).toEqual({ ok: true });
     expect((await db.select().from(schema.run))[0]).toMatchObject({ state: "cancelled", endedAt: deps.clock.now() });
     expect((await db.select().from(schema.attempt))[0]).toMatchObject({ id: attempt!.id, state: "cancelled" });
-    expect(commands).toEqual([{ type: "run.cancel", machineId: machine.id, runId, attemptIds: [attempt!.id] }]);
+    expect(commands).toEqual([
+      { type: "run.cancel", machineId: machine.id, runId, attemptIds: [attempt!.id] },
+      // Ann started it: she is told Bob cancelled it (#198).
+      { type: "member.notify", memberEmail: "ann@example.com", kind: "cancelled", runId, actorEmail: "bob@example.com" },
+    ]);
     expect(await actions()).toContain("run.cancel");
 
     expect(await cancelRunAs(deps, ann, runId)).toEqual({ ok: false, reason: "ended" });

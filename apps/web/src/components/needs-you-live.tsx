@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { useGatewaySocket } from "./gateway-socket";
+import { useShellSocket } from "./shell-socket";
 
 type Live = { count: number; changes: number };
 
@@ -10,26 +10,24 @@ const LiveNeeds = createContext<Live | null>(null);
 
 /**
  * The Needs you count the shell shows: the server's value at first, then
- * `load` again on every `needs.changed` from the Gateway's `/browser` socket,
+ * `load` again on every `needs.changed` from the shell's `/browser` socket,
  * and every `everyMs` while the tab is visible as a fallback for when the
  * socket is down (or an older Gateway never sends the event).
  */
 export function NeedsYouProvider({
   initial,
   load,
-  gatewayUrl,
   everyMs = 15000,
   children,
 }: {
   initial: number;
   load: () => Promise<number>;
-  gatewayUrl: string;
   everyMs?: number;
   children: ReactNode;
 }) {
   const [count, setCount] = useState(initial);
   const [changes, setChanges] = useState(0);
-  const socket = useGatewaySocket(gatewayUrl);
+  const socket = useShellSocket();
   useEffect(() => setCount(initial), [initial]);
   useEffect(() => {
     const timer = setInterval(() => {

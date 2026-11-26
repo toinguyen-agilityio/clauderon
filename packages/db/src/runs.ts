@@ -621,3 +621,51 @@ export async function getRunView(db: Db, runId: string) {
     : [];
   return { ...row, title: row.ticket?.title ?? row.run.title ?? "Run", snapshot: row.run.flowSnapshot as FlowSnapshot, machineOwner: machineOwner ?? null, attempts: await attemptsOfRun(db, runId) };
 }
+
+/**
+ * What a notification about a Run says (#198): its Starter, Ticket, Flow and
+ * one Node. `flowNodeId` names the Node; undefined means the latest Attempt's
+ * Node, null means none.
+ */
+export async function runNotice(db: Db, runId: string, flowNodeId?: string | null) {
+  if (!/^[0-9a-f-]{36}$/i.test(runId)) return null;
+  const [row] = await db
+    .select({
+      starterEmail: member.email,
+      projectId: runProjectId,
+      ticketNumber: ticket.number,
+      title: sql<string>`coalesce(${ticket.title}, ${run.title}, 'Run')`,
+      snapshot: run.flowSnapshot,
+    })
+    .from(run)
+    .leftJoin(ticket, eq(ticket.id, run.ticketId))
+    .innerJoin(member, eq(member.id, run.starterMemberId))
+    .where(eq(run.id, runId));
+  if (!row) return null;
+  let nodeId = flowNodeId;
+  if (nodeId === undefined) {
+    const [latest] = await db
+      .select({ flowNodeId: attempt.flowNodeId })
+      .from(attempt)
+      .where(eq(attempt.runId, runId))
+      .orderBy(desc(attempt.startedAt), desc(attempt.createdAt))
+      .limit(1);
+    nodeId = latest?.flowNodeId ?? null;
+  }
+  const snapshot = row.snapshot as FlowSnapshot;
+  const node = nodeId ? snapshot.nodes.find((n) => n.id === nodeId) : undefined;
+  return {
+    starterEmail: row.starterEmail,
+    projectId: row.projectId,
+    ticketNumber: row.ticketNumber,
+    ticketTitle: row.title,
+    flowName: snapshot.name,
+    nodeName: node?.name ?? null,
+  };
+}
+
+/** A Member's display name by email, or the email when there is no name. */
+export async function memberLabel(db: Db, email: string): Promise<string> {
+  const [row] = await db.select({ name: member.name }).from(member).where(eq(member.email, email));
+  return row?.name ?? email;
+}

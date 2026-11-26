@@ -52,3 +52,19 @@ describe("needs.changed Gateway command (#197)", () => {
     expect(parseGatewayCommand(JSON.stringify({ type: "unknown" }))).toBeNull();
   });
 });
+
+describe("member.notify Gateway command (#198)", () => {
+  const command = { type: "member.notify", memberEmail: "ann@example.com", kind: "approved", runId: "r-1", actorEmail: "bo@example.com" };
+
+  it("parses without a machineId, with or without the Node", () => {
+    expect(parseGatewayCommand(JSON.stringify(command))).toEqual(command);
+    expect(parseGatewayCommand(JSON.stringify({ ...command, flowNodeId: "n-1" }))).toEqual({ ...command, flowNodeId: "n-1" });
+  });
+
+  it("drops an unknown kind or a missing field", () => {
+    expect(parseGatewayCommand(JSON.stringify({ ...command, kind: "succeeded" }))).toBeNull();
+    expect(parseGatewayCommand(JSON.stringify({ ...command, memberEmail: undefined }))).toBeNull();
+    expect(parseGatewayCommand(JSON.stringify({ ...command, actorEmail: 1 }))).toBeNull();
+    expect(parseGatewayCommand(JSON.stringify({ ...command, flowNodeId: 2 }))).toBeNull();
+  });
+});

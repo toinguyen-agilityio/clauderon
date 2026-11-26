@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ago } from "../../../components/format";
 import { Icon } from "../../../components/icons";
+import { NotificationsToggle } from "../../../components/notifications-live";
 import { viewGitHubAccess, type GitHubAccessView } from "../../../server/github-access";
 import { canManageProjects, viewProjects } from "../../../server/projects";
 import { deps, requireMember } from "../../../server/runtime";
@@ -66,6 +67,7 @@ export default async function ProjectsPage() {
           <h1>Projects</h1>
           <p className="sub">Each Project is one GitHub repository and its base branch. Its open issues show up as Tickets, read from GitHub in the background.</p>
         </div>
+        <NotificationsToggle />
       </div>
 
       <GitHubAccess access={access} canManage={canManage} now={now} />

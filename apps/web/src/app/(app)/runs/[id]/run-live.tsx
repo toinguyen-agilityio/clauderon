@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { isEntryKind, type FlowSnapshot } from "@clauderon/core";
 import { duration, formatTime, tokens } from "../../../../components/format";
-import { useGatewaySocket } from "../../../../components/gateway-socket";
+import { useShellSocket } from "../../../../components/shell-socket";
 import { HumanForm } from "../../../../components/human-form";
 import { OutputValue } from "../../../../components/output-value";
 import { MarkdownBody, MarkdownText } from "../../../../components/markdown-text";
@@ -42,7 +42,6 @@ function classify(line: Line): string {
  * backfilled from storage, then streamed.
  */
 export function RunLive({
-  gatewayUrl,
   runId,
   snapshot,
   timeline,
@@ -50,7 +49,6 @@ export function RunLive({
   retryable,
   retryContext,
 }: {
-  gatewayUrl: string;
   runId: string;
   /** The Flow as it was when the Run started, drawn above the Node's details. */
   snapshot: FlowSnapshot;
@@ -62,7 +60,7 @@ export function RunLive({
   retryContext: string | null;
 }) {
   const router = useRouter();
-  const socket = useGatewaySocket(gatewayUrl);
+  const socket = useShellSocket();
   const currentId = currentNodeId(timeline);
   const current = timeline.find((n) => n.id === currentId);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);

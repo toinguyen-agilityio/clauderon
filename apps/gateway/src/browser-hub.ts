@@ -1,6 +1,6 @@
 import type { Clock } from "@clauderon/core";
 import { loadSessionById, normalizeEmail, type Db, type Member } from "@clauderon/db";
-import { CloseCode, verifyGatewayTicket, type LinkSocket } from "@clauderon/protocol";
+import { CloseCode, verifyGatewayTicket, type LinkSocket, type NotifyEvent } from "@clauderon/protocol";
 import type { FlowDrafts } from "./flow-drafts";
 import type { LiveHub } from "./live-hub";
 
@@ -87,6 +87,12 @@ export class BrowserHub {
     if (!set) return;
     this.sockets.delete(normalized);
     for (const socket of set) socket.close(CloseCode.Revoked, "access removed");
+  }
+
+  /** Sends a `notify` to every open socket of one Member, and no one else (#198). */
+  notifyMember(email: string, event: NotifyEvent): void {
+    const text = JSON.stringify(event);
+    for (const socket of this.sockets.get(normalizeEmail(email)) ?? []) socket.send(text);
   }
 
   count(email: string): number {
