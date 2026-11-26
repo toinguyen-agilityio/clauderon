@@ -170,6 +170,38 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .signin { min-height: 100%; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
 .signin-card { width: min(420px, 100%); display: flex; flex-direction: column; gap: 20px; padding: 28px; }
 .signin-card .brand { padding: 0; }
+/* Sign-in page: a dark pitch with an example Run on the left, the form on the right. */
+.signin-split { min-height: 100%; display: grid; grid-template-columns: minmax(0, 52fr) minmax(0, 48fr); }
+.signin-hero { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 48px; padding: 48px 64px 40px; background: radial-gradient(600px 480px at 80% 8%, rgba(17, 105, 122, 0.45), transparent 70%), radial-gradient(520px 420px at 0% 100%, rgba(17, 105, 122, 0.25), transparent 70%), var(--side-bg); color: var(--side-fg); }
+.signin-hero .brand { padding: 0; }
+.signin-hero .brand-sub { color: var(--side-fg3); }
+.signin-pitch { margin-top: auto; max-width: 620px; }
+.signin-pitch h1 { margin: 0 0 20px; font-family: var(--font-display); font-size: clamp(34px, 3.6vw, 52px); line-height: 1.06; letter-spacing: -0.03em; font-weight: 700; color: var(--side-fg); }
+.signin-pitch p { margin: 0; font-size: 17px; line-height: 1.6; color: var(--side-fg2); }
+.signin-steps { list-style: none; margin: 0; padding: 0; max-width: 504px; display: flex; flex-direction: column; gap: 22px; }
+.signin-steps li { position: relative; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 16px; }
+.signin-steps li:not(:last-child)::before { content: ""; position: absolute; left: 16px; top: 34px; height: 22px; width: 2px; background: var(--side-line); }
+.signin-steps li.done:not(:last-child)::before { background: #2e9e65; }
+.signin-steps .dot { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; border: 2px solid rgba(241, 246, 244, 0.28); color: #fff; }
+.signin-steps .dot svg { width: 14px; height: 14px; }
+.signin-steps .done .dot { background: #2e9e65; border-color: #2e9e65; }
+.signin-steps .running .dot { border-color: var(--yellow); border-top-color: transparent; box-shadow: 0 0 0 5px rgba(255, 200, 1, 0.12); animation: spin 1.2s linear infinite; }
+.signin-steps .name { font-weight: 600; font-size: 16px; }
+.signin-steps .note { font-family: var(--font-mono); font-size: 13px; color: var(--side-fg3); }
+.signin-steps .running .note { color: var(--yellow); }
+.signin-foot { margin: auto 0 0; font-size: 13px; color: var(--side-fg3); }
+.signin-main { display: grid; place-items: center; padding: 48px max(24px, env(safe-area-inset-right, 0px)) 48px 24px; background: var(--panel); }
+.signin-panel { width: min(480px, 100%); display: flex; flex-direction: column; gap: 28px; }
+.signin-panel .signin-copy h1 { font-size: 34px; }
+.signin-panel .signin-copy p { font-size: 15px; line-height: 1.6; }
+@media (max-width: 900px) {
+  .signin-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .signin-main { place-items: start center; padding-top: 32px; }
+  .signin-hero { gap: 28px; padding: 28px 24px; }
+  .signin-pitch { margin-top: 0; }
+  .signin-steps, .signin-foot { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .signin-steps .running .dot { animation: none; } }
 
 @media (max-width: 860px) {
   .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
