@@ -2,6 +2,8 @@ import {
   RUN_STATES,
   contextSize,
   findWaste,
+  attemptTokens,
+  freshInput,
   historyEntry,
   rereads,
   resultBytesOf,
@@ -400,7 +402,8 @@ export async function viewRun(deps: AppDeps, runId: string) {
         endedAt: a.endedAt,
         error: a.error,
         exitCode: a.exitCode,
-        inputTokens: a.inputTokens,
+        // Without cache read, as every token total on the Run page (`TokenSplit`).
+        inputTokens: a.inputTokens === null ? null : freshInput(a),
         outputTokens: a.outputTokens,
         inspector: inspectorOf(a, histories.get(id) ?? []),
         retryContext: a.retryContext ? renderRetryContext(a.retryContext as RetryContext) : null,
@@ -421,7 +424,7 @@ export async function viewRun(deps: AppDeps, runId: string) {
     };
   });
 
-  const tokens = run.attempts.reduce((sum, a) => sum + (a.inputTokens ?? 0) + (a.outputTokens ?? 0), 0);
+  const tokens = run.attempts.reduce((sum, a) => sum + (attemptTokens(a) ?? 0), 0);
   const durationMs = run.run.startedAt ? (run.run.endedAt ?? deps.clock.now()).getTime() - run.run.startedAt.getTime() : null;
   return {
     ...run,
@@ -457,7 +460,7 @@ type InspectedAttempt = { inputTokens: number | null; outputTokens: number | nul
 export function inspectorOf(a: InspectedAttempt, history: ReturnType<typeof historyEntry>[]) {
   const turns = (a.turns ?? []).map(withCalls);
   const findings = findWaste(turns);
-  const totalsOnly = a.inputTokens !== null || a.outputTokens !== null ? { input: a.inputTokens ?? 0, output: a.outputTokens ?? 0, cacheCreated: a.cacheCreationTokens, cacheRead: a.cacheReadTokens } : null;
+  const totalsOnly = a.inputTokens !== null || a.outputTokens !== null ? { input: freshInput(a), output: a.outputTokens ?? 0, cacheCreated: a.cacheCreationTokens, cacheRead: a.cacheReadTokens } : null;
   return {
     hasTurns: turns.length > 0,
     totalsOnly,

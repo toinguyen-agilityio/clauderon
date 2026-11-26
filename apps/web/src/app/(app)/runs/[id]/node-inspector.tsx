@@ -66,9 +66,8 @@ export function NodeInspector({ inspector, attemptState }: { inspector: Inspecte
   return (
     <div className="stack" style={{ gap: 18 }} data-testid="inspector">
       <div className="stats">
-        <Stat label="Total tokens" value={tokens(summary.total)} />
+        <Stat label="Total tokens" value={tokens(summary.total)} sub="fresh + output, cache read not counted" />
         <Stat label="Fresh" value={tokens(summary.fresh)} sub="new input + cache created" />
-        <Stat label="Cache read" value={tokens(summary.cacheRead)} />
         <Stat label="Output" value={tokens(summary.output)} />
         <Stat label="Turns" value={String(summary.turns)} sub={`${summary.toolCalls} tool calls`} />
       </div>
