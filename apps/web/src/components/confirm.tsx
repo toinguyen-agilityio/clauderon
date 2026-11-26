@@ -34,7 +34,7 @@ export function Confirm({ trigger, title, confirm, pendingLabel, action, fields,
       <button type="button" className="btn sm danger" onClick={() => ref.current?.showModal()}>
         {trigger}
       </button>
-      <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby={titleId}>
+      <dialog ref={ref} {...closeOnBackdrop} className="modal danger" aria-labelledby={titleId}>
         <form action={formAction} className="modal-in">
           <div className="modal-h">
             <h2 id={titleId}>{title}</h2>
