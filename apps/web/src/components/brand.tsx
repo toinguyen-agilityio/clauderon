@@ -4,7 +4,7 @@ export function Brand() {
       <div className="brand-mark">C/</div>
       <div>
         <div className="brand-name">Clauderon</div>
-        <div className="brand-sub">issues to pull requests</div>
+        <div className="brand-sub">ideas to delivery</div>
       </div>
     </div>
   );
