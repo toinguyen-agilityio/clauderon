@@ -1,8 +1,14 @@
-import { agentSupportsFlowDrafts, buildFlowFile, isMachineReady, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind, isEntryKind, type OutputType } from "@clauderon/core";
+import { agentSupportsFlowDrafts, buildFlowFile, describeChanges, maskSnapshot, nodeName, type FlowVersionKind, type VersionSnapshot, isMachineReady, parseFlowFile, topologicalOrder, validateFlow, type Flow, type LibraryNode, type NodeKind, isEntryKind, type OutputType } from "@clauderon/core";
 import {
   cloneFlow,
+  cloneFlowVersion,
   createFlow,
   deleteFlow,
+  flowExists,
+  getFlowVersion,
+  listDeletedFlows,
+  listFlowHistory,
+  restoreFlowVersion,
   importFlow,
   listLibraryRows,
   flowLocks,
@@ -95,7 +101,7 @@ export type CloneFlowResult = { ok: true; flowId: string; name: string } | { ok:
 export async function cloneMyFlow(deps: AppDeps, viewer: Viewer, flowId: string): Promise<CloneFlowResult> {
   const copy = await cloneFlow(deps.db, flowId, viewer.email, deps.clock.now());
   if (!copy) return { ok: false, error: "That Flow no longer exists." };
-  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: copy.id, detail: { clonedFrom: flowId } });
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: copy.id, detail: { clonedFrom: flowId, versionId: copy.versionId } });
   return { ok: true, flowId: copy.id, name: copy.name };
 }
 
@@ -111,7 +117,7 @@ export async function createMyFlow(deps: AppDeps, viewer: Viewer, rawName: strin
   const names = (await listFlowRows(deps.db)).map((f) => f.name);
   const name = names.some((x) => x.toLowerCase() === wanted.toLowerCase()) ? copyName(wanted, names) : wanted;
   const created = await createFlow(deps.db, name, viewer.email, deps.clock.now());
-  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: created.id, detail: { name } });
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: created.id, detail: { name, versionId: created.versionId } });
   return { ok: true, flowId: created.id, name: created.name };
 }
 
@@ -119,7 +125,7 @@ export type DeleteFlowOutcome = { ok: true } | { ok: false; error: string };
 
 /** Delete (FLW-9): any Flow, samples included; refused for locked Flows; ended Runs stay in the history. Audit `flow.delete`. */
 export async function deleteMyFlow(deps: AppDeps, viewer: Viewer, flowId: string): Promise<DeleteFlowOutcome> {
-  const result = await deleteFlow(deps.db, flowId);
+  const result = await deleteFlow(deps.db, flowId, viewer.email, deps.clock.now());
   if (!result.ok) {
     switch (result.reason) {
       case "not-found":
@@ -128,7 +134,7 @@ export async function deleteMyFlow(deps: AppDeps, viewer: Viewer, flowId: string
         return { ok: false, error: `Locked by Run ${result.lock.runId} (${result.lock.state.replaceAll("_", " ")}). It can be deleted when that Run ends.` };
     }
   }
-  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.delete", subjectType: "flow", subjectId: flowId, detail: { name: result.name } });
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.delete", subjectType: "flow", subjectId: flowId, detail: { name: result.name, versionId: result.versionId } });
   return { ok: true };
 }
 
@@ -211,7 +217,7 @@ export async function saveMyFlow(deps: AppDeps, viewer: Viewer, flowId: string, 
     action: "flow.update",
     subjectType: "flow",
     subjectId: flowId,
-    detail: { name: graph.name, nodes: graph.nodes.length, edges: graph.edges.length, problems },
+    detail: { name: graph.name, nodes: graph.nodes.length, edges: graph.edges.length, problems, ...(result.versionId ? { versionId: result.versionId } : {}) },
   });
   return { ok: true, problems };
 }
@@ -268,7 +274,7 @@ export async function importMyFlow(deps: AppDeps, viewer: Viewer, text: string):
   const name = flowNames.some((x) => x.toLowerCase() === parsed.flow.name.toLowerCase()) ? copyName(parsed.flow.name, flowNames) : parsed.flow.name;
 
   const created = await importFlow(deps.db, { name, nodes, placements: parsed.flow.placements, edges: parsed.flow.edges }, viewer.email, deps.clock.now());
-  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: created.id, detail: { imported: true, newNodes: created.createdNodes } });
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: created.id, detail: { imported: true, newNodes: created.createdNodes, versionId: created.versionId } });
   return { ok: true, flowId: created.id, name: created.name, createdNodes: created.createdNodes };
 }
 
@@ -281,4 +287,124 @@ export async function flowBuildAvailability(deps: AppDeps, viewer: Viewer): Prom
   if (!isMachineReady(machine)) return { ok: false, reason: "Your Machine is not ready. Open Machines to see why." };
   if (!agentSupportsFlowDrafts(machine.agentVersion)) return { ok: false, reason: "Update your Machine's Agent to build Flows with it." };
   return { ok: true, machine: machine.name ?? machine.hostname ?? "your Machine" };
+}
+
+// Flow history (issue #181): the versions of a Flow, what changed in each, restore and clone.
+
+const KIND_LABEL: Record<FlowVersionKind, string> = {
+  create: "Created",
+  clone: "Cloned",
+  import: "Imported",
+  update: "Edited",
+  restore: "Restored",
+  "library-node": "Library Node changed",
+  delete: "Deleted",
+  baseline: "Existing before history",
+};
+
+export type HistoryEntryView = {
+  id: string;
+  seq: number;
+  kind: FlowVersionKind;
+  label: string;
+  actorEmail: string;
+  actorName: string | null;
+  at: Date;
+  /** What changed, in plain words. */
+  summary: string[];
+  /** For a clone or an import, where it came from; for a restore, the version restored. */
+  clonedFrom: string | null;
+  restoredFromVersionId: string | null;
+};
+
+export type FlowHistoryView = {
+  flowId: string;
+  /** The Flow's name now, or its last name when it is deleted. */
+  name: string;
+  deleted: boolean;
+  lock: FlowLock | null;
+  entries: HistoryEntryView[];
+};
+
+/** A Flow's history, newest first; also for a deleted Flow. Null when no version of this id was ever recorded. */
+export async function viewFlowHistory(deps: AppDeps, flowId: string): Promise<FlowHistoryView | null> {
+  const [list, exists] = await Promise.all([listFlowHistory(deps.db, flowId), flowExists(deps.db, flowId)]);
+  if (list.length === 0) return null;
+  const lock = exists ? ((await flowLocks(deps.db, [flowId])).get(flowId) ?? null) : null;
+  return {
+    flowId,
+    name: list[0]!.flowName,
+    deleted: !exists,
+    lock,
+    entries: list.map((v) => ({
+      id: v.id,
+      seq: v.seq,
+      kind: v.kind,
+      label: KIND_LABEL[v.kind],
+      actorEmail: v.actorEmail,
+      actorName: v.actorName,
+      at: v.at,
+      summary: v.kind === "baseline" || v.summary.length > 0 ? describeChanges(v.summary) : [],
+      clonedFrom: v.detail.clonedFrom ?? null,
+      restoredFromVersionId: v.detail.restoredFromVersionId ?? null,
+    })),
+  };
+}
+
+export type SnapshotView = { name: string; nodes: { name: string; kind: string; instructions: string; extraInstructions: string }[]; edges: string[] };
+
+/** A version's graph as lists a page can show; masked (NFR-1). */
+function snapshotView(raw: VersionSnapshot): SnapshotView {
+  const snapshot = maskSnapshot(raw);
+  const byId = new Map(snapshot.nodes.map((n) => [n.id, nodeName(n)]));
+  return {
+    name: snapshot.name,
+    nodes: snapshot.nodes.map((n) => ({ name: nodeName(n), kind: n.definition.kind, instructions: n.definition.kind === "command" ? (n.definition.command ?? "") : n.definition.instructions, extraInstructions: n.extraInstructions })),
+    edges: snapshot.edges.map((e) => `${byId.get(e.fromFlowNodeId) ?? "?"} (${e.fromOutput}) → ${byId.get(e.toFlowNodeId) ?? "?"} (${e.toInput})`),
+  };
+}
+
+export type FlowVersionView = { entry: HistoryEntryView; flowName: string; deleted: boolean; lock: FlowLock | null; before: SnapshotView | null; after: SnapshotView };
+
+/** One version with the graph before and after it. */
+export async function viewFlowVersion(deps: AppDeps, flowId: string, versionId: string): Promise<FlowVersionView | null> {
+  const found = await getFlowVersion(deps.db, flowId, versionId);
+  const history = await viewFlowHistory(deps, flowId);
+  const entry = history?.entries.find((e) => e.id === versionId);
+  if (!found || !history || !entry) return null;
+  return { entry, flowName: history.name, deleted: history.deleted, lock: history.lock, before: found.previous ? snapshotView(found.previous.snapshot) : null, after: snapshotView(found.version.snapshot) };
+}
+
+export type DeletedFlowView = { flowId: string; name: string; versionId: string; deletedByEmail: string; deletedByName: string | null; deletedAt: Date };
+
+/** The Deleted Flows view: who deleted each Flow and when; its history stays reachable. */
+export async function viewDeletedFlows(deps: AppDeps): Promise<DeletedFlowView[]> {
+  return listDeletedFlows(deps.db);
+}
+
+export type RestoreOutcome = { ok: true } | { ok: false; error: string };
+
+/** Restore (issue #181): any Member; same lock rule as a save (FLW-7). Audit `flow.restore`. */
+export async function restoreMyFlowVersion(deps: AppDeps, viewer: Viewer, flowId: string, versionId: string): Promise<RestoreOutcome> {
+  const result = await restoreFlowVersion(deps.db, flowId, versionId, viewer.email, deps.clock.now());
+  if (!result.ok) {
+    switch (result.reason) {
+      case "not-found":
+        return { ok: false, error: "That Flow or version no longer exists. To use a deleted Flow, clone it from Deleted Flows." };
+      case "locked":
+        return { ok: false, error: `Locked by Run ${result.lock.runId} (${result.lock.state.replaceAll("_", " ")}). Restore it when that Run ends.` };
+      case "bad-ids":
+        return { ok: false, error: "That version could not be restored. Clone it instead." };
+    }
+  }
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.restore", subjectType: "flow", subjectId: flowId, detail: { restoredFromVersionId: versionId, versionId: result.versionId } });
+  return { ok: true };
+}
+
+/** Clone a version of a deleted Flow into a new Flow (issue #181). Audit `flow.create`. */
+export async function cloneMyDeletedFlow(deps: AppDeps, viewer: Viewer, flowId: string, versionId: string): Promise<CloneFlowResult> {
+  const copy = await cloneFlowVersion(deps.db, flowId, versionId, viewer.email, deps.clock.now());
+  if (!copy.ok) return { ok: false, error: "That version no longer exists." };
+  await recordAudit(deps.db, { actorEmail: viewer.email, action: "flow.create", subjectType: "flow", subjectId: copy.id, detail: { clonedFrom: flowId, versionId: copy.versionId } });
+  return { ok: true, flowId: copy.id, name: copy.name };
 }

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-/** Size limit of `docs/features.json`, in bytes (about 6,500 tokens). Raise it deliberately. */
-export const MAX_BYTES = 26_000;
+/** Size limit of `docs/features.json`, in bytes (about 6,700 tokens). Raise it deliberately. */
+export const MAX_BYTES = 27_000;
 
 export const STATUSES = ["done", "partial", "not-started", "removed"] as const;
 

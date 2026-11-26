@@ -47,7 +47,7 @@ describe("seedSamples", () => {
     expect(changed).toMatchObject({ ok: true });
     const [basic, plan] = await listFlows(db);
     await db.update(schema.flow).set({ name: "Renamed" }).where(eq(schema.flow.id, plan!.id));
-    expect(await deleteFlow(db, basic!.id)).toMatchObject({ ok: true });
+    expect(await deleteFlow(db, basic!.id, "ann@example.com", new Date())).toMatchObject({ ok: true });
 
     await seedSamples(db);
     const [kept] = await db.select().from(schema.node).where(eq(schema.node.slug, "draft-a-plan"));

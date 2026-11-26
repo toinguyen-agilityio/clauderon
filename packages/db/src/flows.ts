@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { NODE_KINDS, OUTPUT_TYPES, type Flow, type NodeDefinition, type FlowSnapshot, type LibraryNode, type NodeInput, type NodeOutput } from "@clauderon/core";
 import type { Db } from "./client";
+import { recordFlowVersion } from "./flow-history";
 import { flow, flowEdge, flowNode, node, run } from "./schema";
 
 const isOutputType = (t: string): t is NodeInput["type"] => (OUTPUT_TYPES as readonly string[]).includes(t);
@@ -117,13 +118,14 @@ export async function listFlowRows(db: Db): Promise<FlowListRow[]> {
  * Flow starts with exactly one (FLW-5). The seeded Ticket Input is preferred;
  * if the library has no Input Node the Flow starts empty.
  */
-export async function createFlow(db: Db, name: string, actorEmail: string, now: Date): Promise<{ id: string; name: string }> {
+export async function createFlow(db: Db, name: string, actorEmail: string, now: Date): Promise<{ id: string; name: string; versionId: string }> {
   return db.transaction(async (tx) => {
     const tickets = await tx.select({ id: node.id, slug: node.slug }).from(node).where(inArray(node.kind, ["input", "ticket"])).orderBy(asc(node.createdAt));
     const ticket = tickets.find((t) => t.slug === "ticket") ?? tickets[0];
     const [created] = await tx.insert(flow).values({ name, isSample: false, updatedByEmail: actorEmail, updatedAt: now }).returning();
     if (ticket) await tx.insert(flowNode).values({ flowId: created!.id, nodeId: ticket.id, x: 0, y: 0 });
-    return { id: created!.id, name: created!.name };
+    const version = await recordFlowVersion(tx, { flowId: created!.id, kind: "create", actorEmail, now });
+    return { id: created!.id, name: created!.name, versionId: version!.id };
   });
 }
 
@@ -138,7 +140,7 @@ export function copyName(name: string, taken: ReadonlySet<string>): string {
  * Copies a Flow, its placements and edges into a new non-sample Flow named
  * `<name> (copy)`, or `(copy 2)`, `(copy 3)`… when that is taken (FLW-8). Library Nodes are shared, not copied.
  */
-export async function cloneFlow(db: Db, flowId: string, actorEmail: string, now: Date): Promise<{ id: string; name: string } | null> {
+export async function cloneFlow(db: Db, flowId: string, actorEmail: string, now: Date): Promise<{ id: string; name: string; versionId: string } | null> {
   return db.transaction(async (tx) => {
     const [source] = await tx.select().from(flow).where(eq(flow.id, flowId));
     if (!source) return null;
@@ -174,12 +176,13 @@ export async function cloneFlow(db: Db, flowId: string, actorEmail: string, now:
         toInput: e.toInput,
       });
     }
-    return { id: copy!.id, name: copy!.name };
+    const version = await recordFlowVersion(tx, { flowId: copy!.id, kind: "clone", actorEmail, now, detail: { clonedFrom: source.id } });
+    return { id: copy!.id, name: copy!.name, versionId: version!.id };
   });
 }
 
 export type DeleteFlowResult =
-  | { ok: true; name: string }
+  | { ok: true; name: string; versionId: string }
   | { ok: false; reason: "not-found" }
   | { ok: false; reason: "locked"; lock: FlowLock };
 
@@ -188,7 +191,7 @@ export type DeleteFlowResult =
  * Active Run (FLW-7). Checked here, not only in the page. Ended Runs stay in the
  * history: their `flow_id` becomes null and they keep their Flow snapshot.
  */
-export async function deleteFlow(db: Db, flowId: string): Promise<DeleteFlowResult> {
+export async function deleteFlow(db: Db, flowId: string, actorEmail: string, now: Date): Promise<DeleteFlowResult> {
   // The row lock makes a Start of this Flow (`startBatch` locks it too) wait for the delete, or
   // the delete wait for the Start and then see its Run: never a Run whose Flow vanishes under it.
   return db.transaction(async (tx) => {
@@ -196,8 +199,10 @@ export async function deleteFlow(db: Db, flowId: string): Promise<DeleteFlowResu
     if (!row) return { ok: false, reason: "not-found" } as const;
     const lock = (await flowLocks(tx, [flowId])).get(flowId);
     if (lock) return { ok: false, reason: "locked", lock } as const;
+    // The last state goes into the history first: it is what a Member can clone or restore later (issue #181).
+    const version = await recordFlowVersion(tx, { flowId, kind: "delete", actorEmail, now });
     await tx.delete(flow).where(eq(flow.id, flowId));
-    return { ok: true, name: row.name } as const;
+    return { ok: true, name: row.name, versionId: version!.id } as const;
   });
 }
 
@@ -239,7 +244,7 @@ export async function loadFlowDetail(db: Db, flowId: string) {
 }
 
 export type SaveFlowResult =
-  | { ok: true }
+  | { ok: true; /** The version this save recorded; null when nothing changed. */ versionId: string | null }
   | { ok: false; reason: "not-found" | "bad-ids" }
   | { ok: false; reason: "locked"; lock: FlowLock };
 
@@ -286,7 +291,8 @@ export async function saveFlow(db: Db, flowId: string, input: FlowGraphInput, ac
       });
     }
     await tx.update(flow).set({ name: input.name, updatedByEmail: actorEmail, updatedAt: now }).where(eq(flow.id, flowId));
-    return { ok: true };
+    const version = await recordFlowVersion(tx, { flowId, kind: "update", actorEmail, now });
+    return { ok: true, versionId: version?.id ?? null };
   });
 }
 
@@ -302,7 +308,7 @@ export type ImportFlowPlan = {
  * Creates a non-sample Flow from an imported file (issue #98), with any Nodes it needs that the
  * library lacks, in one transaction. Nothing existing is changed: only rows are added.
  */
-export async function importFlow(db: Db, plan: ImportFlowPlan, actorEmail: string, now: Date): Promise<{ id: string; name: string; createdNodes: number }> {
+export async function importFlow(db: Db, plan: ImportFlowPlan, actorEmail: string, now: Date): Promise<{ id: string; name: string; createdNodes: number; versionId: string }> {
   return db.transaction(async (tx) => {
     const nodeIds = new Map<string, string>();
     let createdNodes = 0;
@@ -327,6 +333,7 @@ export async function importFlow(db: Db, plan: ImportFlowPlan, actorEmail: strin
     for (const e of plan.edges) {
       await tx.insert(flowEdge).values({ flowId: created!.id, fromFlowNodeId: placementIds.get(e.from)!, fromOutput: e.output, toFlowNodeId: placementIds.get(e.to)!, toInput: e.input });
     }
-    return { id: created!.id, name: created!.name, createdNodes };
+    const version = await recordFlowVersion(tx, { flowId: created!.id, kind: "import", actorEmail, now });
+    return { id: created!.id, name: created!.name, createdNodes, versionId: version!.id };
   });
 }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { RunInput, Turn } from "@clauderon/core";
+import type { FlowChange, FlowVersionKind, RunInput, Turn, VersionSnapshot } from "@clauderon/core";
 import {
   bigint,
   boolean,
@@ -290,6 +290,29 @@ export const flowEdge = pgTable("flow_edge", {
     .references(() => flowNode.id, { onDelete: "cascade" }),
   toInput: text("to_input").notNull(),
 });
+
+/**
+ * One version of a Flow (issue #181): a full, masked snapshot with a precomputed summary. No foreign
+ * key to `flow`, so the history outlives a deleted Flow. Only the app reads it, never the Gateway.
+ */
+export const flowVersion = pgTable(
+  "flow_version",
+  {
+    id: id(),
+    flowId: uuid("flow_id").notNull(),
+    seq: integer("seq").notNull(),
+    kind: text("kind").$type<FlowVersionKind>().notNull(),
+    actorEmail: text("actor_email").notNull(),
+    at: ts("at").notNull().defaultNow(),
+    flowName: text("flow_name").notNull(),
+    snapshot: jsonb("snapshot").$type<VersionSnapshot>().notNull(),
+    summary: jsonb("summary").$type<FlowChange[]>().notNull().default([]),
+    detail: jsonb("detail").$type<FlowVersionDetail>().notNull().default({}),
+  },
+  (t) => [uniqueIndex("flow_version_flow_seq_idx").on(t.flowId, t.seq), index("flow_version_kind_at_idx").on(t.kind, t.at)],
+);
+
+export type FlowVersionDetail = { clonedFrom?: string; restoredFromVersionId?: string; nodeId?: string; nodeName?: string };
 
 export const batch = pgTable("batch", {
   id: id(),

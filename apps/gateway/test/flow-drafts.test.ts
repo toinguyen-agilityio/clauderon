@@ -17,7 +17,7 @@ beforeAll(async () => {
 });
 afterAll(() => test.drop());
 beforeEach(async () => {
-  await db.execute(sql`truncate member, machine, node, flow cascade`);
+  await db.execute(sql`truncate member, machine, node, flow, flow_version cascade`);
   await seedSamples(db);
 });
 

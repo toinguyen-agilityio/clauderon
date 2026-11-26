@@ -12,7 +12,8 @@ type Search = { member?: string; action?: string; page?: string };
 const SUBJECT_LINK: Record<string, (id: string) => string> = {
   run: (id) => `/runs/${id}`,
   machine: (id) => `/machines/${id}`,
-  flow: (id) => `/flows/${id}`,
+  // A Flow's history also opens for a deleted Flow (issue #181), so the link never goes dead.
+  flow: (id) => `/flows/${id}/history`,
 };
 
 /** One line of an entry's detail: its fields, without nesting. */

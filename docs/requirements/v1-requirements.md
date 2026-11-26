@@ -195,6 +195,7 @@ Priority: **Must** / **Should** / **Could**.
 | FLW-8 | Seed the sample Nodes and Flows below. Samples are edited and deleted like any Flow or Node (still subject to FLW-7 and FLW-10) and can be cloned. Seeding again only adds the samples that are missing; it never overwrites a Member's changes. | Must |
 | FLW-9 | Any Member can create a new Flow (it starts with the Ticket Input Node placed) and edit or delete any Flow or library Node, samples included; every change is recorded in the audit log. | Must |
 | FLW-10 | A library Node cannot be edited while a Flow that uses it is locked. Editing a library Node changes every Flow that uses it. | Must |
+| FLW-11 | Each Flow has a History tab listing its changes, newest first: created, cloned or imported, each edit, each restore and each change to a library Node it uses, with who and when. An edit says what changed in plain words (Node added or removed, instructions edited, edge added, removed or rewired, Flow renamed, layout changed) and opens to the Flow's graph before and after. Deleted Flows are listed in a Deleted Flows view with who deleted them and when. A Member can restore a version as the current Flow (still refused while an Active Run locks it, FLW-7) or clone a version as a new Flow. Versions are full snapshots with known token patterns masked (NFR-1), kept forever (ADR 0012). | Should |
 
 Output Types for v1: `issue`, `plan`, `branch`, `test-result`, `pull-request`, `summary`, `screenshot`.
 

@@ -713,6 +713,9 @@ export function FlowEditor({ data, notice }: { data: EditorData; notice?: ReactN
               <span>Start from Tickets</span>
             </Link>
           )}
+          <Link className="fe-btn" href={`/flows/${data.flow.id}/history`} title="Who changed this Flow, what changed, and restore an earlier version.">
+            <span>History</span>
+          </Link>
           {!readOnly && (
             <button type="button" className="fe-btn primary" disabled={!canSave} onClick={() => void save()} title={`Save (${mod}S)`}>
               {FIcon.save}
