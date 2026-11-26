@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Avatar } from "../../../../components/brand";
 import { ago, duration, formatTime, tokens } from "../../../../components/format";
 import { Icon } from "../../../../components/icons";
-import { StatePill } from "../../../../components/state-pill";
+import { runStateLook, StatePill } from "../../../../components/state-pill";
 import { viewRun } from "../../../../server/runs";
 import { deps, requireMember } from "../../../../server/runtime";
 import { DISK_ADVICE, diskFree } from "../../machines/machine-parts";
@@ -34,73 +34,175 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const claudeFailed = /^Claude Code exited/.test(r.failureReason ?? "");
   const canSwitchClaude = r.state === "failed" && failedAt?.kind === "agent" && claudeFailed && run.machineOwnerId === member.id;
 
+  const [tone] = runStateLook(r.state);
+  const done = run.timeline.filter((n) => n.state === "succeeded").length;
+  const prLabel = r.pullRequestNumber ? `#${r.pullRequestNumber}` : "Pull request";
+
+  // The Run's state in a sentence, with what to do next: the strip along the bottom of the header.
+  let verdict: { tone: string; body: React.ReactNode } | null = null;
+  if (r.state === "failed")
+    verdict = {
+      tone: "fail",
+      body: (
+        <>
+          <p>
+            <b>Failed{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
+          </p>
+          <p className="small">The Run stays Active and keeps its worktree, but frees its Slot. Pick a Node and use Retry from here, or Cancel it to end it for good.</p>
+          {canSwitchClaude && (
+            <p className="small muted" data-testid="switch-claude">
+              Out of Claude usage, or signed in to the wrong account? Run <span className="mono">claude</span> in your own terminal on your Machine and sign in to
+              another account, then Retry from a Node below.
+            </p>
+          )}
+        </>
+      ),
+    };
+  else if (r.state === "interrupted")
+    verdict = {
+      tone: "intr",
+      body: (
+        <>
+          <p>
+            <b>Interrupted{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
+          </p>
+          <p className="small">Nothing is retried automatically. The Run keeps its worktree but not a Slot: Retry from a Node, or Cancel it.</p>
+        </>
+      ),
+    };
+  else if (r.state === "waiting_for_human")
+    verdict = {
+      tone: "wait",
+      body: (
+        <>
+          <p>
+            <b>Waiting for a person{waitingAt ? ` at “${waitingAt.name}”` : ""}</b>
+          </p>
+          <p className="small">Any Member can respond below or from Needs you. The Run keeps its Slot until someone does; there is no timeout.</p>
+        </>
+      ),
+    };
+  else if (r.state === "queued")
+    verdict = {
+      tone: "mute",
+      body: (
+        <>
+          <p>
+            <b>Queued on {machineLabel}</b>
+          </p>
+          <p className="small">Starts first-in, first-out when a Slot frees up and the Machine is online.</p>
+        </>
+      ),
+    };
+  else if (r.state === "running" && !r.branch) verdict = { tone: "info", body: <p>Checking the Machine&apos;s logins and preparing the worktree…</p> };
+  else if (r.state === "cancelled") verdict = { tone: "mute", body: <p><b>Cancelled</b>. The Run ended for good and cannot be retried.</p> };
+  else if (r.state === "succeeded")
+    verdict = {
+      tone: "ok",
+      body: (
+        <p>
+          <b>Succeeded</b>
+          {run.durationMs !== null && ` in ${duration(run.durationMs)}`}
+          {r.pullRequestUrl ? (
+            <>
+              {" · pull request "}
+              <a href={r.pullRequestUrl} target="_blank" rel="noreferrer" className="mono">
+                {prLabel}
+              </a>{" "}
+              {r.pullRequestState === "merged" ? "merged" : "open for review on GitHub"}
+            </>
+          ) : (
+            " · no changes, so no pull request"
+          )}
+        </p>
+      ),
+    };
+
   return (
     <>
-      <div>
-        <nav className="crumbs" aria-label="Breadcrumb">
-          <Link href="/runs">Runs</Link> / <span className="mono">{run.key}</span>
-        </nav>
-        <div className="page-head">
-          <div className="grow">
-            <h1>{run.title}</h1>
-            <div className="row" style={{ marginTop: 8 }}>
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <Link href="/runs">Runs</Link> / <span className="mono">{run.key}</span>
+      </nav>
+
+      <header className={`card run-head t-${tone || "mute"}`}>
+        <div className="run-head-row">
+          <div className="run-head-title">
+            <div className="run-head-tags">
               <StatePill state={r.state} />
               {run.ticket ? (
-                <a className="mono small row" style={{ gap: 4 }} href={run.ticket.url} target="_blank" rel="noreferrer">
+                <a className="run-key" href={run.ticket.url} target="_blank" rel="noreferrer" title="Open the Ticket on GitHub">
                   {run.key} {Icon.external}
                 </a>
               ) : (
-                <span className="mono small">{run.key}</span>
+                <span className="run-key">{run.key}</span>
               )}
-              <span className="faint">·</span>
-              <span className="small">{run.snapshot.name}</span>
-              <span className="faint">·</span>
-              {r.machineId && machineOwner ? (
-                <Link className="small" href={`/machines/${r.machineId}`}>
-                  {machineLabel}
-                </Link>
-              ) : (
-                <span className="small faint">Machine removed</span>
-              )}
-              <span className="faint">·</span>
-              <span className="row" style={{ gap: 6 }}>
-                <Avatar name={run.starter.name} email={run.starter.email} picture={run.starter.pictureUrl} />
-                <span className="small">
-                  started by <b>{run.starter.name ?? run.starter.email}</b> {ago(r.createdAt, now)}
-                </span>
-              </span>
             </div>
+            <h1>{run.title}</h1>
+            <p className="run-head-by">
+              <Avatar name={run.starter.name} email={run.starter.email} picture={run.starter.pictureUrl} />
+              <span>
+                Started by <b>{run.starter.name ?? run.starter.email}</b>{" "}
+                <time dateTime={r.createdAt.toISOString()} title={formatTime(r.createdAt)}>
+                  {ago(r.createdAt, now)}
+                </time>
+                {" on "}
+                {r.machineId && machineOwner ? <Link href={`/machines/${r.machineId}`}>{machineLabel}</Link> : <span className="faint">a removed Machine</span>}
+              </span>
+            </p>
           </div>
-          {active && <CancelRun runId={r.id} running={r.state === "running"} />}
+          {active && (
+            <div className="run-head-actions">
+              <CancelRun runId={r.id} running={r.state === "running"} />
+            </div>
+          )}
         </div>
-      </div>
 
-      {r.state === "failed" && (
-        <div className="banner fail" role="status">
-          <div className="grow">
-            <p>
-              <b>Failed{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
-            </p>
-            <p className="small">The Run stays Active and keeps its worktree, but frees its Slot. Pick a Node and use Retry from here, or Cancel it to end it for good.</p>
-            {canSwitchClaude && (
-              <p className="small muted" style={{ marginTop: 10 }} data-testid="switch-claude">
-                Out of Claude usage, or signed in to the wrong account? Run <span className="mono">claude</span> in your own terminal on your
-                Machine and sign in to another account, then Retry from a Node below.
-              </p>
-            )}
+        <dl className="run-facts">
+          <Fact label="Flow" value={run.snapshot.name} sub={`${done} of ${run.timeline.length} Nodes done`} />
+          <Fact label="Duration" value={<span className="num">{run.durationMs === null ? "—" : duration(run.durationMs)}</span>} sub={runningAt ? `running “${runningAt.name}”` : undefined} />
+          <Fact label="Tokens" value={<span className="num">{run.tokens ? tokens(run.tokens) : "—"}</span>} />
+          {active && (
+            <Fact
+              label="Machine disk"
+              value={<span data-disk={disk.state}>{disk.text}</span>}
+              sub={disk.state === "low" ? "low" : disk.state === "critical" ? "almost full" : undefined}
+            />
+          )}
+          <Fact
+            label="Branch"
+            wide
+            value={
+              r.branch ? (
+                <span className="mono run-branch" title={r.branch}>
+                  {r.branch}
+                </span>
+              ) : (
+                "—"
+              )
+            }
+          />
+          <Fact
+            label="Pull request"
+            value={
+              r.pullRequestUrl ? (
+                <a href={r.pullRequestUrl} target="_blank" rel="noreferrer" className="mono">
+                  {prLabel}
+                </a>
+              ) : (
+                "—"
+              )
+            }
+            sub={r.pullRequestUrl ? (r.pullRequestState ?? undefined) : undefined}
+          />
+        </dl>
+
+        {verdict && (
+          <div className={`run-verdict is-${verdict.tone}`} role="status">
+            {verdict.body}
           </div>
-        </div>
-      )}
-      {r.state === "interrupted" && (
-        <div className="banner intr" role="status">
-          <div className="grow">
-            <p>
-              <b>Interrupted{failedAt ? ` at “${failedAt.name}”` : ""}</b>: {r.failureReason}
-            </p>
-            <p className="small">Nothing is retried automatically. The Run keeps its worktree but not a Slot: Retry from a Node, or Cancel it.</p>
-          </div>
-        </div>
-      )}
+        )}
+      </header>
+
       {active && (disk.state === "low" || disk.state === "critical") && (
         <div className={`banner ${disk.state === "critical" ? "fail" : "wait"}`} role="status" data-testid="disk-banner">
           <div className="grow">
@@ -111,83 +213,8 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
       )}
-      {r.state === "waiting_for_human" && (
-        <div className="banner wait" role="status">
-          <div className="grow">
-            <p>
-              <b>Waiting for a person{waitingAt ? ` at “${waitingAt.name}”` : ""}</b>
-            </p>
-            <p className="small">Any Member can respond below or from Needs you. The Run keeps its Slot until someone does; there is no timeout.</p>
-          </div>
-        </div>
-      )}
-      {r.state === "queued" && (
-        <div className="banner" role="status">
-          <div className="grow">
-            <p>
-              <b>Queued on {machineLabel}</b>
-            </p>
-            <p className="small muted">Starts first-in, first-out when a Slot frees up and the Machine is online.</p>
-          </div>
-        </div>
-      )}
-      {r.state === "running" && !r.branch && (
-        <div className="banner info" role="status">
-          <div className="grow small">Checking the Machine&apos;s logins and preparing the worktree…</div>
-        </div>
-      )}
-      {r.state === "cancelled" && (
-        <div className="banner" role="status">
-          <div className="grow">
-            <p>
-              <b>Cancelled</b>
-            </p>
-          </div>
-        </div>
-      )}
-      {r.state === "succeeded" && (
-        <div className="banner ok" role="status">
-          <div className="grow">
-            <p>
-              <b>Succeeded</b>
-              {run.durationMs !== null && ` in ${duration(run.durationMs)}`}
-              {r.pullRequestUrl ? (
-                <>
-                  {" · pull request "}
-                  <a href={r.pullRequestUrl} target="_blank" rel="noreferrer" className="mono">
-                    #{r.pullRequestNumber}
-                  </a>{" "}
-                  {r.pullRequestState === "merged" ? "merged" : "open for review on GitHub"}
-                </>
-              ) : (
-                " · no changes, so no pull request"
-              )}
-            </p>
-          </div>
-        </div>
-      )}
 
-      <div className="stats">
-        <Stat label="Duration" value={run.durationMs === null ? "—" : duration(run.durationMs)} sub={runningAt ? `running “${runningAt.name}”` : undefined} />
-        <Stat label="Machine disk" value={active ? <span data-disk={disk.state}>{disk.text}</span> : "—"} sub={disk.state === "low" ? "low" : disk.state === "critical" ? "almost full" : undefined} />
-        <Stat label="Tokens" value={run.tokens ? tokens(run.tokens) : "—"} />
-        <Stat label="Branch" value={r.branch ? <span className="mono" style={{ fontSize: 12 }}>{r.branch}</span> : "—"} />
-        <Stat
-          label="Pull request"
-          value={
-            r.pullRequestUrl ? (
-              <a href={r.pullRequestUrl} target="_blank" rel="noreferrer" className="mono">
-                #{r.pullRequestNumber}
-              </a>
-            ) : (
-              "—"
-            )
-          }
-          sub={r.pullRequestState ?? undefined}
-        />
-      </div>
-
-      <div className="card">
+      <section className="card run-body" aria-label="Nodes">
         <RunLive
           runId={r.id}
           snapshot={run.snapshot}
@@ -196,37 +223,56 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           retryable={run.retryable}
           retryContext={run.retryContext ? renderRetryContext(run.retryContext) || null : null}
         />
-      </div>
+      </section>
 
-      <div className="card card-pad stack" style={{ gap: 10 }}>
-        <span className="eyebrow">History</span>
+      <section className="card run-history" aria-labelledby="run-history-h">
+        <h2 id="run-history-h">History</h2>
         {run.history.length === 0 ? (
-          <span className="faint small">Nothing recorded yet.</span>
+          <p className="faint small">Nothing recorded yet.</p>
         ) : (
-          <ul className="history" aria-label="Run history">
+          <ol className="rh" aria-label="Run history">
             {run.history.map((h) => (
-              <li key={h.id}>
-                <span className="faint num nowrap">{formatTime(h.at)}</span>
-                <span className="mono">{h.action}</span>
-                <span>{h.actorEmail}</span>
-                {typeof h.detail.node === "string" && <span className="faint">at “{h.detail.node}”</span>}
-                {typeof h.detail.feedback === "string" && <span className="faint">: {h.detail.feedback}</span>}
-                {typeof h.detail.note === "string" && <span className="faint">: {h.detail.note}</span>}
+              <li key={h.id} className={`rh-item a-${h.action.replace("run.", "")}`}>
+                <time className="rh-time" dateTime={h.at.toISOString()} title={formatTime(h.at)}>
+                  {formatTime(h.at)}
+                </time>
+                <div className="rh-body">
+                  <p>
+                    <b title={h.action}>{ACTION[h.action] ?? h.action}</b>
+                    {typeof h.detail.node === "string" && <> at “{h.detail.node}”</>}
+                    <span className="rh-who"> by {h.actorEmail}</span>
+                  </p>
+                  {typeof h.detail.feedback === "string" && <q className="rh-quote">{h.detail.feedback}</q>}
+                  {typeof h.detail.note === "string" && <q className="rh-quote">{h.detail.note}</q>}
+                </div>
               </li>
             ))}
-          </ul>
+          </ol>
         )}
-      </div>
+      </section>
     </>
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+/** What each recorded action reads as in the History. */
+const ACTION: Record<string, string> = {
+  "run.start": "Started",
+  "run.approve": "Approved",
+  "run.reject": "Rejected",
+  "run.answer": "Answered",
+  "run.continue": "Continued",
+  "run.stop": "Stopped",
+  "run.resume": "Resumed",
+  "run.retry": "Retried",
+  "run.cancel": "Cancelled",
+};
+
+function Fact({ label, value, sub, wide }: { label: string; value: React.ReactNode; sub?: string; wide?: boolean }) {
   return (
-    <div className="card stat">
-      <span className="eyebrow">{label}</span>
-      <span className="v">{value}</span>
-      {sub && <span className="faint small">{sub}</span>}
+    <div className={`run-fact${wide ? " is-wide" : ""}`}>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+      {sub && <dd className="run-fact-sub">{sub}</dd>}
     </div>
   );
 }

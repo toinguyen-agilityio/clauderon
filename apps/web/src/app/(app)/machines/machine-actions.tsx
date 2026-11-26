@@ -75,7 +75,7 @@ function Confirmed({
       <button type="button" className="btn danger" onClick={() => ref.current?.showModal()}>
         {button}
       </button>
-      <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby={`${testId}-title`}>
+      <dialog ref={ref} {...closeOnBackdrop} className="modal danger" aria-labelledby={`${testId}-title`}>
         <form action={action} className="modal-in">
           <div className="modal-h">
             <h2 id={`${testId}-title`}>{title}</h2>

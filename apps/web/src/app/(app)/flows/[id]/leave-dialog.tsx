@@ -15,7 +15,7 @@ export function LeaveDialog({ pending, onStay, onLeave }: { pending: PendingLeav
   }, [pending]);
 
   return (
-    <dialog ref={ref} {...closeOnBackdrop} className="modal" aria-labelledby="leave-flow-title" onClose={onStay}>
+    <dialog ref={ref} {...closeOnBackdrop} className="modal danger" aria-labelledby="leave-flow-title" onClose={onStay}>
       <div className="modal-in">
         <div className="modal-h">
           <h2 id="leave-flow-title">Leave without saving?</h2>
