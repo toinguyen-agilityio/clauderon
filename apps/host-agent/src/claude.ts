@@ -7,10 +7,31 @@ import { extractResultBlock, MAX_CALLS_PER_TURN, MAX_TARGET_LENGTH, scrubTarget,
  */
 export const CLAUDE_ARGS = ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"] as const;
 
+/**
+ * Appended to Claude Code's system prompt on every Agent and Grill Node (#218). Every turn re-reads
+ * the whole conversation, so the number of turns and the size of tool results are what a Node
+ * costs. Short and fixed, so it is cached once and costs almost nothing. No single quotes: it is
+ * passed single-quoted.
+ */
+export const TOKEN_GUIDANCE = [
+  "Keep this session small: every later turn re-reads the whole conversation.",
+  "- Run independent commands together in one turn (several tool calls at once, or one command joined with &&).",
+  "- Do not print whole large files; read only the part you need (a line range, or grep with a little context).",
+  "- Keep command output short: pipe it through head, tail or grep, and never print install or build logs in full.",
+  "- While working, run only the tests that cover your change; run the full suite once at the end.",
+].join("\n");
+
+export type ClaudeOptions = {
+  /** Resumes this Claude session (a Grill round). */
+  resumeSessionId?: string;
+};
+
+const quote = (text: string) => `'${text.replaceAll("'", "")}'`;
+
 /** The shell line that runs Claude Code on the prompt file named by `$CLAUDERON_PROMPT_FILE`. */
-export function claudeCommand(resumeSessionId?: string): string {
-  const resume = resumeSessionId ? ` --resume '${resumeSessionId.replace(/[^A-Za-z0-9-]/g, "")}'` : "";
-  return `claude ${CLAUDE_ARGS.join(" ")}${resume} < "$CLAUDERON_PROMPT_FILE"`;
+export function claudeCommand(options: ClaudeOptions = {}): string {
+  const resume = options.resumeSessionId ? ` --resume '${options.resumeSessionId.replace(/[^A-Za-z0-9-]/g, "")}'` : "";
+  return `claude ${CLAUDE_ARGS.join(" ")}${resume} --append-system-prompt ${quote(TOKEN_GUIDANCE)} < "$CLAUDERON_PROMPT_FILE"`;
 }
 
 /**
