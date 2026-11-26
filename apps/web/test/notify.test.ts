@@ -68,9 +68,9 @@ describe("the notifications switch (#198)", () => {
   });
 
   it("offers to enable or disable, and explains a denied or unsupported permission", () => {
-    expect(switchState(false, "default")).toMatchObject({ label: "Enable notifications", on: false, disabled: false, hint: null });
-    expect(switchState(true, "granted")).toMatchObject({ label: "Disable notifications", on: true, disabled: false });
-    expect(switchState(true, "default")).toMatchObject({ label: "Enable notifications", on: false });
+    expect(switchState(false, "default")).toMatchObject({ label: "Notifications", on: false, disabled: false, hint: null });
+    expect(switchState(true, "granted")).toMatchObject({ label: "Notifications", on: true, disabled: false });
+    expect(switchState(true, "default")).toMatchObject({ on: false });
     expect(switchState(true, "denied")).toMatchObject({ disabled: true, hint: expect.stringContaining("blocked") });
     expect(switchState(false, "unsupported")).toMatchObject({ disabled: true, hint: expect.stringContaining("cannot show") });
   });

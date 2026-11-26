@@ -92,12 +92,12 @@ export function readEnabled(storage: Pick<Storage, "getItem"> | null): boolean {
   }
 }
 
-/** What the account menu item says for the switch and the permission. */
+/** The Projects page switch: whether it is on, whether it can be used, and why not. */
 export function switchState(enabled: boolean, permission: NotifyPermission): { label: string; on: boolean; disabled: boolean; hint: string | null } {
-  if (permission === "unsupported") return { label: "Notifications unavailable", on: false, disabled: true, hint: "This browser cannot show notifications." };
+  if (permission === "unsupported") return { label: "Notifications", on: false, disabled: true, hint: "This browser cannot show notifications." };
   if (permission === "denied") {
-    return { label: "Notifications blocked", on: false, disabled: true, hint: "Notifications are blocked for this site. Allow them in the browser's site settings, then reload." };
+    return { label: "Notifications", on: false, disabled: true, hint: "Notifications are blocked for this site. Allow them in the browser's site settings, then reload." };
   }
   const on = enabled && permission === "granted";
-  return { label: on ? "Disable notifications" : "Enable notifications", on, disabled: false, hint: null };
+  return { label: "Notifications", on, disabled: false, hint: null };
 }

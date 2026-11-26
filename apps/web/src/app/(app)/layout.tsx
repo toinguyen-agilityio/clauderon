@@ -4,7 +4,7 @@ import { signOut } from "../../auth";
 import { Avatar, Brand } from "../../components/brand";
 import { Icon } from "../../components/icons";
 import { NeedsYouProvider } from "../../components/needs-you-live";
-import { NotificationsProvider, NotificationsToggle } from "../../components/notifications-live";
+import { NotificationsProvider } from "../../components/notifications-live";
 import { ShellSocketProvider } from "../../components/shell-socket";
 import { needsYouAction } from "./actions";
 import { MobileShell } from "../../components/mobile-shell";
@@ -33,7 +33,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <div className="small faint me-email">{member.email}</div>
             </div>
           </div>
-          <NotificationsToggle />
           <div className="side-tools">
             <ThemeToggle />
             <form

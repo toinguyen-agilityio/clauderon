@@ -147,17 +147,20 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** The account menu item that turns notifications on and off for this browser. */
+/** The Projects page switch that turns notifications on and off for this browser. */
 export function NotificationsToggle() {
   const setting = useContext(NotifySetting);
   if (!setting) return null;
   const state = switchState(setting.enabled, setting.permission);
   return (
     <div className="notify-switch">
-      <button type="button" className="side-item" aria-pressed={state.on} disabled={state.disabled} onClick={setting.toggle} title={state.hint ?? state.label}>
-        {state.on ? Icon.bell : Icon.bellOff}
-        <span>{state.label}</span>
-      </button>
+      <label className="notify-switch-row" title={state.hint ?? undefined}>
+        {state.label}
+        <span className="fe-switch">
+          <input type="checkbox" role="switch" checked={state.on} disabled={state.disabled} onChange={setting.toggle} />
+          <span aria-hidden="true" />
+        </span>
+      </label>
       {state.hint && <p className="small faint">{state.hint}</p>}
     </div>
   );
