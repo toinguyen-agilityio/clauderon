@@ -4,18 +4,29 @@ Notable changes to Clauderon, grouped by release. Versions follow [Semantic Vers
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-27
+
 ### Added
 
+- An in-app guided tour, started from "Take the tour", that walks a Member step by step from pairing a Machine to a first Run and its Pull request, in English or Vietnamese (#248, #253).
+- The sidebar collapses to an icon rail on desktop (#247).
 - Sort the Tickets, Runs, Pull requests, Machines and Members lists by column (#242).
 
 ### Removed
 
 - The tab of deleted Flows on the Flows page (#238).
+- The separate "Opened" sort on the Pull requests table; the time still shows under Opened by (#255).
+
+### Fixed
+
+- The selection bar stays pinned to the viewport on every screen size (#249, #252).
+- The notifications switch explains why it stayed off (#250).
+- Tour buttons show, follow the app theme, and keep their labels on one line (#251, #254).
 
 ### Changed
 
 - Deployment docs describe Render as production; the self-hosted Compose stack is the alternative (#236).
-- Project documentation: installation, environment variables, architecture, API, database, deployment and troubleshooting guides, and this changelog.
+- Project documentation: installation, environment variables, architecture, API, database, deployment and troubleshooting guides, and this changelog (#243).
 
 ## [0.11.0] - 2026-11-26
 
