@@ -15,15 +15,15 @@ export type Step = {
 
 const nav = (area: string) => `[data-tour-nav="${area}"]`;
 
-/** The round, in order: pair, pick a Ticket, the Flow, start, follow the Run, find the Pull request. */
+/** The round, in order: pair, add a Project (Operator), pick a Ticket, the Flow, start, follow the Run, find the Pull request. */
 export const STEPS: readonly Step[] = [
-  { id: "machines", route: "/machines", selector: nav("machines"), operatorOnly: false, needs: [] },
+  { id: "machines", route: "/machines", selector: ".mach-pair .mach-cmds, .mach-hero", operatorOnly: false, needs: [] },
+  { id: "projects", route: "/projects", selector: "#gh-token", operatorOnly: true, needs: [] },
   { id: "tickets", route: "/tickets", selector: nav("tickets"), operatorOnly: false, needs: ["ticket"] },
   { id: "flows", route: "/flows", selector: nav("flows"), operatorOnly: false, needs: ["flow"] },
-  { id: "start", route: "/tickets", selector: "main .view", operatorOnly: false, needs: ["machine", "ticket", "flow"] },
+  { id: "start", route: "/tickets", selector: ".tk-table tbody .cb:not(:disabled)", operatorOnly: false, needs: ["machine", "ticket", "flow"] },
   { id: "runs", route: "/runs", selector: nav("runs"), operatorOnly: false, needs: ["run"] },
   { id: "pullRequests", route: "/pull-requests", selector: nav("pullRequests"), operatorOnly: false, needs: [] },
-  { id: "projects", route: "/projects", selector: nav("projects"), operatorOnly: true, needs: [] },
   { id: "members", route: "/members", selector: nav("members"), operatorOnly: true, needs: [] },
 ];
 

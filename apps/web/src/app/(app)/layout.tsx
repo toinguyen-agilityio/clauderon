@@ -8,7 +8,6 @@ import { NeedsYouProvider } from "../../components/needs-you-live";
 import { NotificationsProvider } from "../../components/notifications-live";
 import { ShellSocketProvider } from "../../components/shell-socket";
 import { needsYouAction, tourFactsAction } from "./actions";
-import { startAction } from "./tickets/actions";
 import { TourProvider } from "../../components/tour/tour-provider";
 import { isOperator } from "@clauderon/db";
 import { MobileShell } from "../../components/mobile-shell";
@@ -27,7 +26,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <ShellSocketProvider gatewayUrl={gatewayUrl()}>
     <NotificationsProvider>
-    <TourProvider isOperator={isOperator(member.email, deps().operators)} loadFacts={tourFactsAction} startRun={startAction}>
+    <TourProvider isOperator={isOperator(member.email, deps().operators)} loadFacts={tourFactsAction}>
     <div className="shell">
       <NeedsYouProvider initial={needsYou} load={needsYouAction}>
       <MobileShell needsYou={needsYou} collapsed={collapsed}>

@@ -45,9 +45,8 @@ const quiet = () => new Promise((r) => setTimeout(r, 150));
 
 function mount(f: TourFacts = facts(), isOperator = false) {
   const loadFacts = vi.fn(async () => f);
-  const startRun = vi.fn(async () => ({ ok: true as const, batchId: "b", runIds: ["r"] }));
   const tree = () => (
-    <TourProvider isOperator={isOperator} loadFacts={loadFacts} startRun={startRun}>
+    <TourProvider isOperator={isOperator} loadFacts={loadFacts}>
       <nav>
         {["machines", "tickets", "flows", "runs", "pullRequests", "projects", "members"].map((a) => (
           <a key={a} href="#" data-tour-nav={a}>
@@ -57,7 +56,21 @@ function mount(f: TourFacts = facts(), isOperator = false) {
         <TakeTourButton />
       </nav>
       <main className="main">
-        <div className="view" />
+        <section className="mach-pair">
+          <div className="mach-cmds" />
+        </section>
+        <input id="gh-token" />
+        <div className="view">
+          <table className="tk-table">
+            <tbody>
+              <tr>
+                <td>
+                  <input type="checkbox" className="cb" aria-label="Select o/r#1" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </main>
     </TourProvider>
   );
@@ -70,7 +83,7 @@ function mount(f: TourFacts = facts(), isOperator = false) {
     nav.path = nav.push.mock.calls.at(-1)![0];
     view.rerender(tree());
   };
-  return { ...view, loadFacts, startRun, next };
+  return { ...view, loadFacts, next };
 }
 
 const takeTour = () => fireEvent.click(screen.getByText("Take the tour"));
@@ -127,6 +140,20 @@ describe("guided tour", () => {
     await waitFor(() => expect(popoverTitle()).toBe("Machines"));
   });
 
+  it("shows Take the tour in the saved language, and switching language changes it at once", async () => {
+    localStorage.setItem(TOUR_KEY, JSON.stringify({ status: "skipped", step: 0, lang: "vi" }));
+    mount();
+    expect(await screen.findByText("Xem hướng dẫn")).toBeTruthy();
+    cleanup();
+    localStorage.clear();
+    mount();
+    takeTour();
+    await waitFor(() => expect(popoverTitle()).toBe("Machines"));
+    fireEvent.click(screen.getByText("Tiếng Việt"));
+    expect(await screen.findByText("Xem hướng dẫn")).toBeTruthy();
+    expect(saved().lang).toBe("vi");
+  });
+
   it("goes Next to the next area's page", async () => {
     mount();
     takeTour();
@@ -173,14 +200,14 @@ describe("guided tour", () => {
     expect(saved().status).toBe("inProgress");
   });
 
-  it("never starts a Run on its own; the Member confirms", async () => {
+  it("Start a Run points at the first Ticket checkbox and leaves picking and starting to the Member", async () => {
     const view = mount();
     takeTour();
     await waitFor(() => expect(popoverTitle()).toBe("Machines"));
     for (let i = 0; i < 3; i++) await view.next();
     await waitFor(() => expect(popoverTitle()).toBe("Start a Run"));
-    expect(view.startRun).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText("Start sample Run on o/r#1"));
-    expect(view.startRun).toHaveBeenCalledWith({ flowId: "f1", ticketIds: ["t1"], extraInstructions: "" });
+    expect(document.querySelector(".driver-active-element")).toBe(document.querySelector(".tk-table .cb"));
+    expect(document.querySelector(".driver-popover select, .driver-popover .tour-start")).toBeNull();
+    expect(document.querySelector(".driver-popover-description")?.textContent).toContain("Start Runs");
   });
 });
