@@ -6,7 +6,6 @@ import {
   deleteFlow,
   flowExists,
   getFlowVersion,
-  listDeletedFlows,
   listFlowHistory,
   restoreFlowVersion,
   importFlow,
@@ -457,13 +456,6 @@ export async function viewFlowVersion(deps: AppDeps, flowId: string, versionId: 
   };
 }
 
-export type DeletedFlowView = { flowId: string; name: string; versionId: string; deletedByEmail: string; deletedByName: string | null; deletedAt: Date };
-
-/** The Deleted Flows view: who deleted each Flow and when; its history stays reachable. */
-export async function viewDeletedFlows(deps: AppDeps): Promise<DeletedFlowView[]> {
-  return listDeletedFlows(deps.db);
-}
-
 export type RestoreOutcome = { ok: true } | { ok: false; error: string };
 
 /** Restore (issue #181): any Member; same lock rule as a save (FLW-7). Audit `flow.restore`. */
@@ -472,7 +464,7 @@ export async function restoreMyFlowVersion(deps: AppDeps, viewer: Viewer, flowId
   if (!result.ok) {
     switch (result.reason) {
       case "not-found":
-        return { ok: false, error: "That Flow or version no longer exists. To use a deleted Flow, clone it from Deleted Flows." };
+        return { ok: false, error: "That Flow or version no longer exists. To use a deleted Flow, clone it from its history." };
       case "locked":
         return { ok: false, error: `Locked by Run ${result.lock.runId} (${result.lock.state.replaceAll("_", " ")}). Restore it when that Run ends.` };
       case "bad-ids":

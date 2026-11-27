@@ -13,7 +13,6 @@ import {
   getFlowVersion,
   hashToken,
   importFlow,
-  listDeletedFlows,
   listFlowHistory,
   loadFlowDetail,
   restoreFlowVersion,
@@ -226,25 +225,24 @@ describe("restore", () => {
 });
 
 describe("deleted Flows", () => {
-  it("keep their history, are listed with who deleted them, and can be cloned from a version", async () => {
+  it("keep their history and can be cloned from a version", async () => {
     const f = await flowWith(["Plan"]);
     await saveFlow(db, f.flowId, f.graph, ann, t(1));
-    const live = await createFlow(db, "Stays", ann, t(1));
-    expect(await deleteFlow(db, f.flowId, bob, t(5))).toMatchObject({ ok: true, name: "Ship", versionId: expect.any(String) });
+    await createFlow(db, "Stays", ann, t(1));
+    const removed = await deleteFlow(db, f.flowId, bob, t(5));
+    if (!removed.ok) throw new Error("delete failed");
+    expect(removed).toMatchObject({ name: "Ship", versionId: expect.any(String) });
 
-    const deleted = await listDeletedFlows(db);
-    expect(deleted).toEqual([expect.objectContaining({ flowId: f.flowId, name: "Ship", deletedByEmail: bob, deletedAt: t(5) })]);
-    expect(deleted.some((d) => d.flowId === live.id)).toBe(false);
     expect((await history(f.flowId)).map((v) => v.kind)).toEqual(["delete", "update", "create"]);
 
-    const cloned = await cloneFlowVersion(db, f.flowId, deleted[0]!.versionId, bob, t(6));
+    const cloned = await cloneFlowVersion(db, f.flowId, removed.versionId, bob, t(6));
     if (!cloned.ok) throw new Error("clone failed");
     expect(cloned.name).toBe("Ship");
     const copy = (await loadFlowDetail(db, cloned.id))!;
     expect([copy.nodes.length, copy.edges.length]).toEqual([2, 1]);
-    expect(await history(cloned.id)).toEqual([expect.objectContaining({ kind: "clone", detail: { clonedFrom: f.flowId, restoredFromVersionId: deleted[0]!.versionId } })]);
+    expect(await history(cloned.id)).toEqual([expect.objectContaining({ kind: "clone", detail: { clonedFrom: f.flowId, restoredFromVersionId: removed.versionId } })]);
     // Cloning again works and the names stay apart.
-    expect(await cloneFlowVersion(db, f.flowId, deleted[0]!.versionId, bob, t(7))).toMatchObject({ ok: true, name: "Copy of Ship" });
+    expect(await cloneFlowVersion(db, f.flowId, removed.versionId, bob, t(7))).toMatchObject({ ok: true, name: "Copy of Ship" });
     expect(await cloneFlowVersion(db, f.flowId, uuid(), bob, t(7))).toEqual({ ok: false, reason: "not-found" });
   });
 });
