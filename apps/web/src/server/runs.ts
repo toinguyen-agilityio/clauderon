@@ -120,14 +120,13 @@ export type PullRequestRow = {
 export type PullRequestQuery = { tab?: PullRequestTab; projectId?: string; memberId?: string; page: number; sort?: Sort };
 
 /** The Pull requests columns a Member can sort by. */
-export const PULL_REQUEST_SORTS = ["pr", "title", "from", "by", "opened"] as const;
+export const PULL_REQUEST_SORTS = ["pr", "title", "from", "by"] as const;
 
 const pullRequestSortKeys = {
   pr: (r: PullRequestRow) => `${r.repo}#${String(r.number).padStart(9, "0")}`,
   title: (r: PullRequestRow) => r.title,
   from: (r: PullRequestRow) => r.run?.ticketTitle,
   by: (r: PullRequestRow) => (r.run ? (r.run.starterName ?? r.run.starterEmail) : r.authorLogin),
-  opened: (r: PullRequestRow) => r.at,
 };
 
 /**
