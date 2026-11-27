@@ -231,6 +231,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .side-close { display: grid; position: absolute; top: 10px; right: 10px; }
   @media (prefers-reduced-motion: reduce) { .side, .side.open { transition: none; } }
   .main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-top: 18px; }
+  .selbar { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
+  /* The bar can wrap to two lines here: leave room to scroll the last row and the pager above it. */
+  .main:has(.selbar) { padding-bottom: 160px; }
 }
 
 /* M1, from the prototype: filters, selection, dialogs, Pods, Run page */
@@ -301,7 +304,9 @@ a.stat.on { border-color: var(--accent-text); }
 .tbl td.actions { text-align: right; white-space: nowrap; }
 .cb { width: 16px; height: 16px; accent-color: var(--accent-text); cursor: pointer; margin: 0; }
 .cb:disabled { cursor: not-allowed; }
-.selbar { position: sticky; bottom: 16px; z-index: 5; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px 10px 16px; border-radius: var(--r); background: var(--fg); color: var(--bg); box-shadow: var(--shadow); }
+/* Pinned to the viewport, not sticky: .tk-board clips its overflow, which traps a sticky bar inside the list (#246).
+   Lined up with .view's column; z-index stays below the phone topbar (20), scrim (30) and drawer (40). */
+.selbar { position: fixed; bottom: max(16px, env(safe-area-inset-bottom, 0px)); left: calc(228px + max(28px, env(safe-area-inset-left, 0px))); right: max(28px, env(safe-area-inset-right, 0px)); max-width: 1240px; margin-inline: auto; z-index: 15; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px 10px 16px; border-radius: var(--r); background: var(--fg); color: var(--bg); box-shadow: var(--shadow); }
 .selbar .btn { border-color: transparent; }
 .selbar .btn.ghost { color: var(--bg); }
 .selbar .btn.ghost:hover { background: color-mix(in srgb, var(--bg) 15%, transparent); }
