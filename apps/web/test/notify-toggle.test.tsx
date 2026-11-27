@@ -74,6 +74,20 @@ describe("the Notifications switch on Project Settings (#244)", () => {
     expect(screen.getByText(/did not allow notifications/)).toBeTruthy();
   });
 
+  it("turns on and off when notifications were allowed in the site settings after the page loaded", async () => {
+    const fake = fakeNotification("default", "default");
+    const input = renderToggle();
+    // Allowed from the address bar: no reload, no visibility change.
+    fake.permission = "granted";
+    await click(input);
+    expect(fake.requestPermission).not.toHaveBeenCalled();
+    expect(input.checked).toBe(true);
+    expect(window.localStorage.getItem(NOTIFY_KEY)).toBe("on");
+    await click(input);
+    expect(input.checked).toBe(false);
+    expect(window.localStorage.getItem(NOTIFY_KEY)).toBeNull();
+  });
+
   it("explains an unsupported browser", () => {
     vi.stubGlobal("Notification", undefined);
     delete (window as { Notification?: unknown }).Notification;

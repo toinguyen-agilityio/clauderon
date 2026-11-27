@@ -108,8 +108,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         // storage unavailable: the choice lasts for this page only
       }
     };
+    // Read the permission again: it may have been allowed in the site settings since the page loaded.
     const now = currentPermission();
-    if (now === "unsupported" || now === "denied") return setPermission(now);
+    setPermission(now);
+    if (now === "unsupported" || now === "denied") return;
     if (enabled && now === "granted") return save(false);
     if (now === "granted") return save(true);
     // Asked only from this click (#198). A dismissed or quietly blocked prompt
