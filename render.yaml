@@ -1,7 +1,8 @@
-# Render Blueprint for a free demo of Clauderon (deploy/README.md, "Demo on Render").
-# Free instances sleep after 15 minutes without traffic and the free database
-# expires after 30 days, so this is for trying the app, not for the team's
-# production; the self-hosted stack in deploy/ stays the supported deploy.
+# Render Blueprint for Clauderon's production (deploy/README.md, "Production on Render").
+# Every push to main deploys both services, so merging a release into main is the
+# production deploy. They run on Render's free plan: instances sleep after 15
+# minutes without traffic and the free database expires after 30 days. The
+# self-hosted Compose stack in deploy/ is the alternative to Render.
 #
 # Both services build the last stage of deploy/Dockerfile (the web image, which
 # also holds the Gateway's source) and differ only in their command.
