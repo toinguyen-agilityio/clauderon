@@ -39,6 +39,13 @@ export const Icon = {
       <path d="M2 4.5h4l1.5 1.5H14v6.5H2z" />
     </svg>
   ),
+  help: (
+    <svg viewBox="0 0 16 16" {...stroke}>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M6.4 6.3a1.7 1.7 0 1 1 2.4 1.5c-.5.3-.8.7-.8 1.2" />
+      <circle cx="8" cy="11.4" r=".6" fill="currentColor" stroke="none" />
+    </svg>
+  ),
   audit: (
     <svg viewBox="0 0 16 16" {...stroke}>
       <rect x="3" y="1.5" width="10" height="13" rx="1.5" />

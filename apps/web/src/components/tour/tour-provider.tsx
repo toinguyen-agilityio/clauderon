@@ -17,7 +17,7 @@ type Ctx = { lang: Lang; open: () => void };
 const TourContext = createContext<Ctx>({ lang: "en", open: () => {} });
 export const useTour = () => useContext(TourContext);
 
-type Phase = "idle" | "resume" | "running";
+type Phase = "idle" | "running";
 
 /** Waits (briefly) for the page to render the area a step points at; null when it is not on screen. */
 function waitFor(selector: string, ms: number): Promise<Element | null> {
@@ -37,7 +37,7 @@ function waitFor(selector: string, ms: number): Promise<Element | null> {
 const reducedMotion = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
- * The guided tour (driver.js draws the highlight and tooltip). It walks one round: pair a Machine, pick a Ticket,
+ * The guided tour (driver.js draws the highlight and tooltip), started only from Take the tour. It walks one round: pair a Machine, pick a Ticket,
  * the Flow, start a Run, follow it, find the Pull request. Finished or skipped lives in the browser only.
  */
 export function TourProvider({
@@ -59,7 +59,6 @@ export function TourProvider({
   const [facts, setFacts] = useState<TourFacts | null>(null);
   const drv = useRef<Driver | null>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
-  const booted = useRef(false);
   const latest = useRef({ index, lang });
   latest.current = { index, lang };
 
@@ -82,25 +81,9 @@ export function TourProvider({
     setPhase("running");
   }, []);
 
-  // First load: a new Member starts the tour; someone who left mid-tour is offered to resume; finished or skipped: nothing.
-  useEffect(() => {
-    if (booted.current) return;
-    booted.current = true;
-    const saved = readTour(browserStorage());
-    setLang(saved.lang ?? detectLang(navigator.language));
-    if (saved.status === "finished" || saved.status === "skipped") return;
-    loadFacts()
-      .then((f) => {
-        setFacts(f);
-        if (saved.status === "inProgress") {
-          setIndex(saved.step);
-          setPhase("resume");
-        } else begin(0);
-      })
-      .catch(() => {});
-  }, [loadFacts, begin]);
-
+  // The tour only starts when the Member asks for it (Take the tour).
   const open = useCallback(() => {
+    setLang(readTour(browserStorage()).lang ?? detectLang(navigator.language));
     loadFacts()
       .then((f) => {
         setFacts(f);
@@ -144,6 +127,9 @@ export function TourProvider({
         smoothScroll: !reducedMotion(),
         allowClose: true,
         overlayClickBehavior: "none",
+        overlayColor: "#0e1a26",
+        overlayOpacity: 0.55,
+        stageRadius: 8,
         showProgress: true,
         progressText: fill(t.ui.progress, { n: index + 1, total: steps.length }),
         nextBtnText: last ? t.ui.done : t.ui.next,
@@ -192,7 +178,17 @@ export function TourProvider({
         },
       });
       drv.current = d;
-      d.highlight({ element: el ?? undefined, popover: { title: text.title, description: body } });
+      // highlight() defaults the popover to no buttons and no progress, over the driver config, so say them here.
+      d.highlight({
+        element: el ?? undefined,
+        popover: {
+          title: text.title,
+          description: body,
+          showButtons: index === 0 ? ["next", "close"] : ["next", "previous", "close"],
+          showProgress: true,
+          progressText: fill(t.ui.progress, { n: index + 1, total: steps.length }),
+        },
+      });
     });
     return () => {
       cancelled = true;
@@ -219,28 +215,10 @@ export function TourProvider({
   );
 
   const ctx = useMemo(() => ({ lang, open }), [lang, open]);
-  const ui = COPY[lang].ui;
 
   return (
     <TourContext.Provider value={ctx}>
       {children}
-      {phase === "resume" && (
-        <div className="tour-resume" role="dialog" aria-label={ui.resumeTitle}>
-          <strong>{ui.resumeTitle}</strong>
-          <p>{ui.resumeBody}</p>
-          <div className="tour-resume-actions">
-            <button type="button" className="btn primary" autoFocus onClick={() => begin(Math.min(index, Math.max(0, steps.length - 1)))}>
-              {ui.resume}
-            </button>
-            <button type="button" className="btn" onClick={() => begin(0)}>
-              {ui.restart}
-            </button>
-            <button type="button" className="btn" onClick={() => close("inProgress")}>
-              {ui.dismiss}
-            </button>
-          </div>
-        </div>
-      )}
     </TourContext.Provider>
   );
 }

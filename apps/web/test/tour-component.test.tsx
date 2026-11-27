@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { HelpIcon, TakeTourButton } from "../src/components/tour/help-icon";
+import { TakeTourButton } from "../src/components/tour/take-tour-button";
 import { TOUR_KEY } from "../src/components/tour/storage";
 import { TourProvider } from "../src/components/tour/tour-provider";
 import type { TourFacts } from "../src/server/tour";
@@ -46,7 +46,7 @@ const quiet = () => new Promise((r) => setTimeout(r, 150));
 function mount(f: TourFacts = facts(), isOperator = false) {
   const loadFacts = vi.fn(async () => f);
   const startRun = vi.fn(async () => ({ ok: true as const, batchId: "b", runIds: ["r"] }));
-  const view = render(
+  const tree = () => (
     <TourProvider isOperator={isOperator} loadFacts={loadFacts} startRun={startRun}>
       <nav>
         {["machines", "tickets", "flows", "runs", "pullRequests", "projects", "members"].map((a) => (
@@ -59,26 +59,49 @@ function mount(f: TourFacts = facts(), isOperator = false) {
       <main className="main">
         <div className="view" />
       </main>
-    </TourProvider>,
+    </TourProvider>
   );
-  return { ...view, loadFacts, startRun };
+  const view = render(tree());
+  // The router mock does not move the page, so a step's route is followed by hand.
+  const next = async () => {
+    const before = nav.push.mock.calls.length;
+    fireEvent.click(await screen.findByText("Next"));
+    await waitFor(() => expect(nav.push.mock.calls.length).toBeGreaterThan(before));
+    nav.path = nav.push.mock.calls.at(-1)![0];
+    view.rerender(tree());
+  };
+  return { ...view, loadFacts, startRun, next };
 }
 
+const takeTour = () => fireEvent.click(screen.getByText("Take the tour"));
+
 describe("guided tour", () => {
-  it("starts for a new Member with the first step and its tooltip", async () => {
+  it("does not start on its own, not even for a new Member", async () => {
+    const view = mount();
+    await quiet();
+    expect(document.querySelector(".driver-popover")).toBeNull();
+    expect(view.loadFacts).not.toHaveBeenCalled();
+  });
+
+  it("Take the tour opens the first step with its tooltip and buttons", async () => {
     mount();
+    takeTour();
     await waitFor(() => expect(popoverTitle()).toBe("Machines"));
     expect(progress()).toBe("Step 1 of 6");
+    expect(document.querySelector(".driver-popover-next-btn")).not.toBeNull();
+    expect(document.querySelector(".driver-popover-close-btn")).not.toBeNull();
   });
 
   it("starts without error when the saved value is corrupt", async () => {
     localStorage.setItem(TOUR_KEY, "{not json");
     mount();
+    takeTour();
     await waitFor(() => expect(popoverTitle()).toBe("Machines"));
   });
 
-  it("does not show again after Skip, and remembers it", async () => {
+  it("Skip closes the tour and remembers it", async () => {
     const first = mount();
+    takeTour();
     await waitFor(() => expect(popoverTitle()).toBe("Machines"));
     fireEvent.click(screen.getByText("Skip"));
     expect(saved().status).toBe("skipped");
@@ -89,7 +112,7 @@ describe("guided tour", () => {
     expect(second.loadFacts).not.toHaveBeenCalled();
   });
 
-  it("does not show again after finishing", async () => {
+  it("stays closed after finishing", async () => {
     localStorage.setItem(TOUR_KEY, JSON.stringify({ status: "finished", step: 5 }));
     const view = mount();
     await quiet();
@@ -106,6 +129,7 @@ describe("guided tour", () => {
 
   it("goes Next to the next area's page", async () => {
     mount();
+    takeTour();
     await waitFor(() => expect(popoverTitle()).toBe("Machines"));
     fireEvent.click(document.querySelector(".driver-popover-next-btn")!);
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/tickets"));
@@ -116,6 +140,7 @@ describe("guided tour", () => {
     const opener = screen.getByText("opener");
     opener.focus();
     mount();
+    takeTour();
     await waitFor(() => expect(popoverTitle()).toBe("Machines"));
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -126,32 +151,22 @@ describe("guided tour", () => {
     outside.unmount();
   });
 
-  it("offers Resume or Restart to someone who left mid-tour", async () => {
-    localStorage.setItem(TOUR_KEY, JSON.stringify({ status: "inProgress", step: 2 }));
-    mount();
-    fireEvent.click(await screen.findByText("Resume"));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/flows"));
-    cleanup();
-    nav.push.mockClear();
-    mount();
-    fireEvent.click(await screen.findByText("Restart"));
-    await waitFor(() => expect(popoverTitle()).toBe("Machines"));
-  });
-
   it("shows the Operator-only steps to an Operator and not to a Member", async () => {
     mount(facts({ isOperator: true }), true);
+    takeTour();
     await waitFor(() => expect(progress()).toBe("Step 1 of 8"));
     cleanup();
     localStorage.clear();
     mount(facts(), false);
+    takeTour();
     await waitFor(() => expect(progress()).toBe("Step 1 of 6"));
   });
 
   it("says what is missing and links to the fix instead of an empty area", async () => {
-    nav.path = "/tickets";
-    localStorage.setItem(TOUR_KEY, JSON.stringify({ status: "inProgress", step: 1 }));
-    mount(facts({ tickets: [] }));
-    fireEvent.click(await screen.findByText("Resume"));
+    const view = mount(facts({ tickets: [] }));
+    takeTour();
+    await waitFor(() => expect(popoverTitle()).toBe("Machines"));
+    await view.next();
     await waitFor(() => expect(popoverTitle()).toBe("No Ticket to pick yet"));
     fireEvent.click(screen.getByText("Go to Tickets"));
     expect(nav.push).toHaveBeenCalledWith("/tickets");
@@ -159,42 +174,13 @@ describe("guided tour", () => {
   });
 
   it("never starts a Run on its own; the Member confirms", async () => {
-    nav.path = "/tickets";
-    localStorage.setItem(TOUR_KEY, JSON.stringify({ status: "inProgress", step: 3 }));
     const view = mount();
-    fireEvent.click(await screen.findByText("Resume"));
+    takeTour();
+    await waitFor(() => expect(popoverTitle()).toBe("Machines"));
+    for (let i = 0; i < 3; i++) await view.next();
     await waitFor(() => expect(popoverTitle()).toBe("Start a Run"));
     expect(view.startRun).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Start sample Run on o/r#1"));
     expect(view.startRun).toHaveBeenCalledWith({ flowId: "f1", ticketIds: ["t1"], extraInstructions: "" });
-  });
-});
-
-describe("help icon", () => {
-  const withTour = (ui: React.ReactNode) => (
-    <TourProvider isOperator={false} loadFacts={async () => facts()} startRun={async () => ({ ok: false, error: "x" })}>
-      {ui}
-    </TourProvider>
-  );
-
-  beforeEach(() => localStorage.setItem(TOUR_KEY, JSON.stringify({ status: "finished", step: 0 })));
-
-  it("shows the tooltip on focus and hover, and hides it on Escape", () => {
-    render(withTour(<HelpIcon area="flows" />));
-    const button = screen.getByRole("button", { name: /Flows/ });
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    fireEvent.focus(button);
-    expect(screen.getByRole("tooltip").textContent).toContain("chain of steps");
-    expect(button.getAttribute("aria-describedby")).toBe(screen.getByRole("tooltip").id);
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    fireEvent.mouseEnter(button.parentElement!);
-    expect(screen.getByRole("tooltip")).toBeTruthy();
-  });
-
-  it("shows on tap", () => {
-    render(withTour(<HelpIcon area="runs" />));
-    fireEvent.click(screen.getByRole("button", { name: /Runs/ }));
-    expect(screen.getByRole("tooltip")).toBeTruthy();
   });
 });

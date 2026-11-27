@@ -95,8 +95,8 @@ p { margin: 0; }
 .brand-name { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
 .brand-sub { font-size: 11px; color: var(--fg3); }
 .nav { display: flex; flex-direction: column; gap: 2px; }
-.nav a, .nav .soon { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); color: var(--fg2); font-weight: 500; }
-.nav a:hover { background: var(--hover); text-decoration: none; color: var(--fg); }
+.nav a, .nav .soon, .nav .take-tour { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); color: var(--fg2); font-weight: 500; }
+.nav a:hover, .nav .take-tour:hover { background: var(--hover); text-decoration: none; color: var(--fg); }
 .nav a.on { background: var(--accent-weak); color: var(--accent-text); }
 .nav .soon { color: var(--fg3); opacity: 0.6; cursor: default; }
 .nav svg { width: 16px; height: 16px; flex: none; }
@@ -524,8 +524,10 @@ h1 .small, h2 .small { font-family: var(--font-ui); letter-spacing: 0; color: va
 .side .brand-sub, .side .faint { color: var(--side-fg3); }
 .brand-name { font-family: var(--font-display); font-weight: 600; color: var(--side-fg); }
 .brand-mark { background: var(--mark); color: var(--on-mark); border-radius: var(--r-sm); font-family: var(--font-mono); }
-.nav a, .nav .soon { color: var(--side-fg2); position: relative; }
-.nav a:hover { background: var(--side-hover); color: var(--side-fg); }
+.nav a, .nav .soon, .nav .take-tour { color: var(--side-fg2); position: relative; }
+.nav .take-tour { width: 100%; border: 0; background: transparent; font: inherit; font-weight: 500; text-align: left; cursor: pointer; }
+.nav .take-tour:focus-visible { outline: 2px solid var(--mark); outline-offset: -2px; }
+.nav a:hover, .nav .take-tour:hover { background: var(--side-hover); color: var(--side-fg); }
 .nav a.on { background: var(--side-hover); color: var(--side-fg); font-weight: 500; }
 .nav a.on svg { color: var(--mark); }
 .nav a.on::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 2px 2px 0; background: var(--mark); }
@@ -569,8 +571,6 @@ h1 .small, h2 .small { font-family: var(--font-ui); letter-spacing: 0; color: va
   .side.collapsed .nav, .side.collapsed .side-foot { align-self: stretch; }
   .side.collapsed .nav-group-title, .side.collapsed .me-text, .side.collapsed .side-version { display: none; }
   .side.collapsed .nav a { justify-content: center; padding: 8px; }
-  /* The guided tour's per-link help icons do not fit the rail; Take the tour stays as its ? icon. */
-  .side.collapsed .nav .help-icon { display: none; }
   .side.collapsed .nav .take-tour { justify-content: center; padding: 8px; }
   /* clipped, not display: none, so each link keeps its accessible name */
   .side.collapsed .nav .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
@@ -1939,26 +1939,27 @@ dialog.modal.danger .modal-b { padding: 8px 24px 22px 74px; }
 /* Guided tour (driver.js popover, help icons, resume prompt) */
 .nav-row { display: flex; align-items: center; gap: 4px; }
 .nav-row > a { flex: 1; min-width: 0; }
-.help-icon { position: relative; display: inline-flex; flex: none; }
-.help-btn, .take-tour { cursor: pointer; font: inherit; color: var(--fg3); background: transparent; border: 1px solid var(--line-strong); }
-.help-btn { width: 20px; height: 20px; border-radius: 50%; font-size: 11px; line-height: 1; padding: 0; }
-.help-btn:hover, .help-btn:focus-visible { color: var(--accent-text); border-color: var(--accent); }
-.help-tip { position: absolute; z-index: 60; left: 26px; top: 50%; transform: translateY(-50%); width: 240px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--panel); color: var(--fg); border: 1px solid var(--line-strong); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); font-size: 12px; font-weight: 400; line-height: 1.4; }
-.take-tour { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: var(--r-sm); text-align: left; font-weight: 500; color: var(--fg2); }
-.take-tour:hover { background: var(--hover); color: var(--fg); }
-.take-tour > span:first-child { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid currentColor; font-size: 10px; flex: none; }
-.driver-popover.tour-popover { max-width: min(340px, calc(100vw - 24px)); background: var(--panel); color: var(--fg); }
-.driver-popover.tour-popover .driver-popover-title { color: var(--fg); }
-.driver-popover.tour-popover .driver-popover-description { color: var(--fg2); }
+.driver-popover.tour-popover { max-width: min(340px, calc(100vw - 24px)); min-width: 280px; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--panel-solid); color: var(--fg2); box-shadow: var(--shadow-lift); font: inherit; font-size: 13px; line-height: 1.5; }
+.driver-popover.tour-popover .driver-popover-title { margin: 0 20px 6px 0; font: inherit; font-size: 15px; font-weight: 700; color: var(--heading); }
+.driver-popover.tour-popover .driver-popover-description { margin: 0; font: inherit; color: var(--fg2); }
+.driver-popover.tour-popover .driver-popover-close-btn { top: 10px; right: 10px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--r-sm); color: var(--fg3); font-size: 18px; }
+.driver-popover.tour-popover .driver-popover-close-btn:hover, .driver-popover.tour-popover .driver-popover-close-btn:focus-visible { color: var(--fg); background: var(--hover); }
+.driver-popover.tour-popover .driver-popover-footer { margin-top: 14px; gap: 6px; align-items: center; }
+.driver-popover.tour-popover .driver-popover-progress-text { margin-right: auto; font-size: 12px; color: var(--fg3); }
+.driver-popover.tour-popover .driver-popover-navigation-btns { gap: 6px; }
+.driver-popover.tour-popover .driver-popover-footer button:not(.tour-skip):not(.tour-lang) { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--panel); color: var(--fg); font: inherit; font-size: 13px; font-weight: 600; text-shadow: none; cursor: pointer; }
+.driver-popover.tour-popover .driver-popover-footer button:not(.tour-skip):not(.tour-lang):hover { background: var(--hover); }
+.driver-popover.tour-popover .driver-popover-footer .driver-popover-next-btn { background: var(--accent); border-color: var(--accent-text); color: var(--on-accent); }
+.driver-popover.tour-popover .driver-popover-footer .driver-popover-next-btn:hover { background: var(--accent-2); }
+.driver-popover.tour-popover .driver-popover-footer button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.driver-popover.tour-popover .driver-popover-arrow { border-width: 6px; }
+.driver-popover.tour-popover .driver-popover-arrow-side-left { border-left-color: var(--panel-solid); }
+.driver-popover.tour-popover .driver-popover-arrow-side-right { border-right-color: var(--panel-solid); }
+.driver-popover.tour-popover .driver-popover-arrow-side-top { border-top-color: var(--panel-solid); }
+.driver-popover.tour-popover .driver-popover-arrow-side-bottom { border-bottom-color: var(--panel-solid); }
+.tour-skip, .tour-lang { cursor: pointer; background: transparent; border: 0; border-radius: var(--r-sm); color: var(--fg3); font: inherit; font-size: 12px; padding: 4px 6px; }
+.tour-skip:hover, .tour-lang:hover { color: var(--accent-text); background: var(--hover); }
 .tour-extra { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .tour-start { display: flex; flex-direction: column; gap: 6px; }
 .tour-start select { max-width: 100%; }
-.tour-skip, .tour-lang { cursor: pointer; background: transparent; border: 0; color: var(--accent-text); font: inherit; padding: 4px 6px; }
-.tour-resume { position: fixed; z-index: 10000; right: 16px; bottom: 16px; max-width: min(320px, calc(100vw - 32px)); padding: 14px; border-radius: var(--r-sm); background: var(--panel); color: var(--fg); border: 1px solid var(--line-strong); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22); }
-.tour-resume p { margin: 4px 0 10px; }
-.tour-resume-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-@media (max-width: 860px) {
-  .help-tip { left: auto; right: 0; top: 26px; transform: none; width: min(240px, calc(100vw - 48px)); }
-  .tour-resume { left: 16px; right: 16px; max-width: none; }
-}
 @media (prefers-reduced-motion: reduce) { .driver-popover.tour-popover, .driver-overlay, .driver-active-element { transition: none !important; animation: none !important; } }

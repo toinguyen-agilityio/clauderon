@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "./icons";
 import { useNeedsYou } from "./needs-you-live";
-import { HelpIcon, TakeTourButton } from "./tour/help-icon";
+import { TakeTourButton } from "./tour/take-tour-button";
 import type { Area } from "./tour/steps";
 
 type Item = { href: string; label: string; icon: React.ReactNode; area: Area; badge?: number };
@@ -54,12 +54,11 @@ export function SideNav({ needsYou: initial }: { needsYou: number }) {
                   </span>
                 ) : null}
               </Link>
-              <HelpIcon area={item.area} />
             </div>
           ))}
+          {group.title === "Insight" ? <TakeTourButton /> : null}
         </div>
       ))}
-      <TakeTourButton />
     </nav>
   );
 }
