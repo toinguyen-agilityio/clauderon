@@ -84,8 +84,15 @@ describe("selection bar styles", () => {
     expect(bar).not.toContain("sticky");
   });
 
+  it("is not trapped by an entrance animation that keeps a transform on its ancestors", () => {
+    expect(css).toMatch(/\.view > \*, \.pod-grid > \*, \.stats > \* \{ animation: rise [^;]*backwards;/);
+  });
+
   it("goes full width on phones and leaves room to scroll past it", () => {
-    expect(rule(phone, ".selbar")).toMatch(/left: max\(16px[^;]*;\s*right: max\(16px/);
+    // The phone override must come after the base rule, or the base left inset wins the cascade.
+    const phoneBar = css.search(/\n\s+\.selbar \{ left: max\(12px[^;]*;\s*right: max\(12px/);
+    expect(phoneBar).toBeGreaterThan(css.search(/\n\.selbar \{/));
+    expect(rule(phone, ".selbar")).toContain("flex-wrap: nowrap");
     expect(rule(phone, ".main:has(.selbar)")).toMatch(/padding-bottom: \d+px/);
   });
 

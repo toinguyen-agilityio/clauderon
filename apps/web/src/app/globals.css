@@ -233,9 +233,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .side-close { display: grid; position: absolute; top: 10px; right: 10px; }
   @media (prefers-reduced-motion: reduce) { .side, .side.open { transition: none; } }
   .main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-top: 18px; }
-  .selbar { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
-  /* The bar can wrap to two lines here: leave room to scroll the last row and the pager above it. */
-  .main:has(.selbar) { padding-bottom: 160px; }
+  /* Leave room to scroll the last row and the pager above the fixed selection bar. */
+  .main:has(.selbar) { padding-bottom: 104px; }
 }
 
 /* M1, from the prototype: filters, selection, dialogs, Pods, Run page */
@@ -312,6 +311,12 @@ a.stat.on { border-color: var(--accent-text); }
 .selbar .btn { border-color: transparent; }
 .selbar .btn.ghost { color: var(--bg); }
 .selbar .btn.ghost:hover { background: color-mix(in srgb, var(--bg) 15%, transparent); }
+/* Phones: after the base rule so the full-width inset wins; one row, the count shortens before the buttons do. */
+@media (max-width: 860px) {
+  .selbar { left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); flex-wrap: nowrap; gap: 8px; padding: 8px 8px 8px 14px; }
+  .selbar .tk-selcount { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .selbar .row { flex: none; flex-wrap: nowrap; gap: 4px; }
+}
 .pager { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid var(--line); }
 .pager-range { margin-right: auto; }
 .pager-size { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
@@ -565,6 +570,7 @@ h1 .small, h2 .small { font-family: var(--font-ui); letter-spacing: 0; color: va
 @media (min-width: 861px) {
   .side { transition: width 0.2s ease, padding 0.2s ease; }
   .side.collapsed { width: 64px; padding-inline: 10px; align-items: center; overflow-x: hidden; }
+  .shell:has(.side.collapsed) .selbar { left: calc(64px + max(28px, env(safe-area-inset-left, 0px))); }
   .side.collapsed .side-toggle { position: relative; top: auto; right: auto; flex: none; }
   .side.collapsed .brand { padding: 0; }
   .side.collapsed .brand > :not(.brand-mark) { display: none; }
@@ -626,7 +632,8 @@ dialog.modal { background: var(--panel-solid); border-radius: var(--r-md); box-s
 .btn.primary:not(:disabled):active { box-shadow: var(--shadow-press); }
 a.pod-tile:hover, a.stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
 @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-.view > *, .pod-grid > *, .stats > * { animation: rise 420ms var(--ease) both; }
+/* backwards, not both: a filled transform would stay on each block and trap the fixed .selbar inside it (#246). */
+.view > *, .pod-grid > *, .stats > * { animation: rise 420ms var(--ease) backwards; }
 .view > *:nth-child(2), .pod-grid > *:nth-child(2), .stats > *:nth-child(2) { animation-delay: 80ms; }
 .view > *:nth-child(3), .pod-grid > *:nth-child(3), .stats > *:nth-child(3) { animation-delay: 160ms; }
 .view > *:nth-child(n+4), .pod-grid > *:nth-child(n+4), .stats > *:nth-child(n+4) { animation-delay: 240ms; }
