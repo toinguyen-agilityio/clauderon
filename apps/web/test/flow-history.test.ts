@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { listAudit, loadFlowDetail, schema, sql, type Db, type FlowGraphInput } from "@clauderon/db";
 import { FakeClock, FakeGitHub, createTestDatabase, machineRow, memberRow, projectRow, sampleFlowId, startSampleBatch, ticketRow, type TestDatabase } from "@clauderon/testing";
@@ -10,7 +13,6 @@ import {
   deleteMyFlow,
   restoreMyFlowVersion,
   saveMyFlow,
-  viewDeletedFlows,
   viewFlowHistory,
   viewFlowVersion,
   type SnapshotView,
@@ -102,19 +104,17 @@ describe("Flow history on the Flows page (issue #181)", () => {
     expect(compareSnapshots(null, after).nodes.every((n) => n.status === "same")).toBe(true);
   });
 
-  it("deleted Flows are listed with who deleted them, and a version can be cloned", async () => {
+  it("a deleted Flow keeps its history and a version can be cloned", async () => {
     const ann = await memberRow(db, "ann@example.com", "Ann");
     const bob = await memberRow(db, "bob@example.com", "Bob");
     const made = await createMyFlow(deps, ann, "Ship");
     if (!made.ok) throw new Error("create failed");
     await deleteMyFlow(deps, bob, made.flowId);
-    const deleted = await viewDeletedFlows(deps);
-    expect(deleted).toEqual([expect.objectContaining({ flowId: made.flowId, name: "Ship", deletedByName: "Bob" })]);
-
-    const copy = await cloneMyDeletedFlow(deps, ann, made.flowId, deleted[0]!.versionId);
+    const history = await viewFlowHistory(deps, made.flowId);
+    expect(history).toMatchObject({ deleted: true, name: "Ship" });
+    const copy = await cloneMyDeletedFlow(deps, ann, made.flowId, history!.entries[0]!.id);
     expect(copy).toMatchObject({ ok: true, name: "Ship" });
     expect(await cloneMyDeletedFlow(deps, ann, made.flowId, crypto.randomUUID())).toMatchObject({ ok: false });
-    expect(await viewDeletedFlows(deps)).toHaveLength(1);
   });
 
   it("restore brings a version back, records it, and is refused while a Run is active (FLW-7)", async () => {
@@ -171,5 +171,19 @@ describe("Flow history on the Flows page (issue #181)", () => {
     const text = JSON.stringify(await viewFlowVersion(deps, flowId, latest!.id));
     expect(text).not.toContain(token);
     expect(text).toContain("•••");
+  });
+
+  it("nothing links to the removed /flows/deleted page", () => {
+    const hits: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, e.name);
+        if (e.isDirectory()) walk(path);
+        else if (/\.(tsx?|json)$/.test(e.name) && readFileSync(path, "utf8").includes("flows/deleted")) hits.push(path);
+      }
+    };
+    walk(fileURLToPath(new URL("../src", import.meta.url)));
+    expect(hits).toEqual([]);
+    expect(existsSync(fileURLToPath(new URL("../src/app/(app)/flows/deleted", import.meta.url)))).toBe(false);
   });
 });

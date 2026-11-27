@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne, notExists, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { diffFlow, libraryChanges, maskSnapshot, type FlowChange, type FlowVersionKind, type NodeDefinition, type VersionSnapshot } from "@clauderon/core";
 import type { Db } from "./client";
 import { flowLocks, type FlowLock } from "./flows";
@@ -107,29 +107,6 @@ export async function getFlowVersion(db: Db, flowId: string, versionId: string):
     version: { ...version, snapshot: maskSnapshot(version.snapshot) },
     previous: previous ? { ...previous, snapshot: maskSnapshot(previous.snapshot) } : null,
   };
-}
-
-export type DeletedFlow = { flowId: string; name: string; versionId: string; deletedByEmail: string; deletedByName: string | null; deletedAt: Date };
-
-/** Flows that no longer exist, newest deletion first, with who deleted them. Their history stays reachable. */
-export async function listDeletedFlows(db: Db): Promise<DeletedFlow[]> {
-  const latest = await db
-    .selectDistinctOn([flowVersion.flowId], {
-      flowId: flowVersion.flowId,
-      versionId: flowVersion.id,
-      kind: flowVersion.kind,
-      name: flowVersion.flowName,
-      email: flowVersion.actorEmail,
-      at: flowVersion.at,
-      actorName: sql<string | null>`(select member.name from member where member.email = ${flowVersion.actorEmail})`,
-    })
-    .from(flowVersion)
-    .where(notExists(db.select({ one: sql`1` }).from(flow).where(eq(flow.id, flowVersion.flowId))))
-    .orderBy(flowVersion.flowId, desc(flowVersion.seq));
-  return latest
-    .filter((r) => r.kind === "delete")
-    .map((r) => ({ flowId: r.flowId, name: r.name, versionId: r.versionId, deletedByEmail: r.email, deletedByName: r.actorName, deletedAt: r.at }))
-    .sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
 }
 
 /** Whether a Flow with this id exists now (history can outlive it). */
