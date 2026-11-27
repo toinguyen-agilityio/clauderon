@@ -13,11 +13,6 @@ type Table = {
     done: string;
     progress: string;
     takeTheTour: string;
-    helpFor: string;
-    resumeTitle: string;
-    resumeBody: string;
-    resume: string;
-    restart: string;
     dismiss: string;
     language: string;
     pickTicket: string;
@@ -56,11 +51,6 @@ export const COPY: Record<Lang, Table> = {
       done: "Finish",
       progress: "Step {n} of {total}",
       takeTheTour: "Take the tour",
-      helpFor: "Help: {area}",
-      resumeTitle: "Continue the tour?",
-      resumeBody: "You left the tour part way through.",
-      resume: "Resume",
-      restart: "Restart",
       dismiss: "Not now",
       language: "Tiếng Việt",
       pickTicket: "Ticket",
@@ -97,11 +87,6 @@ export const COPY: Record<Lang, Table> = {
       done: "Xong",
       progress: "Bước {n}/{total}",
       takeTheTour: "Xem hướng dẫn",
-      helpFor: "Trợ giúp: {area}",
-      resumeTitle: "Tiếp tục hướng dẫn?",
-      resumeBody: "Bạn đã dừng giữa chừng.",
-      resume: "Tiếp tục",
-      restart: "Bắt đầu lại",
       dismiss: "Để sau",
       language: "English",
       pickTicket: "Ticket",
