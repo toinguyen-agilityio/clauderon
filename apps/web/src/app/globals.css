@@ -1951,9 +1951,11 @@ dialog.modal.danger .modal-b { padding: 8px 24px 22px 74px; }
 .driver-popover.tour-popover .driver-popover-description { margin: 0; font: inherit; color: var(--fg2); }
 .driver-popover.tour-popover .driver-popover-close-btn { top: 10px; right: 10px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--r-sm); color: var(--fg3); font-size: 18px; }
 .driver-popover.tour-popover .driver-popover-close-btn:hover, .driver-popover.tour-popover .driver-popover-close-btn:focus-visible { color: var(--fg); background: var(--hover); }
-.driver-popover.tour-popover .driver-popover-footer { margin-top: 14px; gap: 6px; align-items: center; }
+.driver-popover.tour-popover .driver-popover-footer { margin-top: 14px; gap: 6px; align-items: center; flex-wrap: wrap; }
+/* Labels never break inside a button; when the row runs out of room (longer Vietnamese labels, larger fonts) the buttons drop to their own row instead. */
+.driver-popover.tour-popover .driver-popover-footer > *, .driver-popover.tour-popover .driver-popover-footer button { white-space: nowrap; flex-shrink: 0; }
 .driver-popover.tour-popover .driver-popover-progress-text { margin-right: auto; font-size: 12px; color: var(--fg3); }
-.driver-popover.tour-popover .driver-popover-navigation-btns { gap: 6px; }
+.driver-popover.tour-popover .driver-popover-navigation-btns { gap: 6px; margin-left: auto; }
 .driver-popover.tour-popover .driver-popover-footer button:not(.tour-skip):not(.tour-lang) { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--panel); color: var(--fg); font: inherit; font-size: 13px; font-weight: 600; text-shadow: none; cursor: pointer; }
 .driver-popover.tour-popover .driver-popover-footer button:not(.tour-skip):not(.tour-lang):hover { background: var(--hover); }
 .driver-popover.tour-popover .driver-popover-footer .driver-popover-next-btn { background: var(--accent); border-color: var(--accent-text); color: var(--on-accent); }
