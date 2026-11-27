@@ -45,7 +45,7 @@ export function SideNav({ needsYou: initial }: { needsYou: number }) {
           </div>
           {group.items.map((item) => (
             <div key={item.href} className="nav-row">
-              <Link href={item.href} data-tour-nav={item.area} className={path.startsWith(item.href) ? "on" : ""} aria-current={path.startsWith(item.href) ? "page" : undefined}>
+              <Link href={item.href} title={item.label} data-tour-nav={item.area} className={path.startsWith(item.href) ? "on" : ""} aria-current={path.startsWith(item.href) ? "page" : undefined}>
                 {item.icon}
                 <span className="lbl">{item.label}</span>
                 {item.badge ? (

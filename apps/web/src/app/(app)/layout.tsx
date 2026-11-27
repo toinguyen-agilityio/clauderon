@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { ThemeToggle } from "../../components/theme-toggle";
 import type { ReactNode } from "react";
 import { signOut } from "../../auth";
@@ -12,6 +13,7 @@ import { TourProvider } from "../../components/tour/tour-provider";
 import { isOperator } from "@clauderon/db";
 import { MobileShell } from "../../components/mobile-shell";
 import { SideNav } from "../../components/side-nav";
+import { parseCollapsed, SIDEBAR_COOKIE } from "../../components/sidebar-state";
 import { needsYouCount } from "../../server/runs";
 import { deps, gatewayUrl, requireMember } from "../../server/runtime";
 import { appVersion } from "../../server/version";
@@ -20,6 +22,7 @@ import { appVersion } from "../../server/version";
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const member = await requireMember();
   const needsYou = await needsYouCount(deps());
+  const collapsed = parseCollapsed((await cookies()).get(SIDEBAR_COOKIE)?.value);
 
   return (
     <ShellSocketProvider gatewayUrl={gatewayUrl()}>
@@ -27,7 +30,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <TourProvider isOperator={isOperator(member.email, deps().operators)} loadFacts={tourFactsAction} startRun={startAction}>
     <div className="shell">
       <NeedsYouProvider initial={needsYou} load={needsYouAction}>
-      <MobileShell needsYou={needsYou}>
+      <MobileShell needsYou={needsYou} collapsed={collapsed}>
         <Brand />
         <SideNav needsYou={needsYou} />
         <div className="side-foot">
@@ -52,7 +55,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             </form>
           </div>
           {appVersion(process.env) && (
-            <div className="small faint" title="App version">
+            <div className="small faint side-version" title="App version">
               {appVersion(process.env)}
             </div>
           )}
