@@ -61,7 +61,7 @@ export function HelpIcon({ area }: { area: Area }) {
 export function TakeTourButton() {
   const { lang, open } = useTour();
   return (
-    <button type="button" className="take-tour" onClick={open}>
+    <button type="button" className="take-tour" title={COPY[lang].ui.takeTheTour} onClick={open}>
       <span aria-hidden="true">?</span>
       <span className="lbl">{COPY[lang].ui.takeTheTour}</span>
     </button>

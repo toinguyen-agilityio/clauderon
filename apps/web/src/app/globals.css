@@ -88,8 +88,8 @@ p { margin: 0; }
 
 /* shell */
 .topbar, .scrim, .side-close { display: none; }
-.shell { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: 100%; }
-.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 20px; padding: 18px 14px; border-right: 1px solid var(--line); background: var(--panel); }
+.shell { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 100%; }
+.side { position: sticky; top: 0; width: 228px; height: 100vh; display: flex; flex-direction: column; gap: 20px; padding: 18px 14px; border-right: 1px solid var(--line); background: var(--panel); }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
 .brand-mark { width: 28px; height: 28px; border-radius: 7px; background: var(--fg); color: var(--bg); display: grid; place-items: center; font-family: var(--font-mono); font-weight: 600; font-size: 13px; }
 .brand-name { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
@@ -228,6 +228,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .scrim { display: block; position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.5); }
   .side { position: fixed; top: 0; bottom: 0; left: 0; z-index: 40; width: min(300px, 86vw); height: 100dvh; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding-top: max(18px, env(safe-area-inset-top, 0px)); transform: translateX(-100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; border-right: 1px solid var(--side-line, var(--line)); }
   .side.open { transform: none; visibility: visible; transition: transform 0.2s ease; }
+  .side-toggle { display: none; }
+  .side .brand { padding-right: 6px; }
   .side-close { display: grid; position: absolute; top: 10px; right: 10px; }
   @media (prefers-reduced-motion: reduce) { .side, .side.open { transition: none; } }
   .main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-top: 18px; }
@@ -549,6 +551,36 @@ h1 .small, h2 .small { font-family: var(--font-ui); letter-spacing: 0; color: va
 .side-tools .theme-seg svg, .icon-btn svg { width: 15px; height: 15px; }
 .icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--side-fg2); cursor: pointer; transition: background-color 250ms var(--ease), color 250ms var(--ease); }
 .icon-btn:hover { background: var(--side-hover); color: var(--side-fg); }
+
+/* Desktop collapse (#241): a toggle at the top of the sidebar shrinks it to an icon-only rail.
+   Phones keep the drawer, so the toggle is hidden there and the rail rules apply only above 860px. */
+.side-toggle { position: absolute; top: 16px; right: 10px; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--side-fg2); cursor: pointer; transition: background-color 250ms var(--ease), color 250ms var(--ease); }
+.side-toggle:hover { background: var(--side-hover); color: var(--side-fg); }
+.side-toggle:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+.side-toggle svg { width: 16px; height: 16px; }
+.side-toggle .dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--attn); }
+.side .brand { padding-right: 40px; }
+@media (min-width: 861px) {
+  .side { transition: width 0.2s ease, padding 0.2s ease; }
+  .side.collapsed { width: 64px; padding-inline: 10px; align-items: center; overflow-x: hidden; }
+  .side.collapsed .side-toggle { position: relative; top: auto; right: auto; flex: none; }
+  .side.collapsed .brand { padding: 0; }
+  .side.collapsed .brand > :not(.brand-mark) { display: none; }
+  .side.collapsed .nav, .side.collapsed .side-foot { align-self: stretch; }
+  .side.collapsed .nav-group-title, .side.collapsed .me-text, .side.collapsed .side-version { display: none; }
+  .side.collapsed .nav a { justify-content: center; padding: 8px; }
+  /* The guided tour's per-link help icons do not fit the rail; Take the tour stays as its ? icon. */
+  .side.collapsed .nav .help-icon { display: none; }
+  .side.collapsed .nav .take-tour { justify-content: center; padding: 8px; }
+  /* clipped, not display: none, so each link keeps its accessible name */
+  .side.collapsed .nav .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+  .side.collapsed .nav .badge { position: absolute; top: 0; right: 0; min-width: 16px; height: 16px; padding: 0 4px; font-size: 10px; margin: 0; }
+  .side.collapsed .side-foot { padding-inline: 0; align-items: center; }
+  .side.collapsed .side-tools { flex-direction: column; }
+  .side.collapsed .side-tools .theme-seg { flex-direction: column; flex: none; }
+  .side.collapsed .side-tools .theme-seg button { width: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { .side, .side-toggle { transition: none; } }
 /* Notifications (#198): the card on the Projects page and the in-app toasts. */
 .notify-card { --fe-ease: cubic-bezier(0.2, 0.7, 0.2, 1); display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; margin-bottom: 16px; }
 .notify-card-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; }

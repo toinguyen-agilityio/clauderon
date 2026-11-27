@@ -85,6 +85,12 @@ export const Icon = {
       <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
     </svg>
   ),
+  sidebar: (
+    <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" aria-hidden="true">
+      <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+      <path d="M6 2.5v11" />
+    </svg>
+  ),
   close: (
     <svg viewBox="0 0 16 16" {...stroke} strokeLinecap="round" aria-hidden="true">
       <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
