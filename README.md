@@ -101,7 +101,7 @@ There are no screenshots in the repository yet. To click through the screens, op
 | Contracts | zod schemas in `packages/protocol` |
 | Testing | Vitest against a real Postgres (no database mocks) |
 | Tooling | ESLint, `tsx` |
-| Deployment | Docker Compose, Cloudflare Tunnel (`cloudflared`); a free Render Blueprint (`render.yaml`) for demos |
+| Deployment | Render Blueprint (`render.yaml`) in production; Docker Compose with a Cloudflare Tunnel (`cloudflared`) to self-host |
 | On each Machine | Claude Code CLI, GitHub CLI (`gh`), git, bash / Git Bash |
 
 ## Project structure
@@ -225,7 +225,9 @@ Secrets live only in the environment, never in the database. Local development r
 | `WEB_URL` | gateway | No | Public web URL for the approve links Agents open. Defaults to `AUTH_URL`. |
 | `AGENT_BUNDLE_DIR` | web | No | Folder with the built `agent.mjs` and `agent.json`. Default `../host-agent/dist`. |
 
-### Production (`deploy/.env.production`)
+### Self-hosted stack (`deploy/.env.production`)
+
+Production on Render takes its variables from `render.yaml` and the Render dashboard instead; see [deploy/README.md](deploy/README.md#production-on-render).
 
 | Variable | Description |
 | --- | --- |
@@ -322,7 +324,7 @@ Clauderon runs an AI agent with broad permissions on people's computers. Read [A
 - **Credentials stay with the Member.** The app never reads, stores or forwards Claude or OAuth tokens; the Agent only checks login status. A Machine token is stored only as its SHA-256 hash.
 - **Read-only GitHub access.** The app holds one read-only token; every write to GitHub happens on the Starter's Machine.
 - **Secrets in the environment only.** No secrets in the database, and known token patterns are masked before any log line is stored or streamed.
-- **Network.** The app is on the internet through a Cloudflare Tunnel, so Google sign-in and the allowlist are the only gate. Neither the host nor the Machines open an inbound port; Postgres is never published.
+- **Network.** The app is on the internet (on Render, or through a Cloudflare Tunnel when self-hosted), so Google sign-in and the allowlist are the only gate. Machines open no inbound port, and Postgres is reachable only from the app's services.
 
 ## Contributing
 
