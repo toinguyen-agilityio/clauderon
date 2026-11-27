@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "../../../components/icons";
 import { runStateLook, tagColor, TicketStatusPill, ticketTone } from "../../../components/state-pill";
 import type { TicketRow } from "../../../server/tickets";
+import { SortHeader } from "../../../components/sort-header";
 import { loadStartDialog, startAction } from "./actions";
 import { StartRunsDialog } from "../../../components/start-runs-dialog";
 
@@ -47,10 +48,10 @@ export function TicketTable({ rows, searched, view }: { rows: TicketRow[]; searc
                     onChange={() => setSelected(allSelected ? new Set() : new Set(pickable.map((t) => t.id)))}
                   />
                 </th>
-                <th className="tk-stub">Issue</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th className="tk-latest">Latest Run</th>
+                <SortHeader className="tk-stub" column="issue" label="Issue" />
+                <SortHeader column="title" label="Title" />
+                <SortHeader column="status" label="Status" />
+                <SortHeader className="tk-latest" column="latest" label="Latest Run" />
               </tr>
             </thead>
             <tbody>

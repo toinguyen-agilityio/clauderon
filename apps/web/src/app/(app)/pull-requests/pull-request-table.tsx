@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Avatar } from "../../../components/brand";
 import { Icon } from "../../../components/icons";
+import { SortButton, SortHeader } from "../../../components/sort-header";
 import { tagColor } from "../../../components/state-pill";
 import { StartRunsDialog } from "../../../components/start-runs-dialog";
 import type { PullRequestRow } from "../../../server/runs";
@@ -51,10 +52,15 @@ export function PullRequestTable({ rows, empty }: { rows: PullRequestListRow[]; 
                   onChange={() => setSelected(allSelected ? new Set() : new Set(pickable.map((r) => r.id)))}
                 />
               </th>
-              <th className="tk-stub">Pull request</th>
-              <th>Title</th>
-              <th>Opened from</th>
-              <th>Opened by</th>
+              <SortHeader className="tk-stub" column="pr" label="Pull request" />
+              <SortHeader column="title" label="Title" />
+              <SortHeader column="from" label="Opened from" />
+              <th aria-label="Opened by, and when">
+                <div className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
+                  <SortButton column="by" label="Opened by" />
+                  <SortButton column="opened" label="Opened" first="desc" />
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>

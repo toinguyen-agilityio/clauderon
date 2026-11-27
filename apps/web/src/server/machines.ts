@@ -180,3 +180,16 @@ export async function removeMachine(deps: AppDeps, viewer: Viewer, machineId: st
   await deps.command({ type: "machine.repaired", machineId });
   return { ok: true };
 }
+
+/** The Machines columns a Member can sort by. */
+export const MACHINE_SORTS = ["name", "owner", "status", "busy"] as const;
+
+/** Offline sorts before online, so the longest-offline Machines are easy to find; unpaired first of all. */
+const stateRank = (m: MachineView) => (!m.paired ? 0 : m.connected ? 2 : 1);
+
+export const machineSortKeys = {
+  name: (m: MachineView) => m.name ?? m.owner.name ?? m.owner.email,
+  owner: (m: MachineView) => m.owner.name ?? m.owner.email,
+  status: (m: MachineView) => stateRank(m),
+  busy: (m: MachineView) => m.inUse,
+};

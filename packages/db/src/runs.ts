@@ -563,8 +563,24 @@ const runListColumns = {
   pullRequestState: run.pullRequestState,
 };
 
-/** The Runs list (TRK-7): filters combine; newest first; paginated, with the page clamped to the last one. */
-export async function listRuns(db: Db, filters: RunFilters, page = 1, size = RUNS_PAGE_SIZE) {
+/** The Runs columns a list can be sorted by. */
+export const RUN_SORTS = ["started", "run", "state", "starter", "duration", "pr"] as const;
+export type RunSort = { by: (typeof RUN_SORTS)[number]; dir: "asc" | "desc" };
+
+const runSortExpr: Record<RunSort["by"], SQL> = {
+  started: sql`${ticket.number}`,
+  run: sql`lower(${runTitle})`,
+  state: sql`${run.state}::text`,
+  starter: sql`lower(coalesce(${member.name}, ${member.email}))`,
+  duration: sql`extract(epoch from (coalesce(${run.endedAt}, now()) - ${run.startedAt}))`,
+  pr: sql`${run.pullRequestNumber}`,
+};
+
+/**
+ * The Runs list (TRK-7): filters combine; newest first unless a `sort` is given
+ * (applied before paging, empty values last); paginated, with the page clamped to the last one.
+ */
+export async function listRuns(db: Db, filters: RunFilters, page = 1, size = RUNS_PAGE_SIZE, sort?: RunSort) {
   const conditions: SQL[] = [];
   if (filters.state) conditions.push(eq(run.state, filters.state));
   if (filters.flowId) conditions.push(eq(run.flowId, filters.flowId));
@@ -580,7 +596,7 @@ export async function listRuns(db: Db, filters: RunFilters, page = 1, size = RUN
     .leftJoin(flow, eq(flow.id, run.flowId))
     .innerJoin(member, eq(member.id, run.starterMemberId))
     .where(where)
-    .orderBy(desc(run.queuedAt), desc(run.id))
+    .orderBy(...(sort ? [sort.dir === "asc" ? sql`${runSortExpr[sort.by]} asc nulls last` : sql`${runSortExpr[sort.by]} desc nulls last`] : []), desc(run.queuedAt), desc(run.id))
     .limit(size + 1)
     .offset((current - 1) * size);
   return { rows: rows.slice(0, size), hasMore: rows.length > size, total, page: current };
