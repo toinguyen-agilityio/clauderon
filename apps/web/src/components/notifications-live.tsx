@@ -8,7 +8,7 @@ import { NOTIFY_KEY, chooseDisplay, notifyTag, notifyText, parseNotify, readEnab
 import { useShellSocket } from "./shell-socket";
 
 type Toast = { id: number; runId: string; title: string; body: string };
-type Setting = { enabled: boolean; permission: NotifyPermission; toggle: () => void };
+type Setting = { enabled: boolean; permission: NotifyPermission; unanswered: boolean; toggle: () => void };
 
 const NotifySetting = createContext<Setting | null>(null);
 const TOAST_MS = 10_000;
@@ -35,6 +35,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const socket = useShellSocket();
   const [enabled, setEnabled] = useState(false);
   const [permission, setPermission] = useState<NotifyPermission>("default");
+  // The last prompt from the switch ended still `default` (dismissed or quietly blocked).
+  const [unanswered, setUnanswered] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);
   // Read by the socket listener, which is not re-attached when these change.
@@ -110,15 +112,20 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     if (now === "unsupported" || now === "denied") return setPermission(now);
     if (enabled && now === "granted") return save(false);
     if (now === "granted") return save(true);
-    // Asked only from this click (#198).
-    void Notification.requestPermission().then((answer) => {
-      setPermission(answer);
-      save(answer === "granted");
-    });
+    // Asked only from this click (#198). A dismissed or quietly blocked prompt
+    // resolves `default` (or rejects): keep the switch off and say why (#244).
+    Promise.resolve()
+      .then(() => Notification.requestPermission())
+      .catch(() => currentPermission())
+      .then((answer) => {
+        setPermission(answer);
+        setUnanswered(answer === "default");
+        save(answer === "granted");
+      });
   }, [enabled]);
 
   return (
-    <NotifySetting.Provider value={{ enabled, permission, toggle }}>
+    <NotifySetting.Provider value={{ enabled, permission, unanswered, toggle }}>
       {children}
       {toasts.length > 0 && (
         <div className="notify-toasts" role="status" aria-live="polite">
@@ -151,7 +158,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 export function NotificationsToggle() {
   const setting = useContext(NotifySetting);
   if (!setting) return null;
-  const state = switchState(setting.enabled, setting.permission);
+  const state = switchState(setting.enabled, setting.permission, setting.unanswered);
   return (
     <section className="card notify-card" aria-labelledby="notify-card-h">
       <div className="notify-card-head">

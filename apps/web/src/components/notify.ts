@@ -92,12 +92,25 @@ export function readEnabled(storage: Pick<Storage, "getItem"> | null): boolean {
   }
 }
 
-/** The Projects page card: whether it is on, whether it can be used, and why not. */
-export function switchState(enabled: boolean, permission: NotifyPermission): { label: string; on: boolean; disabled: boolean; hint: string | null } {
+/**
+ * The Projects page card: whether it is on, whether it can be used, and why not.
+ * `unanswered` is true when the last prompt from the switch ended without an
+ * answer (dismissed, or blocked quietly by the browser), so the permission is
+ * still `default` and the switch stayed off (#244).
+ */
+export function switchState(
+  enabled: boolean,
+  permission: NotifyPermission,
+  unanswered = false,
+): { label: string; on: boolean; disabled: boolean; hint: string | null } {
   if (permission === "unsupported") return { label: "Notifications", on: false, disabled: true, hint: "This browser cannot show notifications." };
   if (permission === "denied") {
     return { label: "Notifications", on: false, disabled: true, hint: "Notifications are blocked for this site. Allow them in the browser's site settings, then reload." };
   }
   const on = enabled && permission === "granted";
-  return { label: "Notifications", on, disabled: false, hint: null };
+  const hint =
+    !on && unanswered && permission === "default"
+      ? "The browser did not allow notifications: the prompt was closed or blocked. Click the switch again and choose Allow, or allow notifications from the icon in the address bar or the browser's site settings."
+      : null;
+  return { label: "Notifications", on, disabled: false, hint };
 }
