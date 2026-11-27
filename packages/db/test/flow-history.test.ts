@@ -228,7 +228,7 @@ describe("deleted Flows", () => {
   it("keep their history and can be cloned from a version", async () => {
     const f = await flowWith(["Plan"]);
     await saveFlow(db, f.flowId, f.graph, ann, t(1));
-    const live = await createFlow(db, "Stays", ann, t(1));
+    await createFlow(db, "Stays", ann, t(1));
     const removed = await deleteFlow(db, f.flowId, bob, t(5));
     if (!removed.ok) throw new Error("delete failed");
     expect(removed).toMatchObject({ name: "Ship", versionId: expect.any(String) });
