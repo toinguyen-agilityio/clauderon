@@ -15,10 +15,6 @@ type Table = {
     takeTheTour: string;
     dismiss: string;
     language: string;
-    pickTicket: string;
-    startSample: string;
-    starting: string;
-    started: string;
     noWait: string;
     waitingForPr: string;
   };
@@ -27,17 +23,17 @@ type Table = {
 export const COPY: Record<Lang, Table> = {
   en: {
     area: {
-      machines: { title: "Machines", help: "Your own computer, paired so Runs execute there. Pair it first, then check that Claude Code and gh are logged in." },
+      machines: { title: "Machines", help: "Runs execute on your own computer. Copy the command for your system (macOS or Linux, or Windows), paste it into a terminal on that computer and follow the prompts, then approve it in the browser. Once it shows here as online, it is connected. Claude Code and gh must be logged in there." },
       tickets: { title: "Tickets", help: "GitHub issues you can work on. Pick one and start a Run from here." },
       flows: { title: "Flows", help: "A Flow is the chain of steps a Run follows. Pick the one this Ticket should use." },
       runs: { title: "Runs", help: "Each Run is one Flow working on one Ticket. Follow it here, and answer under Needs you when it asks." },
       needsYou: { title: "Needs you", help: "Runs waiting for your answer or approval. Respond here so they can go on." },
       pullRequests: { title: "Pull requests", help: "The result of a Run: find the Pull request it opened and open it on GitHub." },
-      projects: { title: "Project Settings", help: "Operators choose the repositories to work on and set the GitHub token here." },
+      projects: { title: "Project Settings", help: "Paste a read-only GitHub token here and save it, then enable a repository below. Its open issues become Tickets, so do this before anything else." },
       members: { title: "Members", help: "Operators decide who may sign in. Add or remove emails here." },
       audit: { title: "Audit log", help: "Who did what, and when. Read it to see how a Run or setting changed." },
     },
-    start: { title: "Start a Run", body: "Choose a Ticket and start a sample Run with the first Flow. Nothing starts until you confirm." },
+    start: { title: "Start a Run", body: "Tick a Ticket here, then press Start Runs… in the bar that appears. Pick the Flow and confirm; nothing starts until you do. Then press Next." },
     missing: {
       machine: { title: "No Machine paired yet", body: "Runs execute on your own computer. Pair it first.", link: "Go to Machines" },
       ticket: { title: "No Ticket to pick yet", body: "There is no open Ticket without a Run. Sync a Project on the Tickets page.", link: "Go to Tickets" },
@@ -53,27 +49,23 @@ export const COPY: Record<Lang, Table> = {
       takeTheTour: "Take the tour",
       dismiss: "Not now",
       language: "Tiếng Việt",
-      pickTicket: "Ticket",
-      startSample: "Start sample Run on {ticket}",
-      starting: "Starting…",
-      started: "Run started. Next, follow it.",
       noWait: "Waiting for the Pull request: it appears here once the Run opens one.",
       waitingForPr: "Waiting for result",
     },
   },
   vi: {
     area: {
-      machines: { title: "Machines", help: "Máy tính của chính bạn, đã ghép đôi để Run chạy trên đó. Ghép đôi trước, rồi kiểm tra Claude Code và gh đã đăng nhập." },
+      machines: { title: "Machines", help: "Run chạy trên máy tính của chính bạn. Hãy sao chép lệnh cho hệ điều hành của bạn (macOS/Linux hoặc Windows), dán vào terminal trên máy đó và làm theo hướng dẫn, rồi duyệt trong trình duyệt. Khi máy hiện ở đây là online thì đã kết nối xong. Claude Code và gh cần được đăng nhập trên máy đó." },
       tickets: { title: "Tickets", help: "Các issue GitHub bạn có thể làm. Chọn một Ticket và bắt đầu Run từ đây." },
       flows: { title: "Flows", help: "Flow là chuỗi bước mà một Run đi theo. Chọn Flow mà Ticket này sẽ dùng." },
       runs: { title: "Runs", help: "Mỗi Run là một Flow làm việc trên một Ticket. Theo dõi tại đây và trả lời ở Needs you khi nó hỏi." },
       needsYou: { title: "Needs you", help: "Các Run đang chờ bạn trả lời hoặc phê duyệt. Phản hồi tại đây để chúng chạy tiếp." },
       pullRequests: { title: "Pull requests", help: "Kết quả của một Run: tìm Pull request nó đã mở và mở trên GitHub." },
-      projects: { title: "Project Settings", help: "Operator chọn các repository cần làm và đặt GitHub token tại đây." },
+      projects: { title: "Project Settings", help: "Dán GitHub token chỉ-đọc vào đây và lưu, rồi bật một repository ở bên dưới. Các issue đang mở của nó sẽ thành Ticket, nên hãy làm việc này trước tiên." },
       members: { title: "Members", help: "Operator quyết định ai được đăng nhập. Thêm hoặc xóa email tại đây." },
       audit: { title: "Audit log", help: "Ai đã làm gì và khi nào. Xem để biết một Run hoặc cài đặt đã thay đổi ra sao." },
     },
-    start: { title: "Bắt đầu một Run", body: "Chọn một Ticket và bắt đầu Run mẫu với Flow đầu tiên. Sẽ không có gì chạy cho đến khi bạn xác nhận." },
+    start: { title: "Bắt đầu một Run", body: "Tick chọn một Ticket ở đây, rồi bấm Start Runs… trên thanh vừa hiện ra. Chọn Flow và xác nhận; sẽ không có gì chạy cho đến khi bạn làm vậy. Sau đó bấm Tiếp." },
     missing: {
       machine: { title: "Chưa ghép đôi Machine", body: "Run chạy trên máy của bạn. Hãy ghép đôi trước.", link: "Đến Machines" },
       ticket: { title: "Chưa có Ticket để chọn", body: "Không có Ticket mở nào chưa có Run. Đồng bộ một Project ở trang Tickets.", link: "Đến Tickets" },
@@ -89,10 +81,6 @@ export const COPY: Record<Lang, Table> = {
       takeTheTour: "Xem hướng dẫn",
       dismiss: "Để sau",
       language: "English",
-      pickTicket: "Ticket",
-      startSample: "Bắt đầu Run mẫu trên {ticket}",
-      starting: "Đang bắt đầu…",
-      started: "Đã bắt đầu Run. Tiếp theo, hãy theo dõi nó.",
       noWait: "Đang chờ Pull request: nó xuất hiện ở đây khi Run mở một cái.",
       waitingForPr: "Đang chờ kết quả",
     },

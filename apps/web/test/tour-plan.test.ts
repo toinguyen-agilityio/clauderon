@@ -11,8 +11,8 @@ describe("tour plan", () => {
     expect(ids(false)).toEqual(["machines", "tickets", "flows", "start", "runs", "pullRequests"]);
   });
 
-  it("adds Project Settings and Members only for an Operator, after the Member steps", () => {
-    expect(ids(true)).toEqual(["machines", "tickets", "flows", "start", "runs", "pullRequests", "projects", "members"]);
+  it("adds Project Settings (right after Machines, since Tickets come from a Project) and Members only for an Operator", () => {
+    expect(ids(true)).toEqual(["machines", "projects", "tickets", "flows", "start", "runs", "pullRequests", "members"]);
     expect(ids(false)).not.toContain("projects");
     expect(ids(false)).not.toContain("members");
   });

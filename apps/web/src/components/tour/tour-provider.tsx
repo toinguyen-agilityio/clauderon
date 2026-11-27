@@ -9,10 +9,6 @@ import { COPY, detectLang, fill, stepText } from "./copy";
 import { buildSteps, type PlannedStep } from "./plan";
 import { browserStorage, readTour, writeTour, type Lang } from "./storage";
 
-type StartInput = { flowId: string; ticketIds: string[]; extraInstructions: string };
-type StartResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; error: string; machinePage?: string };
-type StartRun = (input: StartInput) => Promise<StartResult>;
-
 type Ctx = { lang: Lang; open: () => void };
 const TourContext = createContext<Ctx>({ lang: "en", open: () => {} });
 export const useTour = () => useContext(TourContext);
@@ -43,12 +39,10 @@ const reducedMotion = () => typeof window !== "undefined" && typeof window.match
 export function TourProvider({
   isOperator,
   loadFacts,
-  startRun,
   children,
 }: {
   isOperator: boolean;
   loadFacts: () => Promise<TourFacts>;
-  startRun: StartRun;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -82,8 +76,12 @@ export function TourProvider({
   }, []);
 
   // The tour only starts when the Member asks for it (Take the tour).
-  const open = useCallback(() => {
+  // The language is known from the first render on, so the sidebar entry is in it before the tour is opened.
+  useEffect(() => {
     setLang(readTour(browserStorage()).lang ?? detectLang(navigator.language));
+  }, []);
+
+  const open = useCallback(() => {
     loadFacts()
       .then((f) => {
         setFacts(f);
@@ -97,7 +95,10 @@ export function TourProvider({
   useEffect(() => {
     if (phase !== "running" || fetchedFor.current === index) return;
     fetchedFor.current = index;
-    loadFacts().then(setFacts).catch(() => {});
+    // Keep the same object when nothing changed, so the step is not drawn a second time.
+    loadFacts()
+      .then((f) => setFacts((prev) => (prev && JSON.stringify(prev) === JSON.stringify(f) ? prev : f)))
+      .catch(() => {});
   }, [phase, index, loadFacts]);
   useEffect(() => {
     if (phase !== "running") fetchedFor.current = -1;
@@ -109,12 +110,17 @@ export function TourProvider({
     const step = steps[index];
     if (!step) return;
     if (path !== step.route) {
+      // Drop the old tooltip at once instead of leaving it on the wrong page while the next one loads.
+      const previous = drv.current;
+      drv.current = null;
+      previous?.destroy();
       router.push(step.route);
       return;
     }
     let cancelled = false;
     const t = COPY[lang];
-    void waitFor(step.selector, 1500).then((el) => {
+    // A step that only says what is missing does not wait for its area to render.
+    void waitFor(step.selector, step.missing ? 0 : 1500).then((el) => {
       if (cancelled) return;
       const previous = drv.current;
       drv.current = null;
@@ -160,8 +166,6 @@ export function TourProvider({
               router.push(fix.href);
             });
             extra.append(link);
-          } else if (step.id === "start") {
-            extra.append(startPicker(facts, lang, startRun));
           }
 
           const skip = document.createElement("button");
@@ -173,7 +177,13 @@ export function TourProvider({
           toggle.type = "button";
           toggle.className = "tour-lang";
           toggle.textContent = t.ui.language;
-          toggle.addEventListener("click", () => setLang(lang === "en" ? "vi" : "en"));
+          toggle.addEventListener("click", () => {
+            const next = lang === "en" ? "vi" : "en";
+            // Remembered at once, so the choice survives a reload and shows on the sidebar entry too.
+            const was = readTour(browserStorage());
+            writeTour(browserStorage(), { status: was.status === "new" ? "inProgress" : was.status, step: latest.current.index, lang: next });
+            setLang(next);
+          });
           popover.footer.prepend(toggle, skip);
         },
       });
@@ -187,19 +197,22 @@ export function TourProvider({
           showButtons: index === 0 ? ["next", "close"] : ["next", "previous", "close"],
           showProgress: true,
           progressText: fill(t.ui.progress, { n: index + 1, total: steps.length }),
+          // Beside the checkbox, so the Ticket rows below it stay visible to tick.
+          ...(step.id === "start" && !step.missing ? { side: "right" as const, align: "start" as const } : {}),
         },
       });
     });
     return () => {
       cancelled = true;
     };
-  }, [phase, index, facts, steps, path, lang, router, close, startRun]);
+  }, [phase, index, facts, steps, path, lang, router, close]);
 
   // Escape closes the tour (keeping the step, so it can be resumed) and focus goes back to where it was.
   useEffect(() => {
     if (phase !== "running") return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close("inProgress");
+      // Escape inside the Start dialog closes only the dialog.
+      if (e.key === "Escape" && !document.querySelector("dialog[open]")) close("inProgress");
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -221,44 +234,4 @@ export function TourProvider({
       {children}
     </TourContext.Provider>
   );
-}
-
-/** The Start step's picker: the Member chooses a Ticket and confirms; the tour never starts a Run on its own. */
-function startPicker(facts: TourFacts, lang: Lang, startRun: StartRun): HTMLElement {
-  const t = COPY[lang].ui;
-  const root = document.createElement("div");
-  root.className = "tour-start";
-  const label = document.createElement("label");
-  label.textContent = t.pickTicket;
-  const select = document.createElement("select");
-  for (const ticket of facts.tickets) select.append(new Option(`${ticket.key} ${ticket.title}`, ticket.id));
-  label.append(select);
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "btn primary";
-  const status = document.createElement("div");
-  status.setAttribute("role", "status");
-  const sync = () => {
-    const picked = facts.tickets.find((x) => x.id === select.value);
-    button.textContent = fill(t.startSample, { ticket: picked?.key ?? "" });
-  };
-  sync();
-  select.addEventListener("change", sync);
-  button.addEventListener("click", () => {
-    const flow = facts.flows[0];
-    if (!flow) return;
-    button.disabled = true;
-    status.textContent = t.starting;
-    startRun({ flowId: flow.id, ticketIds: [select.value], extraInstructions: "" })
-      .then((r) => {
-        status.textContent = r.ok ? t.started : r.error;
-        button.disabled = r.ok;
-      })
-      .catch(() => {
-        button.disabled = false;
-        status.textContent = "";
-      });
-  });
-  root.append(label, button, status);
-  return root;
 }
