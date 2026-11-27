@@ -21,7 +21,7 @@ const FLOW_DELETED = "That Flow was deleted just now. Pick another.";
 const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 /** Flows without problems (RUN-1): only those can start Runs. */
-async function startableFlows(deps: AppDeps) {
+export async function startableFlows(deps: AppDeps) {
   const [flows, library] = await Promise.all([listFlows(deps.db), loadLibrary(deps.db)]);
   const kinds = new Map(library.map((n) => [n.id, n.kind]));
   const byId = new Map(library.map((n) => [n.id, n]));

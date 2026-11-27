@@ -1,0 +1,286 @@
+"use client";
+
+import { driver, type Driver } from "driver.js";
+import "driver.js/dist/driver.css";
+import { usePathname, useRouter } from "next/navigation";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { TourFacts } from "../../server/tour";
+import { COPY, detectLang, fill, stepText } from "./copy";
+import { buildSteps, type PlannedStep } from "./plan";
+import { browserStorage, readTour, writeTour, type Lang } from "./storage";
+
+type StartInput = { flowId: string; ticketIds: string[]; extraInstructions: string };
+type StartResult = { ok: true; batchId: string; runIds: string[] } | { ok: false; error: string; machinePage?: string };
+type StartRun = (input: StartInput) => Promise<StartResult>;
+
+type Ctx = { lang: Lang; open: () => void };
+const TourContext = createContext<Ctx>({ lang: "en", open: () => {} });
+export const useTour = () => useContext(TourContext);
+
+type Phase = "idle" | "resume" | "running";
+
+/** Waits (briefly) for the page to render the area a step points at; null when it is not on screen. */
+function waitFor(selector: string, ms: number): Promise<Element | null> {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const tick = () => {
+      const el = document.querySelector(selector);
+      // A closed mobile menu leaves the nav links in the DOM but not on screen.
+      if (el && el.getClientRects().length > 0) return resolve(el);
+      if (Date.now() - started >= ms) return resolve(null);
+      setTimeout(tick, 50);
+    };
+    tick();
+  });
+}
+
+const reducedMotion = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * The guided tour (driver.js draws the highlight and tooltip). It walks one round: pair a Machine, pick a Ticket,
+ * the Flow, start a Run, follow it, find the Pull request. Finished or skipped lives in the browser only.
+ */
+export function TourProvider({
+  isOperator,
+  loadFacts,
+  startRun,
+  children,
+}: {
+  isOperator: boolean;
+  loadFacts: () => Promise<TourFacts>;
+  startRun: StartRun;
+  children: ReactNode;
+}) {
+  const router = useRouter();
+  const path = usePathname();
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [index, setIndex] = useState(0);
+  const [lang, setLang] = useState<Lang>("en");
+  const [facts, setFacts] = useState<TourFacts | null>(null);
+  const drv = useRef<Driver | null>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const booted = useRef(false);
+  const latest = useRef({ index, lang });
+  latest.current = { index, lang };
+
+  const steps: PlannedStep[] = useMemo(() => (facts ? buildSteps(isOperator, facts) : []), [facts, isOperator]);
+
+  const close = useCallback((status: "finished" | "skipped" | "inProgress") => {
+    writeTour(browserStorage(), { status, step: latest.current.index, lang: latest.current.lang });
+    const d = drv.current;
+    drv.current = null;
+    d?.destroy();
+    setPhase("idle");
+    const back = returnFocus.current;
+    returnFocus.current = null;
+    if (back?.isConnected) back.focus();
+  }, []);
+
+  const begin = useCallback((at: number) => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setIndex(at);
+    setPhase("running");
+  }, []);
+
+  // First load: a new Member starts the tour; someone who left mid-tour is offered to resume; finished or skipped: nothing.
+  useEffect(() => {
+    if (booted.current) return;
+    booted.current = true;
+    const saved = readTour(browserStorage());
+    setLang(saved.lang ?? detectLang(navigator.language));
+    if (saved.status === "finished" || saved.status === "skipped") return;
+    loadFacts()
+      .then((f) => {
+        setFacts(f);
+        if (saved.status === "inProgress") {
+          setIndex(saved.step);
+          setPhase("resume");
+        } else begin(0);
+      })
+      .catch(() => {});
+  }, [loadFacts, begin]);
+
+  const open = useCallback(() => {
+    loadFacts()
+      .then((f) => {
+        setFacts(f);
+        begin(0);
+      })
+      .catch(() => {});
+  }, [loadFacts, begin]);
+
+  // Fresh facts at each step: a Run started in the tour changes the later steps.
+  const fetchedFor = useRef(-1);
+  useEffect(() => {
+    if (phase !== "running" || fetchedFor.current === index) return;
+    fetchedFor.current = index;
+    loadFacts().then(setFacts).catch(() => {});
+  }, [phase, index, loadFacts]);
+  useEffect(() => {
+    if (phase !== "running") fetchedFor.current = -1;
+  }, [phase]);
+
+  // Show the step: go to its page, wait for its area, then highlight it.
+  useEffect(() => {
+    if (phase !== "running" || !facts) return;
+    const step = steps[index];
+    if (!step) return;
+    if (path !== step.route) {
+      router.push(step.route);
+      return;
+    }
+    let cancelled = false;
+    const t = COPY[lang];
+    void waitFor(step.selector, 1500).then((el) => {
+      if (cancelled) return;
+      const previous = drv.current;
+      drv.current = null;
+      previous?.destroy();
+      const last = index === steps.length - 1;
+      const text = step.missing ? t.missing[step.missing.need] : stepText(lang, step.id);
+      const body = step.id === "pullRequests" && facts.pullRequests === 0 ? `${text.body} ${t.ui.noWait}` : text.body;
+      const d = driver({
+        animate: !reducedMotion(),
+        smoothScroll: !reducedMotion(),
+        allowClose: true,
+        overlayClickBehavior: "none",
+        showProgress: true,
+        progressText: fill(t.ui.progress, { n: index + 1, total: steps.length }),
+        nextBtnText: last ? t.ui.done : t.ui.next,
+        prevBtnText: t.ui.back,
+        closeBtnLabel: t.ui.dismiss,
+        popoverClass: "tour-popover",
+        showButtons: index === 0 ? ["next", "close"] : ["next", "previous", "close"],
+        onNextClick: () => (last ? close("finished") : setIndex(index + 1)),
+        onPrevClick: () => setIndex(Math.max(0, index - 1)),
+        onCloseClick: () => close("inProgress"),
+        onPopoverRender: (popover) => {
+          popover.wrapper.setAttribute("aria-live", "polite");
+          popover.progress.textContent = fill(t.ui.progress, { n: index + 1, total: steps.length });
+          popover.progress.style.display = "";
+          const extra = document.createElement("div");
+          extra.className = "tour-extra";
+          popover.description.after(extra);
+
+          if (step.missing) {
+            const fix = step.missing;
+            const link = document.createElement("a");
+            link.href = fix.href;
+            link.className = "tour-link";
+            link.textContent = t.missing[fix.need].link;
+            link.addEventListener("click", (e) => {
+              e.preventDefault();
+              close("inProgress");
+              router.push(fix.href);
+            });
+            extra.append(link);
+          } else if (step.id === "start") {
+            extra.append(startPicker(facts, lang, startRun));
+          }
+
+          const skip = document.createElement("button");
+          skip.type = "button";
+          skip.className = "tour-skip";
+          skip.textContent = t.ui.skip;
+          skip.addEventListener("click", () => close("skipped"));
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "tour-lang";
+          toggle.textContent = t.ui.language;
+          toggle.addEventListener("click", () => setLang(lang === "en" ? "vi" : "en"));
+          popover.footer.prepend(toggle, skip);
+        },
+      });
+      drv.current = d;
+      d.highlight({ element: el ?? undefined, popover: { title: text.title, description: body } });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, index, facts, steps, path, lang, router, close, startRun]);
+
+  // Escape closes the tour (keeping the step, so it can be resumed) and focus goes back to where it was.
+  useEffect(() => {
+    if (phase !== "running") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close("inProgress");
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [phase, close]);
+
+  useEffect(
+    () => () => {
+      const d = drv.current;
+      drv.current = null;
+      d?.destroy();
+    },
+    [],
+  );
+
+  const ctx = useMemo(() => ({ lang, open }), [lang, open]);
+  const ui = COPY[lang].ui;
+
+  return (
+    <TourContext.Provider value={ctx}>
+      {children}
+      {phase === "resume" && (
+        <div className="tour-resume" role="dialog" aria-label={ui.resumeTitle}>
+          <strong>{ui.resumeTitle}</strong>
+          <p>{ui.resumeBody}</p>
+          <div className="tour-resume-actions">
+            <button type="button" className="btn primary" autoFocus onClick={() => begin(Math.min(index, Math.max(0, steps.length - 1)))}>
+              {ui.resume}
+            </button>
+            <button type="button" className="btn" onClick={() => begin(0)}>
+              {ui.restart}
+            </button>
+            <button type="button" className="btn" onClick={() => close("inProgress")}>
+              {ui.dismiss}
+            </button>
+          </div>
+        </div>
+      )}
+    </TourContext.Provider>
+  );
+}
+
+/** The Start step's picker: the Member chooses a Ticket and confirms; the tour never starts a Run on its own. */
+function startPicker(facts: TourFacts, lang: Lang, startRun: StartRun): HTMLElement {
+  const t = COPY[lang].ui;
+  const root = document.createElement("div");
+  root.className = "tour-start";
+  const label = document.createElement("label");
+  label.textContent = t.pickTicket;
+  const select = document.createElement("select");
+  for (const ticket of facts.tickets) select.append(new Option(`${ticket.key} ${ticket.title}`, ticket.id));
+  label.append(select);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn primary";
+  const status = document.createElement("div");
+  status.setAttribute("role", "status");
+  const sync = () => {
+    const picked = facts.tickets.find((x) => x.id === select.value);
+    button.textContent = fill(t.startSample, { ticket: picked?.key ?? "" });
+  };
+  sync();
+  select.addEventListener("change", sync);
+  button.addEventListener("click", () => {
+    const flow = facts.flows[0];
+    if (!flow) return;
+    button.disabled = true;
+    status.textContent = t.starting;
+    startRun({ flowId: flow.id, ticketIds: [select.value], extraInstructions: "" })
+      .then((r) => {
+        status.textContent = r.ok ? t.started : r.error;
+        button.disabled = r.ok;
+      })
+      .catch(() => {
+        button.disabled = false;
+        status.textContent = "";
+      });
+  });
+  root.append(label, button, status);
+  return root;
+}

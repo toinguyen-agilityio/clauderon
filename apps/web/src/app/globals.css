@@ -1896,3 +1896,30 @@ dialog.modal.danger .modal-b { padding: 8px 24px 22px 74px; }
 .sort-btn.on .sort-arrow { opacity: 1; }
 .sort-bar { display: flex; align-items: center; gap: 14px; padding: 6px 16px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--fg3); }
 .tk-right .sort-btn { justify-content: flex-end; }
+
+/* Guided tour (driver.js popover, help icons, resume prompt) */
+.nav-row { display: flex; align-items: center; gap: 4px; }
+.nav-row > a { flex: 1; min-width: 0; }
+.help-icon { position: relative; display: inline-flex; flex: none; }
+.help-btn, .take-tour { cursor: pointer; font: inherit; color: var(--fg3); background: transparent; border: 1px solid var(--line-strong); }
+.help-btn { width: 20px; height: 20px; border-radius: 50%; font-size: 11px; line-height: 1; padding: 0; }
+.help-btn:hover, .help-btn:focus-visible { color: var(--accent-text); border-color: var(--accent); }
+.help-tip { position: absolute; z-index: 60; left: 26px; top: 50%; transform: translateY(-50%); width: 240px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--panel); color: var(--fg); border: 1px solid var(--line-strong); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); font-size: 12px; font-weight: 400; line-height: 1.4; }
+.take-tour { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: var(--r-sm); text-align: left; font-weight: 500; color: var(--fg2); }
+.take-tour:hover { background: var(--hover); color: var(--fg); }
+.take-tour > span:first-child { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid currentColor; font-size: 10px; flex: none; }
+.driver-popover.tour-popover { max-width: min(340px, calc(100vw - 24px)); background: var(--panel); color: var(--fg); }
+.driver-popover.tour-popover .driver-popover-title { color: var(--fg); }
+.driver-popover.tour-popover .driver-popover-description { color: var(--fg2); }
+.tour-extra { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.tour-start { display: flex; flex-direction: column; gap: 6px; }
+.tour-start select { max-width: 100%; }
+.tour-skip, .tour-lang { cursor: pointer; background: transparent; border: 0; color: var(--accent-text); font: inherit; padding: 4px 6px; }
+.tour-resume { position: fixed; z-index: 10000; right: 16px; bottom: 16px; max-width: min(320px, calc(100vw - 32px)); padding: 14px; border-radius: var(--r-sm); background: var(--panel); color: var(--fg); border: 1px solid var(--line-strong); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22); }
+.tour-resume p { margin: 4px 0 10px; }
+.tour-resume-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 860px) {
+  .help-tip { left: auto; right: 0; top: 26px; transform: none; width: min(240px, calc(100vw - 48px)); }
+  .tour-resume { left: 16px; right: 16px; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) { .driver-popover.tour-popover, .driver-overlay, .driver-active-element { transition: none !important; animation: none !important; } }
