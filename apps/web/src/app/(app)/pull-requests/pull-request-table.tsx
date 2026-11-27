@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Avatar } from "../../../components/brand";
 import { Icon } from "../../../components/icons";
-import { SortButton, SortHeader } from "../../../components/sort-header";
+import { SortHeader } from "../../../components/sort-header";
 import { tagColor } from "../../../components/state-pill";
 import { StartRunsDialog } from "../../../components/start-runs-dialog";
 import type { PullRequestRow } from "../../../server/runs";
@@ -55,12 +55,7 @@ export function PullRequestTable({ rows, empty }: { rows: PullRequestListRow[]; 
               <SortHeader className="tk-stub" column="pr" label="Pull request" />
               <SortHeader column="title" label="Title" />
               <SortHeader column="from" label="Opened from" />
-              <th aria-label="Opened by, and when">
-                <div className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
-                  <SortButton column="by" label="Opened by" />
-                  <SortButton column="opened" label="Opened" first="desc" />
-                </div>
-              </th>
+              <SortHeader column="by" label="Opened by" />
             </tr>
           </thead>
           <tbody>
