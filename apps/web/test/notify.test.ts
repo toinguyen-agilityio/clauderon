@@ -74,4 +74,10 @@ describe("the notifications switch (#198)", () => {
     expect(switchState(true, "denied")).toMatchObject({ disabled: true, hint: expect.stringContaining("blocked") });
     expect(switchState(false, "unsupported")).toMatchObject({ disabled: true, hint: expect.stringContaining("cannot show") });
   });
+
+  it("explains a prompt that ended without an answer, and only while the permission is still `default` (#244)", () => {
+    expect(switchState(false, "default", true)).toMatchObject({ on: false, disabled: false, hint: expect.stringContaining("did not allow notifications") });
+    expect(switchState(true, "granted", true)).toMatchObject({ on: true, hint: null });
+    expect(switchState(false, "denied", true).hint).toContain("blocked for this site");
+  });
 });
