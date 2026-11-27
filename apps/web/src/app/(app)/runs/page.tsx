@@ -4,6 +4,9 @@ import { Avatar } from "../../../components/brand";
 import { ago, duration } from "../../../components/format";
 import { Pager } from "../../../components/pager";
 import { parsePaging } from "../../../components/paging";
+import { SortHeader } from "../../../components/sort-header";
+import { parseSort } from "../../../components/sorting";
+import { RUN_SORTS, type RunSort } from "@clauderon/db";
 import { outputColor, runStateLook, StatePill, tagColor } from "../../../components/state-pill";
 import { parseRunFilters, viewRuns } from "../../../server/runs";
 import { deps, requireMember } from "../../../server/runtime";
@@ -11,7 +14,7 @@ import { FilterSelect } from "./filters";
 
 export const dynamic = "force-dynamic";
 
-type Search = { state?: string; flow?: string; machine?: string; page?: string; size?: string };
+type Search = { state?: string; flow?: string; machine?: string; page?: string; size?: string; sort?: string; dir?: string };
 
 const SUMMARY = ["running", "queued", "failed", "succeeded"] as const;
 const STATE_OPTIONS = [
@@ -29,7 +32,7 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
   const search = await searchParams;
   const paging = parsePaging(search);
   const filters = parseRunFilters(search);
-  const { rows, total, page, counts, flows, machines } = await viewRuns(deps(), filters, paging.page, paging.size);
+  const { rows, total, page, counts, flows, machines } = await viewRuns(deps(), filters, paging.page, paging.size, parseSort(search, RUN_SORTS) as RunSort | undefined);
   const now = new Date();
   const href = (change: Search) => {
     const query = new URLSearchParams(Object.entries({ ...search, ...change }).filter(([, v]) => v) as [string, string][]);
@@ -85,12 +88,12 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
             </caption>
             <thead>
               <tr>
-                <th className="tk-stub">Started from</th>
-                <th>Run</th>
-                <th>State</th>
-                <th>Started by</th>
-                <th className="tk-right">Duration</th>
-                <th>Pull request</th>
+                <SortHeader className="tk-stub" column="started" label="Started from" />
+                <SortHeader column="run" label="Run" />
+                <SortHeader column="state" label="State" />
+                <SortHeader column="starter" label="Started by" />
+                <SortHeader className="tk-right" column="duration" label="Duration" first="desc" />
+                <SortHeader column="pr" label="Pull request" />
               </tr>
             </thead>
             <tbody>

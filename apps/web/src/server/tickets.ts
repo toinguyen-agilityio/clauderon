@@ -1,3 +1,4 @@
+import { sortRows, type Sort } from "../components/sorting";
 import { isActive, ticketKeys, ticketStatus, type PullRequestState, type TicketStatus } from "@clauderon/core";
 import { listProjects, listTicketsWithRuns } from "@clauderon/db";
 import { pageOf, type Paging } from "../components/paging";
@@ -42,7 +43,17 @@ export function ticketViewParam(status: string | undefined): TicketView {
  * The Tickets page (TIC-1, TIC-2, TIC-3, TIC-6): key, title, labels and the
  * derived Ticket Status; search by title or key, filter by Project and status.
  */
-export async function viewTickets(deps: AppDeps, filters: TicketFilters, paging?: Paging) {
+/** The Tickets columns a Member can sort by. */
+export const TICKET_SORTS = ["issue", "title", "status", "latest"] as const;
+
+const ticketSortKeys = {
+  issue: (t: TicketRow) => t.key,
+  title: (t: TicketRow) => t.title,
+  status: (t: TicketRow) => t.status,
+  latest: (t: TicketRow) => t.latestRun?.state,
+};
+
+export async function viewTickets(deps: AppDeps, filters: TicketFilters, paging?: Paging, sort?: Sort) {
   const [projects, tickets] = await Promise.all([listProjects(deps.db), listTicketsWithRuns(deps.db)]);
   const keyOf = ticketKeys(projects);
   const q = filters.q?.trim().toLowerCase() ?? "";
@@ -77,7 +88,8 @@ export async function viewTickets(deps: AppDeps, filters: TicketFilters, paging?
 
   const inView = (r: TicketRow) => !filters.view || (filters.view === "Closed") === (r.status === "Closed");
   const views: Record<TicketView, number> = { Open: matching.filter((r) => r.status !== "Closed").length, Closed: counts.Closed ?? 0 };
-  const listed = matching.filter((r) => inView(r) && (!filters.status || r.status === filters.status));
+  // Sorted before paging, so the order covers the whole list.
+  const listed = sortRows(matching.filter((r) => inView(r) && (!filters.status || r.status === filters.status)), sort, ticketSortKeys);
   // Without paging (tests, callers that need them all), every listed Ticket.
   const shown = paging ? pageOf(listed, paging) : { rows: listed, page: 1, total: listed.length };
   return { projects, all: rows, counts, views, total: matching.length, listed: shown.total, page: shown.page, rows: shown.rows };

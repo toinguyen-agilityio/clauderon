@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { SortButton } from "../../../components/sort-header";
+import { parseSort, sortRows } from "../../../components/sorting";
 import { ago } from "../../../components/format";
 import { Icon } from "../../../components/icons";
 import { installCommandPs1, installCommandSh } from "../../../server/agent-install";
-import { lookUpPairing, viewMachines, type MachineView } from "../../../server/machines";
+import { MACHINE_SORTS, lookUpPairing, machineSortKeys, viewMachines, type MachineView } from "../../../server/machines";
 import { deps, pageWebUrl, requireMember } from "../../../server/runtime";
 import { CmdBox } from "./cmd-box";
 import { claudeAccountLabel, DiskStatus, LoginChip, MachineResources, MachineStatusChip, ReadyChip, SlotBar, SlotChips, machineName, osLabel } from "./machine-parts";
@@ -11,13 +13,14 @@ import { tagColor } from "../../../components/state-pill";
 
 export const dynamic = "force-dynamic";
 
-export default async function MachinesPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
+export default async function MachinesPage({ searchParams }: { searchParams: Promise<{ code?: string; sort?: string; dir?: string }> }) {
   const member = await requireMember();
-  const { code } = await searchParams;
+  const search = await searchParams;
+  const { code } = search;
   const [{ machines, mine }, web] = await Promise.all([viewMachines(deps(), member), pageWebUrl()]);
   // The Agent opens this page with its code: show the computer, ready to approve.
   const opened = code ? await lookUpPairing(deps(), member, code) : null;
-  const others = machines.filter((m) => !m.mine);
+  const others = sortRows(machines.filter((m) => !m.mine), parseSort(search, MACHINE_SORTS), machineSortKeys);
   const now = new Date();
 
   const pairing = opened ? (
@@ -75,6 +78,13 @@ export default async function MachinesPage({ searchParams }: { searchParams: Pro
                 {others.filter((m) => m.connected).length} online
               </span>
             </h2>
+          </div>
+          <div className="sort-bar" role="group" aria-label="Sort Team Machines">
+            <span>Sort by</span>
+            <SortButton column="name" label="Name" />
+            <SortButton column="owner" label="Owner" />
+            <SortButton column="status" label="Status" />
+            <SortButton column="busy" label="Busy Slots" first="desc" />
           </div>
           <ul className="mach-rack" data-testid="team-machines">
             {others.map((machine) => (

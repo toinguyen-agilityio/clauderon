@@ -2,11 +2,12 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getMachineOfMember } from "@clauderon/db";
 import { deps, requireMember } from "../../../server/runtime";
-import { ticketViewParam, viewTickets, type TicketView } from "../../../server/tickets";
+import { TICKET_SORTS, ticketViewParam, viewTickets, type TicketView } from "../../../server/tickets";
 import { Icon } from "../../../components/icons";
 import { ago } from "../../../components/format";
 import { Pager } from "../../../components/pager";
 import { parsePaging } from "../../../components/paging";
+import { parseSort } from "../../../components/sorting";
 import { tagColor } from "../../../components/state-pill";
 import { FilterLink, FilterResults, TicketFilters, TicketSearch } from "./ticket-filters";
 import { TicketTable } from "./ticket-table";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 const VIEWS: TicketView[] = ["Open", "Closed"];
 
-type Search = { project?: string; q?: string; status?: string; page?: string; size?: string };
+type Search = { project?: string; q?: string; status?: string; page?: string; size?: string; sort?: string; dir?: string };
 
 export default async function TicketsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const member = await requireMember();
@@ -26,7 +27,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
   // Render from the database; TicketsSync pulls GitHub afterwards (at most once a minute per Project).
   const paging = parsePaging(search);
   const [{ projects, all, views, rows, listed, page }, machine] = await Promise.all([
-    viewTickets(deps(), { projectId: search.project, q: search.q, view }, paging),
+    viewTickets(deps(), { projectId: search.project, q: search.q, view }, paging, parseSort(search, TICKET_SORTS)),
     getMachineOfMember(deps().db, member.id),
   ]);
   const href = (change: Search) => {

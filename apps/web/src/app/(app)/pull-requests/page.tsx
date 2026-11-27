@@ -2,25 +2,27 @@ import Link from "next/link";
 import { ago } from "../../../components/format";
 import { Icon } from "../../../components/icons";
 import { tagColor } from "../../../components/state-pill";
-import { parsePullRequestTab, viewPullRequests } from "../../../server/runs";
+import { parseSort } from "../../../components/sorting";
+import { PULL_REQUEST_SORTS, parsePullRequestTab, viewPullRequests } from "../../../server/runs";
 import { deps, requireMember } from "../../../server/runtime";
 import { PullRequestTable } from "./pull-request-table";
 
 export const dynamic = "force-dynamic";
 
-type Search = { project?: string; tab?: string; page?: string };
+type Search = { project?: string; tab?: string; page?: string; sort?: string; dir?: string };
 
 export default async function PullRequestsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const member = await requireMember();
   const search = await searchParams;
   const tab = parsePullRequestTab(search.tab);
   const page = Math.max(1, Number(search.page) || 1);
-  const view = await viewPullRequests(deps(), member, { tab, projectId: search.project || undefined, page });
+  const view = await viewPullRequests(deps(), member, { tab, projectId: search.project || undefined, page, sort: parseSort(search, PULL_REQUEST_SORTS) });
   const { rows, hasMore, counts, projects } = view;
   const now = new Date();
   // A new filter starts again at page 1.
   const href = (change: Omit<Search, "page">, p?: number) => {
-    const next = { project: search.project, tab: search.tab, ...change, page: p && p > 1 ? String(p) : undefined };
+    // A new filter starts again at page 1; the sort stays.
+    const next = { project: search.project, tab: search.tab, sort: search.sort, dir: search.dir, ...change, page: p && p > 1 ? String(p) : undefined };
     const query = new URLSearchParams(Object.entries(next).filter(([, v]) => v) as [string, string][]);
     return `/pull-requests${query.size ? `?${query}` : ""}`;
   };
