@@ -165,10 +165,11 @@ export function NotificationsToggle() {
     <section className="card notify-card" aria-labelledby="notify-card-h">
       <div className="notify-card-head">
         <h2 id="notify-card-h">{state.label}</h2>
-        <span className="fe-switch">
+        {/* A label, so a click on the drawn track (painted above the hidden checkbox) reaches the checkbox. */}
+        <label className="fe-switch">
           <input type="checkbox" role="switch" aria-labelledby="notify-card-h" checked={state.on} disabled={state.disabled} onChange={setting.toggle} />
           <span aria-hidden="true" />
-        </span>
+        </label>
       </div>
       <p className="small muted">
         Get a notification when one of your Runs needs you at an Approve or Grill Node, when it ends, or when someone else approves, rejects, answers,

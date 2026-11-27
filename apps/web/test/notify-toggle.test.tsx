@@ -88,6 +88,16 @@ describe("the Notifications switch on Project Settings (#244)", () => {
     expect(window.localStorage.getItem(NOTIFY_KEY)).toBeNull();
   });
 
+  it("turns on from a click on the drawn track, which sits above the hidden checkbox", async () => {
+    fakeNotification("granted", "granted");
+    const input = renderToggle();
+    const track = input.nextElementSibling as HTMLElement;
+    await act(async () => {
+      fireEvent.click(track);
+    });
+    expect(input.checked).toBe(true);
+  });
+
   it("explains an unsupported browser", () => {
     vi.stubGlobal("Notification", undefined);
     delete (window as { Notification?: unknown }).Notification;
