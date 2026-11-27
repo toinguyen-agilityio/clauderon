@@ -3,7 +3,9 @@ import { Avatar } from "../../../components/brand";
 import { ago, formatTime } from "../../../components/format";
 import { Icon } from "../../../components/icons";
 import { tagColor } from "../../../components/state-pill";
-import { viewMembers, type MemberRow } from "../../../server/members";
+import { SortButton, SortHeader } from "../../../components/sort-header";
+import { parseSort, sortRows } from "../../../components/sorting";
+import { MEMBER_SORTS, memberSortKeys, viewMembers, type MemberRow } from "../../../server/members";
 import { deps, requireMember } from "../../../server/runtime";
 import { MachineStatusChip } from "../machines/machine-parts";
 import { AddEmailForm, RemoveMachine, RemoveMember } from "./forms";
@@ -29,12 +31,13 @@ function MachineCell({ machine }: { machine: MemberRow["machine"] }) {
   );
 }
 
-export default async function MembersPage() {
+export default async function MembersPage({ searchParams }: { searchParams: Promise<{ sort?: string; dir?: string }> }) {
   const viewer = await requireMember();
+  const sort = parseSort(await searchParams, MEMBER_SORTS);
   const { rows, canManage, viewerEmail } = await viewMembers(deps(), viewer);
   const now = new Date();
-  const team = rows.filter((r) => r.status !== "removed");
-  const removed = rows.filter((r) => r.status === "removed");
+  const team = sortRows(rows.filter((r) => r.status !== "removed"), sort, memberSortKeys);
+  const removed = sortRows(rows.filter((r) => r.status === "removed"), sort, memberSortKeys);
   const online = team.filter((r) => r.machine?.connected).length;
   const cols = canManage ? 5 : 4;
 
@@ -126,9 +129,14 @@ export default async function MembersPage() {
                 <th className="tk-stub">
                   <span className="sr-only">Photo</span>
                 </th>
-                <th>Member</th>
-                <th>Status</th>
-                <th>Machine</th>
+                <SortHeader column="member" label="Member" />
+                <th aria-label="Status, and last sign-in">
+                  <div className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
+                    <SortButton column="status" label="Status" />
+                    <SortButton column="signin" label="Last sign-in" first="desc" />
+                  </div>
+                </th>
+                <SortHeader column="machine" label="Machine" />
                 {canManage && <th aria-label="Actions" />}
               </tr>
             </thead>

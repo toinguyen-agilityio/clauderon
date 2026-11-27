@@ -1,5 +1,7 @@
 # Deploying Clauderon
 
+Production runs on Render, from the Blueprint [`render.yaml`](../render.yaml): every push to `main` deploys it (see [Production on Render](#production-on-render)). The rest of this guide is the self-hosted alternative.
+
 The web app, the Gateway and Postgres run as one Docker Compose stack on one always-on host. A Cloudflare Tunnel, run by the stack's `cloudflared` container, publishes the web app and the Gateway to the internet with HTTPS; it connects out, so the host opens no port. Google sign-in and the email allowlist are the only gate. Runs do not execute here: each Member pairs their own computer, their Machine, whose Agent connects out to the Gateway. Why: [ADR 0005](../docs/adr/0005-self-host-the-app-on-the-pod-host.md), [ADR 0006](../docs/adr/0006-each-member-runs-on-their-own-machine.md).
 
 ```
@@ -119,9 +121,9 @@ deploy/backup.sh restore <path to clauderon-….dump>
 
 Log chunks older than 90 days are deleted by the Gateway every day; Runs, Outputs and Artifacts are kept.
 
-## Demo on Render
+## Production on Render
 
-For trying Clauderon without a host, [`render.yaml`](../render.yaml) at the repo root is a Render Blueprint: a free Postgres, the Gateway and the web app, in Singapore, deployed from `main` on every push. It is a demo only: free web services sleep after 15 minutes without traffic and take about a minute to wake (an Agent's socket drops and reconnects, and a Run in progress can fail), the free database expires after 30 days with its data, and a workspace's 750 free instance hours a month do not cover two services running all month.
+Production runs from [`render.yaml`](../render.yaml) at the repo root, a Render Blueprint: a free Postgres, the Gateway and the web app, in Singapore, deployed from `main` on every push, so merging a release PR into `main` is the production deploy. Both services build [`Dockerfile`](Dockerfile) on Render; nothing runs on a Mac. Moving off the free plan (a Gateway that stays on, a paid database with backups) is [#118](https://github.com/toinguyen-agilityio/clauderon/issues/118). Until then, mind the free plan's limits: free web services sleep after 15 minutes without traffic and take about a minute to wake (an Agent's socket drops and reconnects, and a Run in progress can fail), the free database expires after 30 days with its data, and a workspace's 750 free instance hours a month do not cover two services running all month.
 
 1. In the Render dashboard: **New → Blueprint**, connect the GitHub repository, pick `main`. Render asks for the values marked `sync: false`: `OPERATOR_EMAILS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Leave `WEB_URL`, `AUTH_URL` and `GATEWAY_URL` empty for now.
 2. When both services are created, note their URLs (`https://clauderon-web….onrender.com`, `https://clauderon-gateway….onrender.com`), then set:

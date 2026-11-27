@@ -1,0 +1,582 @@
+{
+ "kind": "explore",
+ "title": "Clauderon architecture and data model",
+ "subtitle": "Diagrams for docs/architecture.md and docs/database.md",
+ "slug": "clauderon-docs-diagrams",
+ "source": "docs/architecture.md, docs/database.md, packages/db/src/schema.ts",
+ "summary": "System context, the life of a Run, and the database's two halves: who starts Runs and what they record, and how Flows are stored.",
+ "diagrams": [
+  {
+   "title": "System context",
+   "caption": "The web app and Gateway share one Postgres; each Agent connects out to the Gateway and runs Nodes on the Member's own computer",
+   "nodes": [
+    {
+     "id": "google",
+     "label": "Google OAuth",
+     "sub": "sign-in",
+     "kind": "auth",
+     "col": 1,
+     "row": 0
+    },
+    {
+     "id": "browser",
+     "label": "Member's browser",
+     "sub": "UI, live logs",
+     "kind": "user",
+     "col": 0,
+     "row": 2
+    },
+    {
+     "id": "web",
+     "label": "Web app",
+     "sub": "Next.js · Auth.js",
+     "kind": "frontend",
+     "col": 1,
+     "row": 1
+    },
+    {
+     "id": "gateway",
+     "label": "Gateway",
+     "sub": "sockets · Run engine",
+     "kind": "backend",
+     "col": 1,
+     "row": 3
+    },
+    {
+     "id": "pg",
+     "label": "Postgres 16",
+     "sub": "shared · LISTEN/NOTIFY",
+     "kind": "database",
+     "col": 2,
+     "row": 2,
+     "w": 180
+    },
+    {
+     "id": "agent",
+     "label": "Agent",
+     "sub": "bash, worktree per Run",
+     "kind": "cli",
+     "col": 3,
+     "row": 3,
+     "w": 180
+    },
+    {
+     "id": "claude",
+     "label": "Claude Code",
+     "sub": "claude -p, own login",
+     "kind": "ai",
+     "col": 4,
+     "row": 2.5
+    },
+    {
+     "id": "gitgh",
+     "label": "git · gh",
+     "sub": "Starter's own login",
+     "kind": "cli",
+     "col": 4,
+     "row": 3.5
+    },
+    {
+     "id": "github",
+     "label": "GitHub",
+     "sub": "issues · pull requests",
+     "kind": "external",
+     "col": 5,
+     "row": 1
+    }
+   ],
+   "edges": [
+    {
+     "from": "browser",
+     "to": "google",
+     "label": "sign in"
+    },
+    {
+     "from": "browser",
+     "to": "web",
+     "label": "HTTPS"
+    },
+    {
+     "from": "browser",
+     "to": "gateway",
+     "label": "WSS /browser"
+    },
+    {
+     "from": "web",
+     "to": "pg",
+     "label": "SQL"
+    },
+    {
+     "from": "gateway",
+     "to": "pg",
+     "label": "SQL · LISTEN"
+    },
+    {
+     "from": "web",
+     "to": "github",
+     "label": "read-only token",
+     "style": "dashed"
+    },
+    {
+     "from": "gateway",
+     "to": "agent",
+     "label": "WSS /agent"
+    },
+    {
+     "from": "agent",
+     "to": "claude",
+     "label": "spawn"
+    },
+    {
+     "from": "agent",
+     "to": "gitgh",
+     "label": "spawn"
+    },
+    {
+     "from": "gitgh",
+     "to": "github",
+     "label": "push · gh pr",
+     "style": "emphasis"
+    }
+   ],
+   "groups": [
+    {
+     "label": "Server (Render)",
+     "kind": "backend",
+     "nodes": [
+      "web",
+      "gateway",
+      "pg"
+     ]
+    },
+    {
+     "label": "Member's Machine",
+     "kind": "client",
+     "nodes": [
+      "agent",
+      "claude",
+      "gitgh"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Life of a Run",
+   "caption": "Web → Gateway commands travel as Postgres NOTIFY; the Run engine runs one Node at a time on the Starter's Machine",
+   "nodes": [
+    {
+     "id": "member",
+     "label": "Member",
+     "sub": "picks Tickets · Start",
+     "kind": "user",
+     "col": 0,
+     "row": 1
+    },
+    {
+     "id": "web",
+     "label": "Web app",
+     "sub": "inserts batch + runs",
+     "kind": "frontend",
+     "col": 1,
+     "row": 1
+    },
+    {
+     "id": "pg",
+     "label": "Postgres",
+     "sub": "run: queued",
+     "kind": "database",
+     "col": 2,
+     "row": 1
+    },
+    {
+     "id": "engine",
+     "label": "Run engine",
+     "sub": "Slots · topological order",
+     "kind": "backend",
+     "col": 3,
+     "row": 1,
+     "w": 184
+    },
+    {
+     "id": "agent",
+     "label": "Agent",
+     "sub": "worktree · runs the Node",
+     "kind": "cli",
+     "col": 4,
+     "row": 0,
+     "w": 184
+    },
+    {
+     "id": "human",
+     "label": "Needs you",
+     "sub": "Approve · Grill · turns",
+     "kind": "user",
+     "col": 4,
+     "row": 2,
+     "w": 184
+    },
+    {
+     "id": "pr",
+     "label": "Pull request",
+     "sub": "opened as the Starter",
+     "kind": "external",
+     "col": 5,
+     "row": 0
+    }
+   ],
+   "edges": [
+    {
+     "from": "member",
+     "to": "web",
+     "label": "Start"
+    },
+    {
+     "from": "web",
+     "to": "pg",
+     "label": "insert"
+    },
+    {
+     "from": "pg",
+     "to": "engine",
+     "label": "NOTIFY schedule"
+    },
+    {
+     "from": "engine",
+     "to": "agent",
+     "label": "node.run"
+    },
+    {
+     "from": "engine",
+     "to": "human",
+     "label": "waits",
+     "style": "dashed"
+    },
+    {
+     "from": "agent",
+     "to": "pr",
+     "label": "push · gh pr",
+     "style": "emphasis"
+    }
+   ],
+   "groups": [
+    {
+     "label": "Gateway",
+     "kind": "backend",
+     "nodes": [
+      "engine"
+     ]
+    },
+    {
+     "label": "Starter's Machine",
+     "kind": "client",
+     "nodes": [
+      "agent"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Database: Members, Machines and Runs",
+   "caption": "Arrows point from parent to child (one to many unless marked 1:1). allowlist_entry, audit_entry and github_access stand alone",
+   "nodes": [
+    {
+     "id": "member",
+     "label": "member",
+     "sub": "email unique",
+     "kind": "database",
+     "col": 0,
+     "row": 1.5
+    },
+    {
+     "id": "pairing",
+     "label": "pairing",
+     "sub": "code · token_hash",
+     "kind": "database",
+     "col": 0,
+     "row": 3
+    },
+    {
+     "id": "project",
+     "label": "project",
+     "sub": "owner/repo · base_branch",
+     "kind": "database",
+     "col": 0,
+     "row": 4.5,
+     "w": 184
+    },
+    {
+     "id": "session",
+     "label": "session",
+     "sub": "token_hash only",
+     "kind": "database",
+     "col": 1,
+     "row": 0
+    },
+    {
+     "id": "account",
+     "label": "member_account",
+     "sub": "Google link, no tokens",
+     "kind": "database",
+     "col": 1,
+     "row": 1
+    },
+    {
+     "id": "machine",
+     "label": "machine",
+     "sub": "1 per Member · Slots",
+     "kind": "database",
+     "col": 1,
+     "row": 2
+    },
+    {
+     "id": "batch",
+     "label": "batch",
+     "sub": "one Start press",
+     "kind": "database",
+     "col": 1,
+     "row": 3
+    },
+    {
+     "id": "ticket",
+     "label": "ticket",
+     "sub": "synced issue",
+     "kind": "database",
+     "col": 1,
+     "row": 4.5
+    },
+    {
+     "id": "run",
+     "label": "run",
+     "sub": "state · flow_snapshot",
+     "kind": "database",
+     "col": 2,
+     "row": 3
+    },
+    {
+     "id": "attempt",
+     "label": "attempt",
+     "sub": "one Node execution",
+     "kind": "database",
+     "col": 3,
+     "row": 2
+    },
+    {
+     "id": "artifact",
+     "label": "artifact",
+     "sub": "1:1 with run",
+     "kind": "database",
+     "col": 3,
+     "row": 3
+    },
+    {
+     "id": "attach",
+     "label": "run_attachment",
+     "sub": "sealed until delivered",
+     "kind": "database",
+     "col": 3,
+     "row": 4
+    },
+    {
+     "id": "output",
+     "label": "output",
+     "sub": "typed value",
+     "kind": "database",
+     "col": 4,
+     "row": 1
+    },
+    {
+     "id": "human",
+     "label": "human_request",
+     "sub": "approve · grill · turns",
+     "kind": "database",
+     "col": 4,
+     "row": 2
+    },
+    {
+     "id": "log",
+     "label": "log_chunk",
+     "sub": "masked · 90 days",
+     "kind": "database",
+     "col": 4,
+     "row": 3
+    }
+   ],
+   "edges": [
+    {
+     "from": "member",
+     "to": "session"
+    },
+    {
+     "from": "member",
+     "to": "account"
+    },
+    {
+     "from": "member",
+     "to": "machine",
+     "label": "1:1"
+    },
+    {
+     "from": "member",
+     "to": "batch",
+     "label": "starter"
+    },
+    {
+     "from": "pairing",
+     "to": "machine",
+     "label": "approve",
+     "style": "dashed"
+    },
+    {
+     "from": "project",
+     "to": "ticket"
+    },
+    {
+     "from": "machine",
+     "to": "run",
+     "label": "set null"
+    },
+    {
+     "from": "batch",
+     "to": "run"
+    },
+    {
+     "from": "ticket",
+     "to": "run",
+     "label": "1 active"
+    },
+    {
+     "from": "run",
+     "to": "attempt"
+    },
+    {
+     "from": "run",
+     "to": "artifact",
+     "label": "1:1"
+    },
+    {
+     "from": "run",
+     "to": "attach"
+    },
+    {
+     "from": "attempt",
+     "to": "output"
+    },
+    {
+     "from": "attempt",
+     "to": "human"
+    },
+    {
+     "from": "attempt",
+     "to": "log"
+    }
+   ],
+   "groups": [
+    {
+     "label": "Access",
+     "kind": "security",
+     "nodes": [
+      "session",
+      "account"
+     ]
+    },
+    {
+     "label": "Run records",
+     "kind": "database",
+     "nodes": [
+      "attempt",
+      "artifact",
+      "attach",
+      "output",
+      "human",
+      "log"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Database: Flows",
+   "caption": "flow_version has no foreign key, so a Flow's history outlives it; deleting a Flow sets batch and run flow_id to null",
+   "nodes": [
+    {
+     "id": "flow",
+     "label": "flow",
+     "sub": "name · is_sample",
+     "kind": "database",
+     "col": 0,
+     "row": 1
+    },
+    {
+     "id": "node",
+     "label": "node",
+     "sub": "library · kind · model",
+     "kind": "database",
+     "col": 0,
+     "row": 2.2
+    },
+    {
+     "id": "version",
+     "label": "flow_version",
+     "sub": "full snapshot · forever",
+     "kind": "database",
+     "col": 1,
+     "row": 0,
+     "w": 184
+    },
+    {
+     "id": "fnode",
+     "label": "flow_node",
+     "sub": "placed on the canvas",
+     "kind": "database",
+     "col": 1,
+     "row": 1,
+     "w": 184
+    },
+    {
+     "id": "runs",
+     "label": "batch · run",
+     "sub": "keep flow_snapshot",
+     "kind": "database",
+     "col": 2,
+     "row": 0,
+     "w": 184
+    },
+    {
+     "id": "edge",
+     "label": "flow_edge",
+     "sub": "output → input, typed",
+     "kind": "database",
+     "col": 2,
+     "row": 1,
+     "w": 184
+    }
+   ],
+   "edges": [
+    {
+     "from": "flow",
+     "to": "version",
+     "label": "no FK",
+     "style": "dashed"
+    },
+    {
+     "from": "flow",
+     "to": "fnode",
+     "label": "cascade"
+    },
+    {
+     "from": "node",
+     "to": "fnode"
+    },
+    {
+     "from": "flow",
+     "to": "runs",
+     "label": "set null"
+    },
+    {
+     "from": "fnode",
+     "to": "edge",
+     "label": "from · to"
+    }
+   ]
+  }
+ ]
+}

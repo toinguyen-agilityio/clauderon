@@ -12,7 +12,7 @@ Pick issues, run each one through a configurable Flow of Claude Code, shell and 
 ![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-ESM-3178C6?logo=typescript&logoColor=white)
 
-[Overview](#overview) · [How it works](#how-it-works) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#environment-variables) · [Docs](#documentation)
+[Overview](#overview) · [How it works](#how-it-works) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#environment-variables) · [Docs](#documentation) · [Changelog](CHANGELOG.md)
 
 </div>
 
@@ -101,7 +101,7 @@ There are no screenshots in the repository yet. To click through the screens, op
 | Contracts | zod schemas in `packages/protocol` |
 | Testing | Vitest against a real Postgres (no database mocks) |
 | Tooling | ESLint, `tsx` |
-| Deployment | Docker Compose, Cloudflare Tunnel (`cloudflared`); a free Render Blueprint (`render.yaml`) for demos |
+| Deployment | Render Blueprint (`render.yaml`) in production; Docker Compose with a Cloudflare Tunnel (`cloudflared`) to self-host |
 | On each Machine | Claude Code CLI, GitHub CLI (`gh`), git, bash / Git Bash |
 
 ## Project structure
@@ -116,6 +116,7 @@ There are no screenshots in the repository yet. To click through the screens, op
 │   ├── core/         Pure domain logic: Flow validation, Run state, Ticket Status, limits, masking
 │   ├── db/           Drizzle schema, migrations, query modules, seed of sample Flows
 │   ├── protocol/     zod message schemas between Gateway, Agent and browser
+│   ├── features/     Builds docs/features.json from features.map.json
 │   └── testing/      Shared fixtures and fakes for tests
 ├── deploy/           Production Compose stack, Dockerfile, deploy and backup scripts
 ├── docs/             Requirements, milestone specs, ADRs, plans, prototype
@@ -124,7 +125,7 @@ There are no screenshots in the repository yet. To click through the screens, op
 └── DESIGN.md         UI design notes
 ```
 
-Internal packages export TypeScript source (`./src/index.ts`) and have no build step.
+Internal packages export TypeScript source (`./src/index.ts`) and have no build step. Components, data flows and integrations are described in [docs/architecture.md](docs/architecture.md); endpoints in [docs/api.md](docs/api.md); tables and migrations in [docs/database.md](docs/database.md).
 
 ## Prerequisites
 
@@ -204,88 +205,42 @@ Approve the code on the page it opens. The Agent then runs in that terminal. Che
 Enable a Project, **Sync** its Tickets, clone a sample Flow, and try the Flow in the editor with **Test run** first: it steps through every Node in the browser and never calls Claude or GitHub.
 
 > [!TIP]
-> Tests need only the Postgres from step 3. Each test file creates and drops its own database: `pnpm test`.
+> Tests need only the Postgres from step 3. Each test file creates and drops its own database: `pnpm test`. More detail in the [installation guide](docs/installation.md); if something does not start, see [troubleshooting](docs/troubleshooting.md).
 
 ## Environment variables
 
-Secrets live only in the environment, never in the database. Local development reads the root `.env` (template: [.env.example](.env.example)); production reads `deploy/.env.production` (template: [deploy/.env.production.example](deploy/.env.production.example)). Neither file is committed.
+Secrets live only in the environment, never in the database. Local development reads the root `.env` (template: [.env.example](.env.example)); production on Render takes its values from [render.yaml](render.yaml) and the Render dashboard. The minimum to run locally is `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `AUTH_URL`, `OPERATOR_EMAILS` and `GATEWAY_URL`.
 
-### Development (`.env`)
-
-| Variable | Used by | Required | Description |
-| --- | --- | --- | --- |
-| `DATABASE_URL` | web, gateway, db scripts | Yes | Postgres connection string. The template points at the local container on port 54329. |
-| `TEST_DATABASE_URL` | tests | For tests | Postgres server where each test file creates and drops its own database. Defaults to the local container. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | web | Yes | Google OAuth client for sign-in. |
-| `SESSION_SECRET` | web, gateway | Yes | Auth.js cookie signing, Gateway tickets and the key that encrypts the app's GitHub token. Rotating it signs everyone out, and an Operator saves the GitHub token again. |
-| `AUTH_URL` | web, gateway | Yes | Public origin of the web app, e.g. `http://localhost:3000`. |
-| `OPERATOR_EMAILS` | web, gateway | Yes | Comma-separated emails that are always allowed and manage the allowlist. |
-| `GATEWAY_URL` | web | Yes | WebSocket URL of the Gateway as browsers and Agents reach it. Default `ws://localhost:4000`. |
-| `GATEWAY_PORT` | gateway | No | Port the Gateway listens on. Default `4000`. |
-| `WEB_URL` | gateway | No | Public web URL for the approve links Agents open. Defaults to `AUTH_URL`. |
-| `AGENT_BUNDLE_DIR` | web | No | Folder with the built `agent.mjs` and `agent.json`. Default `../host-agent/dist`. |
-
-### Production (`deploy/.env.production`)
-
-| Variable | Description |
-| --- | --- |
-| `POSTGRES_PASSWORD` | Password of the stack's Postgres container (random secret). |
-| `SESSION_SECRET` | As above (random secret). |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth client; redirect URI `https://<WEB_HOSTNAME>/api/auth/callback/google`. |
-| `WEB_HOSTNAME` | Public hostname of the web app, e.g. `clauderon.example.com`; `https://<WEB_HOSTNAME>` becomes `AUTH_URL` and the Gateway's `WEB_URL`. |
-| `GATEWAY_HOSTNAME` | Public hostname of the Gateway; `wss://<GATEWAY_HOSTNAME>` becomes the web app's `GATEWAY_URL`. |
-| `CLOUDFLARE_TUNNEL_TOKEN` | Token of the Cloudflare Tunnel that publishes both; `deploy/deploy.sh tunnel` fills it in. |
-| `OPERATOR_EMAILS` | As above. |
-| `WEB_HOST_PORT`, `GATEWAY_HOST_PORT` | Ports on `127.0.0.1` for checks on the host. Default `3000` and `4000`. |
-
-<details>
-<summary><strong>Agent variables</strong> (on a Member's Machine)</summary>
-
-| Variable | Description |
-| --- | --- |
-| `CLAUDERON_HOME` | The Agent's own directory: Pairing, link state, clones and worktrees. Default `~/.clauderon`. |
-| `CLAUDERON_BASH` | bash used for every command. On Windows, Git Bash is found where Git for Windows installs it. |
-| `CLAUDERON_URL` | Web app URL for `pair` when none is passed on the command line. |
-| `GATEWAY_URL` | Overrides the Gateway URL the Agent got from Pairing. |
-| `CLAUDERON_WEB_URL` | Overrides the web app URL the Agent updates itself from. |
-| `CLAUDERON_NO_UPDATE` | Set to turn off self-updates. |
-| `CLAUDERON_NO_BROWSER` | Set to stop `pair` from opening the browser. |
-
-The Agent also sets variables of its own for Nodes and services (such as `CLAUDERON_SERVICE` and `CLAUDERON_PATH`); they are not meant to be set by hand.
-
-</details>
+Every variable of the web app, the Gateway, the self-hosted stack and the Agent, with defaults and examples: [docs/environment-variables.md](docs/environment-variables.md).
 
 ## Development commands
-
-Run from the repository root.
 
 | Command | What it does |
 | --- | --- |
 | `pnpm dev` | Web (Next.js) and Gateway in watch mode |
-| `pnpm build` | Build every package that has a build (web app, Agent bundle) |
-| `pnpm lint` | ESLint in every package |
-| `pnpm typecheck` | `tsc --noEmit` in every package |
-| `pnpm test` | Vitest in every package (needs Postgres) |
-| `pnpm db:up` | Start the local Postgres 16 container on port 54329 |
-| `pnpm db:migrate` | Apply Drizzle migrations (needs `DATABASE_URL` in the shell) |
-| `pnpm db:seed` | Apply migrations and seed the sample Nodes and Flows |
-| `pnpm --filter @clauderon/db generate` | Generate a migration after editing `packages/db/src/schema.ts` |
-| `pnpm --filter @clauderon/host-agent pair <web-url>` | Pair this computer as your Machine, then run the Agent |
-| `pnpm --filter @clauderon/host-agent build` | Bundle the Agent into `apps/host-agent/dist` |
-| `pnpm --filter @clauderon/gateway test` | Tests of one package |
-| `pnpm --filter @clauderon/core exec vitest run src/flow` | One test file or name filter |
+| `pnpm build` | Build the web app and the Agent bundle |
+| `pnpm lint` · `pnpm typecheck` · `pnpm test` | Checks in every package (tests need Postgres) |
+| `pnpm db:up` · `pnpm db:migrate` · `pnpm db:seed` | Local Postgres, migrations, sample data |
 
-CI runs lint, typecheck and tests against Postgres, plus the Agent's tests, its bundle build and an install smoke test ([apps/web/scripts/agent-smoke.ts](apps/web/scripts/agent-smoke.ts)) on macOS, Linux and Windows.
+The full list, including per-package and single-test commands, is in [docs/installation.md](docs/installation.md#build-check-and-test).
 
 ## Documentation
 
 | Document | What it covers |
 | --- | --- |
+| [docs/installation.md](docs/installation.md) | Prerequisites, local setup, pairing a Machine, build, test and run commands |
+| [docs/environment-variables.md](docs/environment-variables.md) | Every environment variable, with defaults and examples |
+| [docs/architecture.md](docs/architecture.md) | Components, folder structure, data flows and integrations |
+| [docs/api.md](docs/api.md) | HTTP endpoints and WebSocket channels of the web app and the Gateway |
+| [docs/database.md](docs/database.md) | Tables, relationships, migrations, backups and rollback |
+| [docs/deployment.md](docs/deployment.md) | Release, deploy, verify and roll back production |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Common setup and runtime problems and their fixes |
+| [CHANGELOG.md](CHANGELOG.md) | Changes by release |
 | [CONTEXT.md](CONTEXT.md) | Domain glossary: the words to use in code, UI and conversation |
 | [docs/requirements/v1-requirements.md](docs/requirements/v1-requirements.md) | v1 scope, functional and non-functional requirements, decision log |
 | [docs/specs/](docs/specs/README.md) | One spec per milestone (M0–M4): contracts, behaviour, acceptance tests, slices |
 | [docs/adr/](docs/adr/) | Architecture decision records |
-| [deploy/README.md](deploy/README.md) | Production deployment and operations |
+| [deploy/README.md](deploy/README.md) | Platform setup for Render and the self-hosted stack, backups, secret rotation |
 | [Plain-language guide](https://claude.ai/artifact/Uoah9d66hwGAi5feUGg1sK) | Landing page for non-technical readers: features, how it works, safety, what changed in each release (EN/VI). Source: [docs/landing-page.html](docs/landing-page.html) |
 | [docs/README.md](docs/README.md) · [docs/overview.md](docs/overview.md) | Docs index and one-page product brief |
 | [docs/roadmap/v1-seven-day-plan.md](docs/roadmap/v1-seven-day-plan.md) | The v1 delivery plan by milestone |
@@ -322,7 +277,7 @@ Clauderon runs an AI agent with broad permissions on people's computers. Read [A
 - **Credentials stay with the Member.** The app never reads, stores or forwards Claude or OAuth tokens; the Agent only checks login status. A Machine token is stored only as its SHA-256 hash.
 - **Read-only GitHub access.** The app holds one read-only token; every write to GitHub happens on the Starter's Machine.
 - **Secrets in the environment only.** No secrets in the database, and known token patterns are masked before any log line is stored or streamed.
-- **Network.** The app is on the internet through a Cloudflare Tunnel, so Google sign-in and the allowlist are the only gate. Neither the host nor the Machines open an inbound port; Postgres is never published.
+- **Network.** The app is on the internet (on Render, or through a Cloudflare Tunnel when self-hosted), so Google sign-in and the allowlist are the only gate. Machines open no inbound port, and Postgres is reachable only from the app's services.
 
 ## Contributing
 

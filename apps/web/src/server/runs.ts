@@ -35,6 +35,7 @@ import {
   listRuns,
   nodeAttemptHistory,
   RUNS_PAGE_SIZE,
+  type RunSort,
   listMembers,
   nodesFrom,
   openHumanRequests,
@@ -49,6 +50,7 @@ import {
   type MemberNotifyKind,
   type RunFilters,
 } from "@clauderon/db";
+import { sortRows, type Sort } from "../components/sorting";
 import type { AppDeps, Viewer } from "./deps";
 import { refreshPullRequest } from "./projects";
 
@@ -68,9 +70,9 @@ export function parseRunFilters(params: { state?: string; flow?: string; machine
 }
 
 /** The Runs list (TRK-7): filters combine; newest first; paginated. */
-export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number, size?: number) {
+export async function viewRuns(deps: AppDeps, filters: RunFilters, page: number, size?: number, sort?: RunSort) {
   const [result, projects, flows, machines, counts] = await Promise.all([
-    listRuns(deps.db, filters, page, size),
+    listRuns(deps.db, filters, page, size, sort),
     listProjects(deps.db),
     listFlows(deps.db),
     listMachines(deps.db),
@@ -115,7 +117,17 @@ export type PullRequestRow = {
 };
 
 /** `memberId` is a Member's id, or "me" for the viewer. */
-export type PullRequestQuery = { tab?: PullRequestTab; projectId?: string; memberId?: string; page: number };
+export type PullRequestQuery = { tab?: PullRequestTab; projectId?: string; memberId?: string; page: number; sort?: Sort };
+
+/** The Pull requests columns a Member can sort by. */
+export const PULL_REQUEST_SORTS = ["pr", "title", "from", "by"] as const;
+
+const pullRequestSortKeys = {
+  pr: (r: PullRequestRow) => `${r.repo}#${String(r.number).padStart(9, "0")}`,
+  title: (r: PullRequestRow) => r.title,
+  from: (r: PullRequestRow) => r.run?.ticketTitle,
+  by: (r: PullRequestRow) => (r.run ? (r.run.starterName ?? r.run.starterEmail) : r.authorLogin),
+};
 
 /**
  * The Pull requests page: every open pull request of every Project, read from
@@ -198,7 +210,8 @@ export async function viewPullRequests(deps: AppDeps, viewer: Viewer, query: Pul
   const perProject: Record<string, number> = {};
   for (const r of ofMember) perProject[r.projectId] = (perProject[r.projectId] ?? 0) + 1;
 
-  const listed = ofProject.filter((r) => query.tab !== "needs-you" || r.needsYou);
+  // Sorted before paging, so the order covers every page.
+  const listed = sortRows(ofProject.filter((r) => query.tab !== "needs-you" || r.needsYou), query.sort, pullRequestSortKeys);
   const page = Math.max(1, query.page);
   const start = (page - 1) * RUNS_PAGE_SIZE;
   return {

@@ -110,3 +110,18 @@ export async function removeMember(deps: AppDeps, actor: Viewer, email: string):
   // A Member already off the allowlist only had their Machine left to remove.
   return machine && !result.ok && result.reason === "not-found" ? { ok: true } : result;
 }
+
+/** The Members columns a Member can sort by. */
+export const MEMBER_SORTS = ["member", "status", "signin", "machine"] as const;
+
+const STATUS_ORDER: Record<MemberStatus, number> = { active: 0, invited: 1, removed: 2 };
+
+/** Machine state, offline first when ascending: no Machine, not paired, offline, online. */
+const machineRank = (m: MemberMachine | null) => (!m ? 0 : !m.paired ? 1 : m.connected ? 3 : 2);
+
+export const memberSortKeys = {
+  member: (r: MemberRow) => r.name ?? r.email,
+  status: (r: MemberRow) => STATUS_ORDER[r.status],
+  signin: (r: MemberRow) => r.lastSignInAt,
+  machine: (r: MemberRow) => machineRank(r.machine),
+};

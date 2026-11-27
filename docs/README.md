@@ -3,6 +3,14 @@
 | Path | What it is |
 | --- | --- |
 | [overview.md](overview.md) | **Start here:** a one-page brief of what Clauderon does, for leads and newcomers |
+| [installation.md](installation.md) | Prerequisites, local setup, pairing a Machine, build, test and run commands |
+| [environment-variables.md](environment-variables.md) | Every environment variable, with defaults and examples |
+| [architecture.md](architecture.md) | Components, folder structure, data flows and integrations |
+| [api.md](api.md) | HTTP endpoints and WebSocket channels of the web app and the Gateway |
+| [database.md](database.md) | Tables, relationships, migrations, backups and rollback |
+| [deployment.md](deployment.md) | Release, deploy, verify and roll back production |
+| [troubleshooting.md](troubleshooting.md) | Common setup and runtime problems and their fixes |
+| [../CHANGELOG.md](../CHANGELOG.md) | Changes by release |
 | [requirements/v1-requirements.md](requirements/v1-requirements.md) | v1 requirements: the source of truth for scope, features and decisions |
 | [roadmap/v1-seven-day-plan.md](roadmap/v1-seven-day-plan.md) | Proposed seven-day roadmap for v1 with AI agents: milestones per day, checks, prerequisites and cut list |
 | [Roadmap (visual)](https://claude.ai/artifact/T4AJv1hxGDNFb9Ktea7GV9) | The seven-day roadmap as a page (EN/VI): modules by day, milestones, daily checks. Hosted as a Claude artifact; source in [roadmap/clauderon-v1-roadmap.html](roadmap/clauderon-v1-roadmap.html) |
